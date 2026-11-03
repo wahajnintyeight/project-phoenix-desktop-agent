@@ -26,7 +26,7 @@ Phoenix brings a multi-tab browser and AI provider controls into one native desk
 - Claude and OpenAI Codex through their command-line clients, plus API-key connections for Gemini, OpenRouter, Mistral, Z.ai, and Grok.
 - API keys stored in a Windows DPAPI-encrypted vault; Phoenix does not put vault-backed keys in `config.yaml` or show them again in the UI.
 
-Page sharing is opt-in. Phoenix sends the page's readable text with your message so the selected provider can answer questions about it; the agent cannot interact with the page or access files yet.
+Page sharing is opt-in. Phoenix can include the active page's readable text with your message so the selected provider can answer questions about it. The agent cannot click or type in browser tabs or access files yet.
 
 ## Build and run
 
