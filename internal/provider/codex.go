@@ -167,7 +167,7 @@ func (c CodexProvider) Run(ctx context.Context, s Settings, req Request, emit fu
 	}
 	defer cleanup()
 
-	prompt := req.Prompt
+	prompt := req.Transcript()
 	if req.System != "" {
 		// codex exec has no system-prompt flag; instructions travel with the prompt.
 		prompt = req.System + "\n\n" + prompt

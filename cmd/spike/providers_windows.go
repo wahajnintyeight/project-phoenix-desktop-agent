@@ -94,6 +94,7 @@ func refreshProvidersForce(forceModels bool) {
 		ctx, cancel := context.WithTimeout(context.Background(), 45*time.Second)
 		defer cancel()
 		sts := hub.Statuses(ctx)
+		setReady(sts)
 		def := hub.Default()
 		runLater(func() {
 			for _, st := range sts {
@@ -117,9 +118,40 @@ type modelsView struct {
 	Model  string           `json:"model"`
 	Effort string           `json:"effort"`
 	Error  string           `json:"error,omitempty"`
+	Ready  bool             `json:"ready"` // can run now (installed and signed in, or has a key)
+	Kind   string           `json:"kind"`  // "cli" or "api"
 }
 
-var providerNames = map[provider.ID]string{provider.Claude: "Claude", provider.Codex: "Codex"}
+func providerName(id provider.ID) string {
+	if spec, ok := provider.SpecFor(id); ok {
+		return spec.Name
+	}
+	if id == provider.Codex {
+		return "Codex"
+	}
+	return "Claude"
+}
+
+// readyMu guards lastReady: which providers could run at the last check. The quick picker
+// lists only those, so it does not offer a provider that has no key or sign-in.
+var (
+	readyMu   sync.Mutex
+	lastReady = map[provider.ID]bool{}
+)
+
+func setReady(sts []provider.Status) {
+	readyMu.Lock()
+	defer readyMu.Unlock()
+	for _, st := range sts {
+		lastReady[st.ID] = st.Ready
+	}
+}
+
+func isReady(id provider.ID) bool {
+	readyMu.Lock()
+	defer readyMu.Unlock()
+	return lastReady[id]
+}
 
 // pushModels sends the model lists from a goroutine (listing Codex models runs the CLI the
 // first time; later calls come from the cache).
@@ -145,11 +177,19 @@ func pushModelsNow(ctx context.Context, force bool) {
 			defer wg.Done()
 			ms, err := hub.Models(ctx, id, force)
 			ch := hub.Selected(id)
-			v := modelsView{ID: string(id), Name: providerNames[id], Models: ms, Model: ch.Model, Effort: ch.Effort}
+			kind := "cli"
+			if provider.IsHTTP(id) {
+				kind = "api"
+			}
+			v := modelsView{ID: string(id), Name: providerName(id), Models: ms, Model: ch.Model, Effort: ch.Effort, Ready: isReady(id), Kind: kind}
 			if err != nil {
 				v.Models = []provider.Model{}
-				if !errors.Is(err, provider.ErrNotInstalled) {
-					v.Error = err.Error()
+				switch {
+				case errors.Is(err, provider.ErrNotInstalled):
+				case errors.Is(err, provider.ErrNotReady):
+					v.Error = "Add an API key to load this provider's models. You can also type a model ID."
+				default:
+					v.Error = "Could not load the model list: " + err.Error() + " You can still type a model ID."
 				}
 			}
 			views[i] = v
@@ -258,6 +298,8 @@ func handleProviderOp(f []string) {
 		err = hub.ClearAPIKey(id)
 	case "default":
 		err = hub.SetDefault(id)
+	case "baseurl": // v baseurl <provider> <url>; empty restores the default
+		err = hub.SetBaseURL(id, arg)
 	case "model": // v model <provider> <model> <effort>
 		effort := ""
 		if len(f) > 4 {

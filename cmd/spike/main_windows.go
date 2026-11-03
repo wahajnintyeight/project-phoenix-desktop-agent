@@ -198,6 +198,11 @@ func onMessage(message string, _ *edge.ICoreWebView2, _ *edge.ICoreWebView2WebMe
 	f := strings.Split(message, fs)
 	switch f[0] {
 	case "p", "i":
+	case "g":
+		// Chat text is private: log the operation only.
+		if len(f) > 1 {
+			logf("msg g %s", f[1])
+		}
 	case "v":
 		// Provider messages can carry an API key: log the operation, never the fields.
 		if len(f) > 2 {
@@ -220,6 +225,9 @@ func onMessage(message string, _ *edge.ICoreWebView2, _ *edge.ICoreWebView2WebMe
 			windowState(),
 		)
 		pushTabs()
+		if hub != nil {
+			refreshProviders() // the agent panel and start page need to know what is ready
+		}
 		pushToolbar()
 	case "n": // address bar submit
 		if len(f) > 1 {
@@ -229,6 +237,8 @@ func onMessage(message string, _ *edge.ICoreWebView2, _ *edge.ICoreWebView2WebMe
 		setSlot(f[1:])
 	case "v": // provider management
 		handleProviderOp(f)
+	case "g": // chat with the agent
+		handleChatOp(f)
 	case "m": // menu popover state
 		if len(f) > 1 {
 			switch f[1] {
@@ -264,6 +274,8 @@ func handleAction(action, id string) {
 		runLater(newTab)
 	case "omnibox.focus":
 		runLater(focusOmnibox)
+	case "agent.stop":
+		stopChat()
 	case "config.open":
 		openConfigFolder()
 	case "menu.settings":

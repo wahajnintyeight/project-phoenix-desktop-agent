@@ -12,6 +12,7 @@ import (
 	"encoding/json"
 	"errors"
 	"regexp"
+	"strings"
 )
 
 // ID names a provider.
@@ -145,13 +146,40 @@ type Limit struct {
 	Status      string  `json:"status"`
 }
 
+// Message is one earlier turn of a conversation. Role is "user" or "assistant".
+type Message struct {
+	Role    string `json:"role"`
+	Content string `json:"content"`
+}
+
+// Transcript is the prompt for a CLI that takes one text: earlier turns, then the new
+// message. The CLIs are run without their own session storage, so Phoenix replays the
+// conversation itself.
+func (r Request) Transcript() string {
+	if len(r.History) == 0 {
+		return r.Prompt
+	}
+	var b strings.Builder
+	b.WriteString("Earlier in this conversation:\n\n")
+	for _, m := range r.History {
+		who := "User"
+		if m.Role == "assistant" {
+			who = "Assistant"
+		}
+		b.WriteString(who + ": " + m.Content + "\n\n")
+	}
+	b.WriteString("The user's new message:\n\n" + r.Prompt)
+	return b.String()
+}
+
 // Request is one run.
 type Request struct {
-	Prompt  string // sent on stdin, so length is not limited by the command line
-	System  string // appended to the CLI's system prompt where the CLI supports it
-	Model   string // overrides Settings.Model
-	Effort  string // overrides Settings.Effort
-	WorkDir string // the run's working root; an empty directory is created if blank
+	History []Message // earlier turns, oldest first; empty for a single question
+	Prompt  string    // sent on stdin, so length is not limited by the command line
+	System  string    // appended to the CLI's system prompt where the CLI supports it
+	Model   string    // overrides Settings.Model
+	Effort  string    // overrides Settings.Effort
+	WorkDir string    // the run's working root; an empty directory is created if blank
 
 	// MCPConfig is the path of a JSON file of MCP servers (Phoenix's own tool server).
 	MCPConfig    string

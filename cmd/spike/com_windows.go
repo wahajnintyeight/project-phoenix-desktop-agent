@@ -145,6 +145,7 @@ const (
 	wvAddNavigationStarting     = 7
 	wvAddSourceChanged          = 11
 	wvAddHistoryChanged         = 13
+	wvExecuteScript             = 29
 	wvCapturePreview            = 30
 	wvReload                    = 31
 	wvGetCanGoBack              = 38

@@ -128,7 +128,7 @@ func (c ClaudeProvider) Run(ctx context.Context, s Settings, req Request, emit f
 
 	args := claudeArgs(s, req)
 	res, parser := Result{}, &claudeParser{}
-	stderr, err := stream(ctx, claudeEnv(s), dir, path, args, req.Prompt, func(line []byte) {
+	stderr, err := stream(ctx, claudeEnv(s), dir, path, args, req.Transcript(), func(line []byte) {
 		for _, ev := range parser.Parse(line) {
 			if ev.Kind == EvDone {
 				res = parser.result

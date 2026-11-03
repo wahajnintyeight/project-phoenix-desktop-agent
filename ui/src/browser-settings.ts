@@ -30,10 +30,10 @@ export class PhBrowserSettings extends HTMLElement {
   #url = "";
   #customOpen = false;
   readonly #seg = el("div", "seg");
-  readonly #custom = el("input", "prov-key-input");
+  readonly #custom = el("input", "field");
   readonly #save = el("button", "btn", "Save");
   readonly #customRow = el("div", "row");
-  readonly #result = el("p", "prov-result small");
+  readonly #result = el("p", "msg");
 
   connectedCallback(): void {
     if (this.childElementCount > 0) return;
@@ -77,7 +77,7 @@ export class PhBrowserSettings extends HTMLElement {
   }
 
   set result(value: Outcome) {
-    this.#result.className = `prov-result small ${value.error ? "is-error" : "is-ok"}`;
+    this.#result.className = `msg ${value.error ? "is-error" : "is-ok"}`;
     this.#result.textContent = value.error ?? value.text ?? "";
   }
 

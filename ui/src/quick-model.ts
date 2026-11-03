@@ -1,12 +1,13 @@
 // <ph-quick-model>: the model picker in the agent panel's footer. One button shows the
 // current provider and model; it opens a popover to switch provider, model and effort
-// without going to Settings. It shows the same data as the Settings cards.
+// without going to Settings. It lists only providers that are ready to run, and shows the
+// same data as the Settings rows.
 import { send } from "./protocol";
 import { describeChoice, type ModelsData, PhModelList } from "./model-list";
 
 interface QuickData {
   default: string;
-  providers: ModelsData[];
+  providers: (ModelsData & { ready?: boolean })[];
 }
 
 function el<K extends keyof HTMLElementTagNameMap>(tag: K, cls?: string, text?: string): HTMLElementTagNameMap[K] {
@@ -19,9 +20,12 @@ function el<K extends keyof HTMLElementTagNameMap>(tag: K, cls?: string, text?: 
 export class PhQuickModel extends HTMLElement {
   #d: QuickData | null = null;
   readonly #button = el("button", "qm-btn");
+  readonly #label = el("span", "qm-label", "Model");
   readonly #pop = el("div", "qm-pop");
   readonly #seg = el("div", "seg");
   readonly #list = document.createElement("ph-model-list") as PhModelList;
+  readonly #empty = el("p", "qm-empty", "No provider is ready yet. Sign in or add an API key in Settings.");
+  readonly #manage = el("button", "btn btn-quiet", "Manage providers…");
 
   connectedCallback(): void {
     if (this.childElementCount > 0) return;
@@ -31,7 +35,7 @@ export class PhQuickModel extends HTMLElement {
     this.#button.setAttribute("popovertarget", this.#pop.id);
     this.#button.setAttribute("aria-label", "Choose model");
     this.#button.disabled = true;
-    this.#button.textContent = "Model";
+    this.#button.append(this.#label, el("span", "qm-caret"));
 
     this.#seg.setAttribute("role", "radiogroup");
     this.#seg.setAttribute("aria-label", "Provider");
@@ -44,8 +48,15 @@ export class PhQuickModel extends HTMLElement {
       send("v", "default", id);
     }, { passive: true });
 
+    // Opening Settings is a normal action; the popover is closed first so it does not linger.
+    this.#manage.type = "button";
+    this.#manage.dataset["action"] = "menu.settings";
+    this.#manage.addEventListener("click", () => this.#pop.hidePopover(), { passive: true });
+    const foot = el("div", "qm-foot");
+    foot.append(this.#manage);
+
     this.#list.classList.add("compact");
-    this.#pop.append(this.#seg, this.#list);
+    this.#pop.append(this.#seg, this.#list, this.#empty, foot);
     this.append(this.#button, this.#pop);
     if (this.#d) this.#render();
   }
@@ -57,24 +68,34 @@ export class PhQuickModel extends HTMLElement {
 
   #render(): void {
     const d = this.#d;
-    if (!d || d.providers.length === 0) return;
-    const cur = d.providers.find((p) => p.id === d.default) ?? d.providers[0];
-    if (!cur) return;
+    if (!d) return;
+    // The default provider is always offered, so the current choice is never hidden.
+    const usable = d.providers.filter((p) => p.ready === true || p.id === d.default);
+    const cur = usable.find((p) => p.id === d.default) ?? usable[0];
+    const readyCount = d.providers.filter((p) => p.ready === true).length;
 
     this.#button.disabled = false;
-    this.#button.textContent = `${cur.name} · ${describeChoice(cur)}`;
+    this.#label.textContent = cur && readyCount > 0 ? `${cur.name} · ${describeChoice(cur)}` : "Choose a model";
+    this.#empty.hidden = readyCount > 0;
+    this.#list.hidden = readyCount === 0 || !cur;
+    this.#seg.hidden = usable.length < 2 || readyCount === 0;
 
     this.#seg.replaceChildren(
-      ...d.providers.map((p) => {
+      ...usable.map((p) => {
         const b = el("button", "seg-btn", p.name);
         b.type = "button";
         b.setAttribute("role", "radio");
-        b.setAttribute("aria-checked", String(p.id === cur.id));
+        b.setAttribute("aria-checked", String(p.id === cur?.id));
         b.dataset["provider"] = p.id;
         return b;
       }),
     );
-    this.#list.data = cur;
+    if (cur) this.#list.data = cur;
+
+    // The start page shows whether the agent has anything to run on.
+    document.dispatchEvent(new CustomEvent("quickchange", {
+      detail: { ready: readyCount, current: cur ? `${cur.name} · ${describeChoice(cur)}` : "" },
+    }));
   }
 }
 

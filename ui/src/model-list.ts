@@ -25,6 +25,7 @@ export interface ModelsData {
   error?: string;
 }
 
+const MAX_ROWS = 40; // rows drawn at once; a filter narrows the rest
 const EFFORT_LABEL: Record<string, string> = { xhigh: "Extra high", max: "Max", ultra: "Ultra" };
 
 function el<K extends keyof HTMLElementTagNameMap>(tag: K, cls?: string, text?: string): HTMLElementTagNameMap[K] {
@@ -52,7 +53,10 @@ function ctx(n: number): string {
 export function describeChoice(d: ModelsData | null): string {
   if (!d) return "";
   const m = d.models.find((x) => x.id === d.model);
-  const name = d.model === "" ? "CLI default" : (m?.name ?? d.model);
+  // An empty choice means "the CLI's default" for Claude and Codex, which list that entry.
+  // The API providers have no default, so nothing chosen yet is said plainly.
+  const none = d.models.some((x) => x.id === "") ? "CLI default" : "No model chosen";
+  const name = d.model === "" ? none : (m?.name ?? d.model);
   return d.effort ? `${name} · ${cap(d.effort)}` : name;
 }
 
@@ -60,14 +64,27 @@ export class PhModelList extends HTMLElement {
   #d: ModelsData | null = null;
   readonly #list = el("div", "ml-list");
   readonly #effort = el("div", "ml-effort");
-  readonly #note = el("p", "muted small ml-note");
-  readonly #custom = el("input", "ml-custom");
+  readonly #note = el("p", "small ml-note");
+  readonly #filter = el("input", "field");
+  readonly #custom = el("input", "field field-mono");
   readonly #useCustom = btn("Use", "btn");
+  #q = "";
 
   connectedCallback(): void {
     if (this.childElementCount > 0) return;
     this.#list.setAttribute("role", "radiogroup");
     this.#list.setAttribute("aria-label", "Model");
+
+    // Long catalogs (OpenRouter lists hundreds) get a filter instead of a wall of rows.
+    this.#filter.type = "search";
+    this.#filter.autocomplete = "off";
+    this.#filter.spellcheck = false;
+    this.#filter.hidden = true;
+    this.#filter.setAttribute("aria-label", "Filter models");
+    this.#filter.addEventListener("input", () => {
+      this.#q = this.#filter.value.trim().toLowerCase();
+      this.#render();
+    }, { passive: true });
 
     this.#custom.type = "text";
     this.#custom.placeholder = "Other model ID";
@@ -76,10 +93,10 @@ export class PhModelList extends HTMLElement {
     this.#custom.maxLength = 100;
     this.#custom.setAttribute("aria-label", "Other model ID");
     this.#useCustom.dataset["act"] = "custom";
-    const customRow = el("div", "row ml-custom-row");
+    const customRow = el("div", "row");
     customRow.append(this.#custom, this.#useCustom);
 
-    this.append(this.#list, this.#effort, customRow, this.#note);
+    this.append(this.#filter, this.#list, this.#effort, customRow, this.#note);
     this.addEventListener("click", this.#onClick, { passive: true });
     this.#custom.addEventListener("keydown", (e) => {
       if (e.key === "Enter") this.#useCustomId();
@@ -112,7 +129,19 @@ export class PhModelList extends HTMLElement {
     if (!d) return;
     this.dataset["provider"] = d.id;
 
-    const rows: HTMLElement[] = d.models.map((m) => {
+    const long = d.models.length > 12;
+    this.#filter.hidden = !long;
+    if (long) this.#filter.placeholder = `Filter ${d.models.length} models`;
+    let shown = d.models;
+    if (long && this.#q) {
+      shown = shown.filter((m) => `${m.name} ${m.id} ${m.description ?? ""}`.toLowerCase().includes(this.#q));
+    }
+    const hidden = shown.length > MAX_ROWS ? shown.length - MAX_ROWS : 0;
+    shown = shown.slice(0, MAX_ROWS);
+    const sel = this.#selected(d);
+    if (sel && !shown.includes(sel) && !this.#q) shown = [sel, ...shown.slice(0, MAX_ROWS - 1)]; // keep the choice visible
+
+    const rows: HTMLElement[] = shown.map((m) => {
       const b = btn("", "ml-row");
       b.setAttribute("role", "radio");
       b.setAttribute("aria-checked", String(m.id === d.model));
@@ -137,6 +166,8 @@ export class PhModelList extends HTMLElement {
       b.append(top);
       rows.push(b);
     }
+    if (hidden > 0) rows.push(el("p", "ml-more", `${hidden} more. Type in the filter to narrow the list.`));
+    if (long && this.#q && shown.length === 0) rows.push(el("p", "ml-more", "No model matches that filter."));
     this.#list.replaceChildren(...rows);
 
     const efforts = this.#efforts(d);
@@ -157,7 +188,7 @@ export class PhModelList extends HTMLElement {
         b.dataset["effort"] = e;
         seg.append(b);
       }
-      this.#effort.replaceChildren(el("span", "ml-label small muted", "Reasoning effort"), seg);
+      this.#effort.replaceChildren(el("span", "small muted", "Reasoning effort"), seg);
     }
 
     this.#note.textContent = d.error ?? (d.models.length === 0 ? "No models found. Install the CLI, then re-check." : "");

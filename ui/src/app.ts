@@ -4,11 +4,12 @@ import "./provider-card";
 import "./model-list";
 import "./quick-model";
 import "./browser-settings";
+import "./chat";
 
 const $ = (id: string): HTMLElement | null => document.getElementById(id);
 
 // Go may only set these. Anything else is ignored.
-const SETTABLE_PROPS = new Set(["tabs", "value", "disabled", "src", "hidden", "data", "result", "models"]);
+const SETTABLE_PROPS = new Set(["tabs", "value", "disabled", "src", "hidden", "data", "result", "models", "events"]);
 const SETTABLE_ATTRS = new Set(["data-view", "data-state"]);
 
 // ── Message handling (Go → UI) ──────────────────────────────────────────
@@ -93,9 +94,34 @@ $("menu")?.addEventListener("toggle", (e) => send("m", (e as ToggleEvent).newSta
 
 // Airspace: Go sends a snapshot of the page into #freeze, then waits for us to confirm it
 // has been painted before it hides the page window.
-$("freeze")?.addEventListener("load", () => {
+$("freeze")?.addEventListener("load", (e) => {
+  // The empty placeholder image loads at start-up; only a real snapshot is acknowledged.
+  if ((e.target as HTMLImageElement).src.startsWith("data:image/gif")) return;
   requestAnimationFrame(() => requestAnimationFrame(() => send("m", "frozen")));
 }, { passive: true });
+
+// Agent panel sections: local view state, nothing for Go to know.
+const agent = document.querySelector<HTMLElement>(".agent");
+document.querySelector(".agent-tabs")?.addEventListener("click", (e) => {
+  const b = (e.target as Element | null)?.closest<HTMLElement>("[data-pane-btn]");
+  const name = b?.dataset["paneBtn"];
+  if (!b || !name || !agent) return;
+  agent.dataset["pane"] = name;
+  document.querySelectorAll<HTMLElement>("[data-pane-btn]").forEach((t) => t.setAttribute("aria-selected", String(t === b)));
+}, { passive: true });
+
+// The start page's first step follows the quick picker: done once some provider can run.
+document.addEventListener("quickchange", (e) => {
+  const { ready, current } = (e as CustomEvent<{ ready: number; current: string }>).detail;
+  const step = $("step-provider");
+  const text = $("step-provider-text");
+  if (step) step.dataset["done"] = String(ready > 0);
+  if (text) {
+    text.textContent = ready > 0
+      ? `${current} is ready. Change it in Settings, or from the picker under the agent panel.`
+      : "No provider is ready yet. Sign in with Claude or Codex, or add an API key.";
+  }
+});
 
 // ── Page slot: tell Go where the page should be drawn ───────────────────
 const slot = $("page-slot");

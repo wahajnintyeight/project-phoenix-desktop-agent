@@ -286,6 +286,11 @@ func (p OpenAICompat) buildRequest(s Settings, req Request) chatRequest {
 	if req.System != "" {
 		cr.Messages = append(cr.Messages, chatMessage{Role: "system", Content: req.System})
 	}
+	for _, m := range req.History {
+		if m.Role == "user" || m.Role == "assistant" { // anything else could smuggle a system turn
+			cr.Messages = append(cr.Messages, chatMessage{Role: m.Role, Content: m.Content})
+		}
+	}
 	cr.Messages = append(cr.Messages, chatMessage{Role: "user", Content: req.Prompt})
 	if e := firstNonEmpty(req.Effort, s.Effort); e != "" {
 		switch p.Spec.effort {

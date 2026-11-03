@@ -90,7 +90,9 @@ How Phoenix uses it:
 4. Review small targets: Impeccable's README says a single section reviewed closely beats a whole page at a glance.
 5. Caution: its "live" mode can launch coding agents with permission checks and sandboxing disabled. Review that before enabling it.
 
-I have only read the README summary. Numeric rules (sizes, spacing, timing) live on impeccable.style/docs and have not been reviewed.
+I have only read the README summary and the docs overview. Numeric rules (sizes, spacing, timing) live on pages I could not retrieve (`/docs/detector` and the command pages) and have not been reviewed.
+
+**Applied 2026-11-03 (see 9c for the work).** `npx impeccable detect internal/ui/dist/index.html` (the built page, so rendered-page rules run) went from 3 findings (an `<img>` with no `src`, two `cramped-padding`) to 0. Scanning the source files only runs regex rules, and its `flat-type-hierarchy` hit on the raw `index.html` is a false positive because that file has no CSS; the built page passes. The detector does not see hidden views (Settings is `display: none` in a static scan), so those were checked by eye. `critique` and `audit` are agent commands, not part of the detector; the review below was done by hand in their spirit.
 
 ## 5a. Application shell: UI specification
 
@@ -462,6 +464,53 @@ Code: `provider.Models` (per provider), `providerhub.Hub.SetModel/Selected/Model
 **Verified live.** Claude `--model haiku --effort low` ran and resolved to `claude-haiku-5-5`; Codex `-m gpt-6-luna -c model_reasoning_effort="low"` ran; an unknown Claude model returns a readable "issue with the selected model" result; an unknown Codex model returns the API message (the raw JSON body is now unwrapped); `--help` as a model is refused. In the app (test profile): the lists render, choices persist to `config.yaml`, a typed-in model works, an invalid one is refused in the UI, a Test shows the model used, switching provider in the quick picker saves the default, and a search from the address bar used the configured engine.
 
 **Not done.** Per-conversation model overrides (the agent loop does not exist yet), cost and limit hints in the picker, and showing why a catalog entry is unavailable.
+
+## 9c. More providers (Gemini, OpenRouter, Mistral, Z.ai, Grok) and a UI pass (implemented 2026-11-03)
+
+Code: `internal/provider/openai.go` (driver, specs, parser), `config` (`providers.<id>`, `base_url`), `providerhub` (`SetBaseURL`, cache keyed by mode, base URL and key presence), `cmd/spike/providers_windows.go`, `ui/src/provider-card.ts`, `model-list.ts`, `quick-model.ts`.
+
+**Approach.** These five publish an OpenAI-compatible chat API, so one standard-library driver (`OpenAICompat`) serves all of them: `POST {base}/chat/completions` with server-sent events, `GET {base}/models`. No third-party LLM library was adopted: the Go libraries found (llmhub, omnillm, gollm, litellm) each miss at least one of the five and would put an unvetted dependency next to API keys. There is no vendor CLI for these, so the only auth is an API key (vault or `env:`), sent only as a `Bearer` header to the configured base URL.
+
+| Provider | Default base URL | Source of the URL | Effort sent |
+|---|---|---|---|
+| Gemini | `https://generativelanguage.googleapis.com/v1beta/openai` | Google's OpenAI-compatibility page (streaming, tools and a models list confirmed there) | `reasoning_effort` |
+| OpenRouter | `https://openrouter.ai/api/v1` | from memory, not checked | `reasoning: {effort}` |
+| Mistral | `https://api.mistral.ai/v1` | from memory, not checked | none |
+| Z.ai | `https://api.z.ai/api/paas/v4` (Coding Plan: `.../api/coding/paas/v4`; China: `https://open.bigmodel.cn/api/paas/v4`) | third-party docs found by search | none |
+| Grok | `https://api.x.ai/v1` | from memory, not checked | none |
+
+**Decisions.**
+- **No default model is hard-coded.** Model names change quickly and my knowledge of them is dated, so the list comes from the provider's `/models` (Gemini's `models/` prefix is stripped; embedding and moderation models, Mistral non-chat models and OpenRouter image-output models are dropped; descriptions are clipped). Until a model is chosen, a run fails with "choose a model first". If the list cannot load, the UI says so and a model ID can still be typed.
+- **Effort is sent only where a provider is known to accept it**, and only if the user picked one; Mistral, Z.ai and Grok get no extra field because they may reject unknown ones. The Gemini and OpenRouter parameter names are from memory and have not been run against the real services.
+- **The base URL receives the API key**, so it is validated everywhere it is accepted (config load, hub, driver): `https`, or `http` only for loopback (local servers); no credentials, query or fragment. Redirects are never followed, and error text has the key scrubbed.
+- **Config.** HTTP providers live under `providers:` by id (`gemini`, `openrouter`, `mistral`, `zai`, `grok`); their `auth` is always `api_key`. Unknown keys under `providers:` are dropped on load.
+- **Not built:** tool calls (the driver streams text only; Phoenix will own the tool loop for these providers, unlike Claude and Codex whose CLIs run theirs), cost caps, retries, and per-provider rate-limit display (OpenRouter returns `usage.cost`, which is parsed).
+
+**Verified.** Unit tests against a local fake server: streaming, usage and cost, mid-stream errors, missing `[DONE]`, error bodies without the key, redirect refusal, model-list parsing for all providers, base-URL validation, config and hub behavior. In the app, a local fake provider on `127.0.0.1` exercised the whole path: save a base URL and a key, the model list (60 models, 40 shown with a filter), choosing a model, Test (`Model used: fake-model-07`), the quick picker, and the key's absence from the log and `config.yaml` (the vault file is DPAPI ciphertext). **Not verified:** any real Gemini, OpenRouter, Mistral, Z.ai or Grok account, since no keys were available. The first real test should be Gemini (free tier).
+
+**UI pass.** Reviewed against Impeccable's vocabulary:
+- *typeset*: one scale (12, 13, 17, 24 px; each heading step is at least 1.25 times the one below), a display face for headings (`Segoe UI Variable Display`, falling back to Segoe UI), mono only for IDs and paths.
+- *layout*: settings is a left nav plus one readable column; providers are one grouped list with hairline dividers (Sign in with a subscription / Use an API key), each row opening into its details, instead of a card per provider; no nested cards.
+- *distill*: the latency probes moved into a collapsed Diagnostics section; the start page is a short "Get started" list that reflects real state (is a provider ready?).
+- *colorize/quieter*: the accent is used for focus, selection, the primary action and the brand; status is a dot plus a word, never color alone.
+- *clarify/onboard*: the agent panel's tabs work and each has an empty state that says what will appear and what is not connected yet; Settings is reachable from the rail.
+- *polish*: SVG icons replace emoji and Unicode arrows, popovers fade in about 100 ms (and honor reduced motion), the placeholder `<img>` has a `src`.
+- The quick picker lists only providers that are ready, plus the default.
+
+**Open.** A full `critique` pass with screenshots at other window sizes and DPI, a keyboard-only walkthrough of the new rows, a light theme, and checking the layout below the 1270 px width used here.
+
+## 9d. Chat with the agent (implemented 2026-11-03)
+
+The agent panel's first tab is a chat. It talks to the default provider and model (the quick picker under the panel), through the same `hub.Run` the Test button uses, so Claude Code, Codex and the five API providers all work.
+
+- **Go owns the conversation** (`cmd/spike/chat_windows.go`); the UI (`ui/src/chat.ts`, `<ph-chat>`) only draws what Go reports and sends `g send <text>`, `g stop`, `g new`. Go posts a batch of events as `u chat events [...]` (`user`, `start`, `delta`, `done`, `error`, `stopped`, `reset`). One conversation, held in memory only: it is gone when Phoenix closes.
+- **History is replayed on every turn**, because the CLIs are run without session storage. `provider.Request.History` becomes real chat messages for the HTTP providers and a `Transcript()` text for the CLIs. Limits: 24 messages and 100,000 characters (newest kept, starting on a user turn); one message is cut at 20,000 characters.
+- **Streaming** deltas are coalesced to about 20 UI updates a second. The log autoscrolls only while the user is already near the bottom. Text is placed with `textContent` and `white-space: pre-wrap`: model output is never parsed as HTML (verified: `<b>` and `<i>` in a reply stay literal). No markdown rendering yet.
+- **Stop** is the Send button turning into Stop, plus the panel's Stop button (`agent.stop`); both cancel the run's context, which kills the CLI process or closes the HTTP stream. A stopped partial reply stays in the history.
+- **Honest about its limits:** the system prompt tells the model it cannot click, type or open files yet, and the empty state says so. Acting (a tool loop with approvals) is the next milestone.
+- **Share this page** (`cmd/spike/page_windows.go`): a checkbox under the message box, off until the user ticks it (remembered). When on, `g send <text> 1` makes Go run one fixed script in the active tab's top frame (`ExecuteScript`, vtable slot 29; 4 s timeout) and read back URL, title, selection (5,000 characters) and visible text (30,000 characters). It is appended to that turn's prompt only, fenced as untrusted data (copies of the fence inside the page are broken, and the model is told never to follow instructions in it); the history keeps only what the user typed, so the page is read afresh each turn. The user sees `Shared page: <title> (<host>)` under their message, never the full address. Only the first frame is read: cross-origin iframes, canvas and images are not. Home and Settings tabs share nothing and say so. Page text is never logged.
+- **Privacy:** the log records only the op name (`msg g send`), never the text. Checked against a run of several messages.
+- **Verified** against a local fake OpenAI-compatible server: two-turn history (server saw 2 then 4 messages), streaming, Stop mid-run, status pill and Stop button state, metadata line (time, tokens). Unit tests cover `trimHistory`, `friendlyChatError` and `Transcript`/`buildRequest` history. **Not verified:** a real provider reply (Gemini is the first thing to try), long conversations, very long single replies.
 
 ## 10. Data (SQLite)
 
