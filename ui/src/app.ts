@@ -78,9 +78,19 @@ omnibox?.addEventListener("keydown", (e) => {
 }, { passive: true });
 omnibox?.addEventListener("focus", () => omnibox.select(), { passive: true });
 
+// The start page's search box does what the address bar does.
+const homeSearch = $("home-search") as HTMLInputElement | null;
+homeSearch?.addEventListener("keydown", (e) => {
+  if (e.key !== "Enter") return;
+  const v = homeSearch.value.trim();
+  if (!v) return;
+  send("n", v);
+  homeSearch.value = "";
+}, { passive: true });
+
 // Settings sections: purely local, no round trip to Go.
 const settings = document.querySelector<HTMLElement>(".settings");
-document.querySelector(".settings-nav")?.addEventListener("click", (e) => {
+document.querySelector("[data-settings-nav]")?.addEventListener("click", (e) => {
   const b = (e.target as Element | null)?.closest<HTMLElement>("[data-section-btn]");
   const name = b?.dataset["sectionBtn"];
   if (!b || !name || !settings) return;

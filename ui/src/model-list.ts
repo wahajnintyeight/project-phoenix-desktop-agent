@@ -5,6 +5,7 @@
 // `v model <provider> <model> <effort>`. Everything shown comes from a CLI or config.yaml,
 // so it is placed with textContent only. Any valid model id can be typed, not only listed
 // ones, because a model can be newer than the CLI's list.
+import { icon } from "./icons";
 import { send } from "./protocol";
 
 export interface ModelInfo {
@@ -23,6 +24,7 @@ export interface ModelsData {
   model: string;
   effort: string;
   error?: string;
+  ready?: boolean;
 }
 
 const MAX_ROWS = 40; // rows drawn at once; a filter narrows the rest
@@ -64,11 +66,13 @@ export class PhModelList extends HTMLElement {
   #d: ModelsData | null = null;
   readonly #list = el("div", "ml-list");
   readonly #effort = el("div", "ml-effort");
-  readonly #note = el("p", "small ml-note");
+  readonly #note = el("p", "ml-note");
   readonly #filter = el("input", "field");
   readonly #custom = el("input", "field field-mono");
   readonly #useCustom = btn("Use", "btn");
   #q = "";
+  #customWrap: HTMLElement | null = null;
+  #customRow: HTMLElement | null = null;
 
   connectedCallback(): void {
     if (this.childElementCount > 0) return;
@@ -94,14 +98,31 @@ export class PhModelList extends HTMLElement {
     this.#custom.setAttribute("aria-label", "Other model ID");
     this.#useCustom.dataset["act"] = "custom";
     const customRow = el("div", "row");
+    this.#customRow = customRow;
     customRow.append(this.#custom, this.#useCustom);
+    // The compact picker keeps "another model ID" one click away instead of always showing it.
+    const more = el("details", "qm-more");
+    const moreSummary = el("summary");
+    moreSummary.append(icon("chevronRight", 14), "Use another model ID");
+    more.append(moreSummary, customRow);
+    this.#customWrap = more;
 
-    this.append(this.#filter, this.#list, this.#effort, customRow, this.#note);
+    this.append(this.#filter, this.#list, this.#effort, more, this.#note);
+    this.#syncCustom();
     this.addEventListener("click", this.#onClick, { passive: true });
     this.#custom.addEventListener("keydown", (e) => {
       if (e.key === "Enter") this.#useCustomId();
     }, { passive: true });
     if (this.#d) this.#render();
+  }
+
+  /** Compact: the custom-ID row lives in the disclosure. Full: it is shown directly. */
+  #syncCustom(): void {
+    const compact = this.classList.contains("compact");
+    if (!this.#customWrap || !this.#customRow) return;
+    if (compact) this.#customWrap.append(this.#customRow);
+    else this.#customWrap.before(this.#customRow);
+    this.#customWrap.hidden = !compact;
   }
 
   set data(value: ModelsData) {
@@ -128,6 +149,7 @@ export class PhModelList extends HTMLElement {
     const d = this.#d;
     if (!d) return;
     this.dataset["provider"] = d.id;
+    this.#syncCustom();
 
     const long = d.models.length > 12;
     this.#filter.hidden = !long;
@@ -151,6 +173,7 @@ export class PhModelList extends HTMLElement {
       top.append(el("span", "ml-name", m.name));
       if (m.id !== "") top.append(el("span", "ml-id", m.id));
       if (m.contextWindow) top.append(el("span", "ml-meta", ctx(m.contextWindow)));
+      if (m.id === d.model) top.append(el("span", "ml-check")); // filled below
       b.append(top);
       if (m.description) b.append(el("span", "ml-desc", m.description));
       return b;
@@ -164,11 +187,19 @@ export class PhModelList extends HTMLElement {
       const top = el("span", "ml-top");
       top.append(el("span", "ml-name", d.model), el("span", "ml-meta", "typed in"));
       b.append(top);
+      top.append(el("span", "ml-check"));
       rows.push(b);
     }
     if (hidden > 0) rows.push(el("p", "ml-more", `${hidden} more. Type in the filter to narrow the list.`));
     if (long && this.#q && shown.length === 0) rows.push(el("p", "ml-more", "No model matches that filter."));
+    if (rows.length === 0 && !d.error && d.ready === true) {
+      const skel = el("div", "ml-skel");
+      skel.setAttribute("aria-hidden", "true");
+      skel.append(el("i"), el("i"), el("i"), el("i"));
+      rows.push(skel);
+    }
     this.#list.replaceChildren(...rows);
+    this.#list.querySelectorAll(".ml-check").forEach((c) => c.replaceChildren(icon("check", 14)));
 
     const efforts = this.#efforts(d);
     const def = this.#selected(d)?.defaultEffort ?? "";
@@ -188,7 +219,7 @@ export class PhModelList extends HTMLElement {
         b.dataset["effort"] = e;
         seg.append(b);
       }
-      this.#effort.replaceChildren(el("span", "small muted", "Reasoning effort"), seg);
+      this.#effort.replaceChildren(el("span", "text-xs text-fg-muted", "Reasoning effort"), seg);
     }
 
     this.#note.textContent = d.error ?? (d.models.length === 0 ? "No models found. Install the CLI, then re-check." : "");
@@ -206,7 +237,7 @@ export class PhModelList extends HTMLElement {
   #useCustomId(): void {
     const v = this.#custom.value.trim();
     if (!v || !/^[A-Za-z0-9][A-Za-z0-9._:/[\]-]{0,99}$/.test(v)) {
-      this.#note.className = "muted small ml-note is-error";
+      this.#note.className = "ml-note is-error";
       this.#note.textContent = "A model ID uses letters, digits and . _ : / [ ] -, and cannot start with a dash.";
       return;
     }

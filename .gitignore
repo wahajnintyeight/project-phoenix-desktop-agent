@@ -3,3 +3,5 @@
 /internal/ui/dist/
 *.log
 *.exe
+
+/ui/.cache/

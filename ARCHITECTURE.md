@@ -47,7 +47,7 @@ All WebView2 instances share one environment and one user-data folder (the persi
 | Win32 / COM | `golang.org/x/sys/windows`, `go-ole` | Recycle Bin, ShellExecute, Credential Manager |
 | Automation | CDP via `CallDevToolsProtocolMethod`, typed with `chromedp/cdproto` | Behind a `cdp.Session` interface |
 | UI language | Strict TypeScript, vanilla, no runtime dependencies | Custom Elements for components |
-| UI build | `esbuild` (written in Go, has a Go API) bundles TS and CSS | Output embedded with `go:embed`. esbuild strips types without checking them, so type-checking needs `tsc` (Node) or the native TypeScript compiler port **[unverified]**. Keep Node as a dev/CI-only dependency |
+| UI build | `esbuild` (written in Go, has a Go API) bundles TS; Tailwind CSS v4 CLI compiles the stylesheet at build time | Output embedded with `go:embed` (see 9e for how the CSS joins the bundle). esbuild strips types without checking them, so type-checking needs `tsc` (Node) or the native TypeScript compiler port **[unverified]**. Keep Node as a dev/CI-only dependency |
 | Protocol types | One schema in Go, generated TypeScript types (e.g. `tygo`) **[unverified]** | Prevents the two sides drifting apart |
 | Database | `modernc.org/sqlite` or `ncruces/go-sqlite3`, FTS5 | goose migrations, sqlc queries |
 | Secrets | DPAPI / Credential Manager | API keys, OAuth tokens, vault |
@@ -72,6 +72,7 @@ All WebView2 instances share one environment and one user-data folder (the persi
 
 ### CSS
 
+- **Since 2026-11-03 the stylesheet is Tailwind CSS v4, compiled to plain CSS before the build (9e).** Nothing from Tailwind runs in the app. The bullets below still describe the output we want.
 - Layers (`reset, tokens, base, components, utilities`), custom properties for tokens and theming, container queries, `:has()`, `popover`, anchor positioning, `@starting-style`.
 - CSS-only interactions stay CSS-only (menus, tab selection, accordions, dialogs).
 - Animation uses `transform` and `opacity`, around 100 ms or less. Use `contain` and `content-visibility: auto` on long lists. Go paginates; there is no JS virtualization.
@@ -511,6 +512,23 @@ The agent panel's first tab is a chat. It talks to the default provider and mode
 - **Share this page** (`cmd/spike/page_windows.go`): a checkbox under the message box, off until the user ticks it (remembered). When on, `g send <text> 1` makes Go run one fixed script in the active tab's top frame (`ExecuteScript`, vtable slot 29; 4 s timeout) and read back URL, title, selection (5,000 characters) and visible text (30,000 characters). It is appended to that turn's prompt only, fenced as untrusted data (copies of the fence inside the page are broken, and the model is told never to follow instructions in it); the history keeps only what the user typed, so the page is read afresh each turn. The user sees `Shared page: <title> (<host>)` under their message, never the full address. Only the first frame is read: cross-origin iframes, canvas and images are not. Home and Settings tabs share nothing and say so. Page text is never logged.
 - **Privacy:** the log records only the op name (`msg g send`), never the text. Checked against a run of several messages.
 - **Verified** against a local fake OpenAI-compatible server: two-turn history (server saw 2 then 4 messages), streaming, Stop mid-run, status pill and Stop button state, metadata line (time, tokens). Unit tests cover `trimHistory`, `friendlyChatError` and `Transcript`/`buildRequest` history. **Not verified:** a real provider reply (Gemini is the first thing to try), long conversations, very long single replies.
+
+## 9e. Tailwind and the UI reshape (implemented 2026-11-03)
+
+**Decision.** The user asked for Tailwind CSS and a full reshape of the UI, guided by Impeccable. I measured Untitled UI React first (9d's neighbour spike): it is MIT, copy-in, on React Aria and Tailwind v4, but cost 529 KB of JS against 25 KB for the vanilla panel and streamed no faster once the vanilla chat got `content-visibility: auto`. So Tailwind is used as a **build-time CSS compiler** and the custom elements stay vanilla. React can still come later without redoing the tokens, because they are Tailwind theme variables.
+
+**Pipeline.** `ui/app.css` is the Tailwind entry: `@import "tailwindcss" source(none); @source "./index.html"; @source "./src";` so only the shell and the TypeScript sources are scanned for classes. `npm run build:css` writes `ui/.cache/app.css` (minified; git-ignored). `tools/buildui` inlines that CSS and the esbuild JS into `internal/ui/dist/index.html` and puts SHA-256 hashes of both into the CSP, so the page is still one file with no `unsafe-inline` and no network request. `scripts/build.ps1` runs `npm ci --ignore-scripts` when `node_modules` is missing (28 packages, install scripts off), then `tsc`, `build:css`, `buildui`, `go build`. Tailwind is pinned to an exact version (4.3.4).
+
+**Rules for the stylesheet.**
+- Design tokens live in `@theme` as OKLCH custom properties (`--color-*: initial` first, so no default palette leaks in). Components are `@layer components` classes that `@apply` utilities; markup carries semantic class names (`.btn`, `.chat-msg`, `.rail-btn`), not long utility strings. Anything used inside `@apply` that is not a built-in utility must be declared with `@utility` (`drag`, `no-drag`, `tabular`, `scroll`).
+- **Go and the UI agree on `id`s and `data-` attributes, never on class names.** Go addresses `chat`, `quick-model`, `agent-pill` (`data-state`), `agent-stop`, `prov-*`, and so on; the settings navigation is found by `data-settings-nav`. A restyle that renames a class must not break behaviour (it did once: the settings navigation went dead when its class was dropped, which is why it now has a data hook).
+- State is shown with `data-*` attributes and `aria-*` (`aria-pressed`, `data-streaming`, `data-tone`), styled with attribute selectors.
+
+**Design.** The design world, tokens and rules are in `DESIGN.md`. In short: Operate mode (a tool used for hours, so quiet neutral surfaces tinted toward one hue, one accent colour reserved for the primary action, selection, focus and "running"), one family (Segoe UI Variable), one icon set drawn in `ui/src/icons.ts`, a filled dot for state and a hollow ring for "not set up".
+
+**Measured.** Built page: 48 KB CSS, 27.7 KB JS, 92 KB HTML in total. `npx impeccable detect` on the built page: 0 findings (two `cramped-padding` reports on the Get started steps were cleared by drawing the divider as an inset hairline instead of a `border-top`). Text contrast against its real background: smallest ratio 5.1 (12 px metadata), body text 8 to 16. Checked by eye in a real window: home, Settings (providers, Browser), the model popover and a streamed chat reply, against a fake provider.
+
+**Not yet checked.** A keyboard-only walkthrough, other window sizes and DPI, and Windows 11. There is no light theme.
 
 ## 10. Data (SQLite)
 

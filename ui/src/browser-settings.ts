@@ -48,7 +48,7 @@ export class PhBrowserSettings extends HTMLElement {
     this.#customRow.append(this.#custom, this.#save);
     this.#result.setAttribute("aria-live", "polite");
 
-    const hint = el("p", "muted small", "Used when you type something in the address bar that is not a web address. The address must start with https:// and contain {query} where the search words go.");
+    const hint = el("p", "max-w-[62ch] text-xs text-fg-muted", "Used when you type something in the address bar that is not a web address. The address must start with https:// and contain {query} where the search words go.");
     this.append(this.#seg, this.#customRow, this.#result, hint);
 
     this.#seg.addEventListener("click", (e) => {

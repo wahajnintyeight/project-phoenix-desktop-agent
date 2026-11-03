@@ -1,4 +1,5 @@
-// buildui bundles the TypeScript and CSS in ./ui with esbuild and writes a single
+// buildui bundles the TypeScript in ./ui with esbuild, takes the CSS that Tailwind compiled
+// (ui/.cache/app.css; scripts/build.ps1 runs Tailwind first) and writes a single
 // self-contained index.html (inline script and style, CSP hashes computed) to
 // internal/ui/dist/index.html, which the Go host embeds.
 package main
@@ -58,13 +59,12 @@ func run() error {
 	if err != nil {
 		return err
 	}
-	css, err := bundle(api.BuildOptions{
-		EntryPoints: []string{"ui/app.css"},
-		Outfile:     "app.css",
-	})
+	// Tailwind already produced minified plain CSS; it is inlined as it is.
+	cssBytes, err := os.ReadFile(filepath.Join("ui", ".cache", "app.css"))
 	if err != nil {
-		return err
+		return fmt.Errorf("compiled CSS not found (%v); run scripts/build.ps1, or `npm run build:css` first", err)
 	}
+	css := string(cssBytes)
 	tpl, err := os.ReadFile("ui/index.html")
 	if err != nil {
 		return err

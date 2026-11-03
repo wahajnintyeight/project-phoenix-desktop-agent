@@ -3,6 +3,7 @@
 // (`result`); it sends user intent back as "v" messages. All text from Go is placed with
 // textContent: version strings, model names and error messages come from external programs
 // and servers.
+import { icon } from "./icons";
 import { send } from "./protocol";
 import { describeChoice, type ModelsData, type PhModelList } from "./model-list";
 
@@ -52,6 +53,11 @@ function el<K extends keyof HTMLElementTagNameMap>(tag: K, cls?: string, text?: 
   return e;
 }
 
+/** The host of an address, for a quiet second line. Empty when it is not a URL. */
+function hostOf(url: string): string {
+  try { return new URL(url).host; } catch { return ""; }
+}
+
 function button(label: string, act: string, cls = "btn"): HTMLButtonElement {
   const b = el("button", cls, label);
   b.type = "button";
@@ -80,9 +86,11 @@ export class PhProvider extends HTMLElement {
 
   readonly #root = el("details", "pv");
   readonly #name = el("span", "pv-name-text");
-  readonly #defaultTag = el("span", "pv-default", "Default");
+  readonly #defaultTag = el("span", "chip", "Default");
   readonly #sub = el("span", "pv-sub");
   readonly #status = el("span", "pv-status");
+  readonly #statusDot = el("span", "dot");
+  readonly #statusLabel = el("span");
   readonly #modelText = el("span", "pv-model");
 
   readonly #modeCli = button("CLI sign-in", "mode-cli", "seg-btn");
@@ -108,12 +116,14 @@ export class PhProvider extends HTMLElement {
   readonly #test = button("Test", "test");
   readonly #refresh = button("Re-check", "refresh", "btn btn-quiet");
   readonly #result = el("p", "msg");
-  readonly #meta = el("p", "msg small");
+  readonly #meta = el("p", "msg text-xs");
 
   static observedAttributes = ["data-state"];
 
   constructor() {
     super();
+    this.#statusDot.setAttribute("aria-hidden", "true");
+    this.#status.append(this.#statusDot, this.#statusLabel);
     const seg = el("div", "seg");
     seg.setAttribute("role", "radiogroup");
     seg.setAttribute("aria-label", "How Phoenix signs in");
@@ -134,7 +144,9 @@ export class PhProvider extends HTMLElement {
     baseRow.append(this.#baseInput, button("Save address", "savebase"), button("Use default", "resetbase", "btn btn-quiet"));
     const endpointBody = el("div", "pv-endpoint-body");
     endpointBody.append(baseRow, this.#baseHint);
-    endpoint.append(el("summary", undefined, "Change the endpoint"), endpointBody);
+    const endpointSummary = el("summary");
+    endpointSummary.append(icon("chevronRight", 14), "Custom endpoint");
+    endpoint.append(endpointSummary, endpointBody);
     this.#endpointSection = el("div", "pv-section");
     this.#endpointSection.append(endpoint);
   }
@@ -151,7 +163,9 @@ export class PhProvider extends HTMLElement {
     const nameRow = el("span", "pv-name");
     nameRow.append(this.#name, this.#defaultTag);
     id.append(nameRow, this.#sub);
-    summary.append(id, this.#status, this.#modelText, el("span", "pv-chevron"));
+    const chevron = el("span", "pv-chevron");
+    chevron.append(icon("chevronRight", 14));
+    summary.append(id, this.#status, this.#modelText, chevron);
     this.#root.name = "providers"; // opening one row closes the others
 
     const body = el("div", "pv-body");
@@ -233,26 +247,27 @@ export class PhProvider extends HTMLElement {
     this.#test.disabled = s === "testing" ? false : !(d?.installed && d.ready) || s !== "idle";
     this.#signIn.disabled = s !== "idle";
     this.#refresh.disabled = s === "checking";
-    if (s === "checking") this.#setStatus("Checking…", "");
-    else if (s === "login") this.#setStatus("Waiting for sign-in…", "");
-    else if (s === "testing") this.#setStatus("Testing…", "");
-    else if (d) this.#setStatus(this.#statusText(d), d.ready ? "ok" : "warn");
+    if (s === "checking") this.#setStatus("Checking…", "busy");
+    else if (s === "login") this.#setStatus("Waiting for sign-in…", "busy");
+    else if (s === "testing") this.#setStatus("Testing…", "busy");
+    else if (d) this.#setStatus(this.#statusText(d), d.ready ? "ok" : "");
   }
 
   #setStatus(text: string, tone: string): void {
-    this.#status.textContent = text;
+    this.#statusLabel.textContent = text;
     this.#status.dataset["tone"] = tone;
+    this.#statusDot.dataset["tone"] = tone;
   }
 
   #statusText(d: ProviderData): string {
     if (!d.installed) return "Not installed";
     if (d.ready) return "Ready";
-    return d.mode === "api_key" ? "Needs key" : "Needs sign-in";
+    return d.mode === "api_key" ? "Add a key" : "Sign in";
   }
 
   #subText(d: ProviderData): string {
     if (!d.installed) return "Command-line client not found";
-    if (d.kind === "api") return d.hasApiKey ? "API key saved" : "No API key";
+    if (d.kind === "api") return d.hasApiKey ? "API key saved" : hostOf(d.baseUrl ?? d.defaultBaseUrl ?? "");
     if (d.mode === "api_key") return d.hasApiKey ? "Using an API key" : "API key mode, no key saved";
     const l = d.login;
     if (!l.signedIn) return "Not signed in";

@@ -1,6 +1,8 @@
 // <ph-tab-strip>: renders the tab list Go sends. Holds no tab state of its own beyond
 // the last list it was given; selection, ordering and closing are decided in Go.
 
+import { icon } from "./icons";
+
 export interface TabInfo {
   id: number;
   title: string;
@@ -59,16 +61,19 @@ export class PhTabStrip extends HTMLElement {
     main.className = "tab-main";
     main.dataset["action"] = "tab.select";
     main.dataset["id"] = String(id);
+    const spin = document.createElement("span");
+    spin.className = "tab-spin";
+    spin.setAttribute("aria-hidden", "true");
     const title = document.createElement("span");
     title.className = "tab-title";
-    main.append(title);
+    main.append(spin, title);
 
     const close = document.createElement("button");
     close.className = "tab-close";
     close.dataset["action"] = "tab.close";
     close.dataset["id"] = String(id);
     close.setAttribute("aria-label", "Close tab");
-    close.textContent = "×";
+    close.append(icon("close", 12));
 
     el.append(main, close);
     return el;

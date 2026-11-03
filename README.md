@@ -15,7 +15,7 @@ Phoenix brings a multi-tab browser and AI provider controls into one native desk
 
 ## What works today
 
-- Native Windows app shell with a dark interface and multi-tab browser powered by WebView2.
+- Native Windows app shell with a redesigned dark interface (calm neutrals, one ember accent) and a multi-tab browser powered by WebView2.
 - Address bar for URLs and web searches, with a configurable HTTPS search provider.
 - Provider setup, model selection, connection checks, and a quick model picker.
 - Streaming chat with the selected model, with an optional **Share page** control to include the active page's readable text in your message.
@@ -41,13 +41,13 @@ cd project-phoenix-desktop-agent
 pwsh ./scripts/build.ps1
 ```
 
-The script type-checks and bundles the UI, then builds `bin/phoenix-spike.exe`. Run it with:
+The script type-checks the UI, compiles its Tailwind CSS, bundles everything into one HTML file, then builds `bin/phoenix-spike.exe`. Run it with:
 
 ```powershell
 ./bin/phoenix-spike.exe
 ```
 
-Or build and launch in one step with `pwsh ./scripts/build.ps1 -Run`. The first build installs the project's npm development dependency if `node_modules` is missing.
+Or build and launch in one step with `pwsh ./scripts/build.ps1 -Run`. The first build runs `npm ci --ignore-scripts` if `node_modules` is missing, which installs the development tools (TypeScript and the Tailwind CSS CLI). Nothing from npm ships inside the app: Tailwind is only a build-time compiler.
 
 ## Provider setup
 
@@ -61,14 +61,21 @@ Phoenix stores its configuration at `%APPDATA%\Phoenix\config.yaml` and the encr
 
 ```powershell
 npm run typecheck
-go test ./internal/...
+npm run build:css
+go test ./cmd/spike ./internal/...
+npx impeccable detect internal/ui/dist/index.html
 ```
 
-The full build command also type-checks the UI before bundling it and compiling the Windows app.
+The last command checks the built page against Impeccable's design rules and should report no findings. The full build command also type-checks the UI before bundling it and compiling the Windows app.
+
+## Interface
+
+The interface is vanilla TypeScript custom elements styled with Tailwind CSS v4, compiled to plain CSS at build time and inlined into a single HTML page, so the app makes no network request for its own UI. [DESIGN.md](DESIGN.md) records the colour, type and component rules.
 
 ## Project notes
 
 - [PRODUCT.md](PRODUCT.md) describes the product direction and current scope.
+- [DESIGN.md](DESIGN.md) describes the visual design system.
 - [ARCHITECTURE.md](ARCHITECTURE.md) records implementation decisions and open questions.
 - Contributions and bug reports are welcome through [GitHub Issues](https://github.com/wahajnintyeight/project-phoenix-desktop-agent/issues).
 

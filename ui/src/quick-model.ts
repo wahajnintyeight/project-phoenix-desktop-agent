@@ -1,7 +1,8 @@
-// <ph-quick-model>: the model picker in the agent panel's footer. One button shows the
+// <ph-quick-model>: the model picker in the chat composer. One button shows the
 // current provider and model; it opens a popover to switch provider, model and effort
 // without going to Settings. It lists only providers that are ready to run, and shows the
 // same data as the Settings rows.
+import { icon } from "./icons";
 import { send } from "./protocol";
 import { describeChoice, type ModelsData, PhModelList } from "./model-list";
 
@@ -35,7 +36,7 @@ export class PhQuickModel extends HTMLElement {
     this.#button.setAttribute("popovertarget", this.#pop.id);
     this.#button.setAttribute("aria-label", "Choose model");
     this.#button.disabled = true;
-    this.#button.append(this.#label, el("span", "qm-caret"));
+    this.#button.append(this.#label, icon("chevronDown", 12));
 
     this.#seg.setAttribute("role", "radiogroup");
     this.#seg.setAttribute("aria-label", "Provider");

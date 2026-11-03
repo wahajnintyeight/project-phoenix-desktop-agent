@@ -1,10 +1,13 @@
-﻿{
+{
   "name": "phoenix-ui",
   "private": true,
   "scripts": {
-    "typecheck": "tsc --noEmit -p ui"
+    "typecheck": "tsc --noEmit -p ui",
+    "build:css": "tailwindcss -i ui/app.css -o ui/.cache/app.css --minify"
   },
   "devDependencies": {
+    "@tailwindcss/cli": "4.3.4",
+    "tailwindcss": "4.3.4",
     "typescript": "^5.9.0"
   }
 }
