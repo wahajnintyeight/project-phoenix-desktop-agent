@@ -57,7 +57,7 @@ All WebView2 instances share one environment and one user-data folder (the persi
 | Drive | `x/oauth2` + Drive v3, `drive.file` scope + Picker | System browser, PKCE, loopback redirect |
 | S3 (deferred) | AWS SDK for Go v2 (custom endpoint for S3-compatible services) | Behind the `Storage` interface; see 5a Cloud storage. Check binary-size impact |
 
-**Wails v3 (stable 3.0.0, announced 26 October 2026; requires Go 1.26+): decision pending a spike.** Phoenix needs several sibling WebView2 controllers (one per tab) inside one window. A Wails maintainer said in January 2024 (pre-stable) that "there won't be multiple embedded webviews per window"; I have not confirmed whether that still holds in 3.0.0. Spike question: can a Wails v3 app expose its native window handle, host extra WebView2 controllers as children in the same environment and profile, and call `CallDevToolsProtocolMethod`? If yes, use Wails for the shell (windows, tray, menus, updater, generated TypeScript bindings, events). If no, use WebView2 directly and borrow only Wails's raw-message idea (see 6).
+**Wails v3 is the target shell (decided 2026-11-03; spike passed, see 14b).** The owner wants Phoenix to be a Wails v3 application. Current facts: stable v3.0.0 and v3.1.0 (1 Nov 2026) are released and need Go 1.26+. Wails v3 does **not** host several webviews inside one window: issue #1997 is open (a maintainer suggested "v3.5, needs contributors"), PR #4880 (`WebviewPanel`, Windows and Linux) is open with changes requested and merge conflicts, and PR #5008 (`webcontentsview`) is a draft. So Phoenix uses a hybrid: Wails owns the window, tray, menus, the UI webview, bindings/events and packaging; the browser tabs stay as our own WebView2 controllers (the existing `go-webview2` code in `cmd/spike/tabs_windows.go`) created as child windows of the Wails window through `WebviewWindow.NativeWindow()`. If #4880 merges, tabs can move to `WebviewPanel` without touching the UI. Migration plan in 14b.
 
 ## 5. UI layer (vanilla TypeScript + HTML5 + CSS)
 
@@ -647,6 +647,21 @@ Verified with real keystrokes while Phoenix was the foreground window: Ctrl+T, C
 **Right-click → Inspect:** page webviews now have DevTools and the default context menu enabled. DevTools opening was verified (F12); the native context menu itself could not be captured, so the presence of the "Inspect" entry is expected from the WebView2 default, not observed.
 
 **Vendored library.** go-webview2 is now copied to `third_party/go-webview2` and wired through a `replace` in `go.mod`, with three defects addressed or worked around: (1) `errorCallback` called `os.Exit(1)` on any COM error; a user's session ended this way with "The group or resource is not in the correct state" after closing a tab. It now exits only before the environment is ready, and every error is logged with a stack. (2) It echoed every UI message back to its sender; removed. (3) Its accelerator handling resets `Handled` to false after the callback, which is why shortcuts use a raw handler instead. The crash was not reproduced in later stress runs (create, navigate and close in several orders), so its exact trigger is unknown; the log now captures a stack if it recurs.
+
+## 14b. Wails v3 hybrid spike (2026-11-03)
+
+Code: `experiments/wails-hybrid` (its own Go module, Wails v3.1.0, the vendored `go-webview2` for tabs). Windows 10 (19045), Go 1.27.3, WebView2 156.
+
+**Passed.** (1) A frameless Wails window loads a custom UI (custom title bar, `--wails-draggable`, window buttons through the runtime). (2) UI to Go: `System.invoke(string)` from `/wails/runtime.js` arrives in `Options.RawMessageHandler` as a raw string, the same shape as our U+001F protocol, so `protocol.ts` is the only UI file that must change. (3) Go to UI: `WebviewWindow.ExecJS` delivered messages (events are the other option). (4) `NativeWindow()` returns the HWND; `edge.NewChromium().Embed(hwnd)` created a tab controller as a child, positioned from the UI's slot rectangle with DPI scaling, and example.com rendered in it with a different user-data folder from Wails's own. (5) Airspace: after embedding, the Wails UI webview sat above the tab and hid it; `SetWindowPos(uiView, HWND_BOTTOM)` (our existing `lowerUI` idea) fixed it, found by listing the window's direct children before the first tab exists. (6) Maximize and restore re-laid out the tab to the slot and kept the z-order. (7) `Options.Windows.AdditionalBrowserArgs` takes `--remote-debugging-port`, so the same CDP test tooling works; `WEBVIEW2_ADDITIONAL_BROWSER_ARGUMENTS` does not reach the Wails webview.
+
+**Not tested yet.** Keyboard focus hand-off between the UI webview and a tab (Wails has `webview_focus_handoff.go`), resize borders and Windows 11 snap layouts on a Wails frameless window, a menu popover drawn over a tab (our freeze-image trick is still needed), tray and single-instance, DPI changes across monitors, the installer, and the binary size (spike exe 18 MB against 8 MB now).
+
+**Migration plan.**
+1. *Shell.* New `cmd/phoenix` Wails app. Window, frameless options, tray (`SystemTray`), single instance and menus from Wails; delete the hand-written Win32 chrome (`win32_windows.go`, most of `main_windows.go`). Keep `tabs_windows.go`, `chat_windows.go`, providers, vault and `internal/*` unchanged; replace `post()` with `ExecJS`/events and the `WM_APP` message pump with `application.InvokeAsync`.
+2. *Protocol.* `protocol.ts` swaps `chrome.webview.postMessage` for `System.invoke` and the listener for a global the host calls. The wire format and every component stay.
+3. *UI delivery.* Serve the built single HTML through the Wails asset server; the CSP gains `'self'` for `/wails/runtime.js`.
+4. *Packaging.* Wails's NSIS installer and updater, signed builds.
+5. *Later.* Replace our tab controllers with `WebviewPanel` if PR #4880 lands.
 
 ## 15. Open decisions
 

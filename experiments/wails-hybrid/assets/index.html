@@ -1,0 +1,35 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><title>Hybrid spike</title>
+<style>
+  html,body{margin:0;height:100%;background:#16181d;color:#e6e8ee;font:13px "Segoe UI Variable Text","Segoe UI",sans-serif}
+  body{display:grid;grid-template-rows:40px 1fr;grid-template-columns:1fr 280px}
+  #bar{grid-column:1/3;display:flex;align-items:center;gap:8px;padding:0 12px;background:#0f1115;--wails-draggable:drag}
+  #bar button{--wails-draggable:no-drag}
+  #slot{background:#1d2027;border:1px dashed #444;margin:0}
+  #side{padding:12px;overflow:auto}
+  pre{white-space:pre-wrap}
+</style></head>
+<body>
+<div id="bar"><b>Phoenix hybrid spike</b>
+  <button id="open">Open example.com tab</button><button id="hide">Hide tab</button><button id="show">Show tab</button><button id="ping">Ping Go</button>
+  <span style="margin-left:auto"></span><button id="min">–</button><button id="max">▢</button><button id="close">✕</button></div>
+<div id="slot"></div>
+<div id="side"><pre id="log"></pre></div>
+<script type="module">
+import { System, Window } from "/wails/runtime.js";
+const log = (s) => { document.getElementById("log").textContent += s + "\n"; };
+window.__phx = (s) => log("go->ui: " + s);
+const send = (s) => System.invoke(s);
+const slot = document.getElementById("slot");
+const report = () => { const r = slot.getBoundingClientRect(); send(["slot", r.x, r.y, r.width, r.height].join(" ")); };
+new ResizeObserver(report).observe(slot);
+document.getElementById("open").onclick = () => send("tab https://example.com/");
+document.getElementById("hide").onclick = () => send("vis 0");
+document.getElementById("show").onclick = () => send("vis 1");
+document.getElementById("ping").onclick = () => send("ping " + performance.now());
+document.getElementById("min").onclick = () => Window.Minimise();
+document.getElementById("max").onclick = () => Window.ToggleMaximise();
+document.getElementById("close").onclick = () => Window.Close();
+log("ui ready");
+report();
+</script></body></html>
