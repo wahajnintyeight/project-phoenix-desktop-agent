@@ -117,7 +117,7 @@ func TestValidation(t *testing.T) {
 func TestStatusesAreInDisplayOrderAndSettingsPersist(t *testing.T) {
 	h, _, _, path := newHub(t)
 	sts := h.Statuses(context.Background())
-	if len(sts) != 2 || sts[0].ID != provider.Claude || sts[1].ID != provider.Codex {
+	if len(sts) != 7 || sts[0].ID != provider.Claude || sts[1].ID != provider.Codex || sts[2].ID != provider.Gemini {
 		t.Fatalf("%+v", sts)
 	}
 	if err := h.SetDefault(provider.Codex); err != nil {
@@ -177,5 +177,93 @@ func TestModelsAreCachedUntilRefresh(t *testing.T) {
 	_, _ = h.Models(ctx, provider.Claude, false)
 	if cl.modelCalls != 2 {
 		t.Error("auth-mode change did not invalidate the cache")
+	}
+}
+
+func newHTTPHub(t *testing.T) (*Hub, *fake) {
+	t.Helper()
+	dir := t.TempDir()
+	vault, err := secrets.Open(filepath.Join(dir, "vault"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	gem := &fake{id: provider.Gemini}
+	h, err := New(filepath.Join(dir, "config.yaml"), vault, &fake{id: provider.Claude}, &fake{id: provider.Codex}, gem)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return h, gem
+}
+
+func TestHTTPProviderSettings(t *testing.T) {
+	h, gem := newHTTPHub(t)
+	if err := h.SetMode(provider.Gemini, provider.AuthCLI); err == nil {
+		t.Error("an HTTP provider accepted CLI mode")
+	}
+	if err := h.SetBaseURL(provider.Claude, "https://x.y"); err == nil {
+		t.Error("a CLI provider accepted a base URL")
+	}
+	for _, bad := range []string{"http://evil.example", "https://u:p@x.y", "ftp://x.y", "https://x.y/?k=1"} {
+		if h.SetBaseURL(provider.Gemini, bad) == nil {
+			t.Errorf("accepted base %q", bad)
+		}
+	}
+	if err := h.SetBaseURL(provider.Gemini, " https://proxy.example/v1/ "); err != nil {
+		t.Fatal(err)
+	}
+	if err := h.SetAPIKey(provider.Gemini, key); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := h.Status(context.Background(), provider.Gemini), error(nil); err != nil {
+		t.Fatal(err)
+	}
+	if gem.seen.BaseURL != "https://proxy.example/v1" || gem.seen.APIKey != key || gem.seen.Mode != provider.AuthAPIKey {
+		t.Errorf("settings reaching the provider: %+v", gem.seen)
+	}
+	// removing the key must not push an API-only provider into a CLI mode it does not have
+	if err := h.ClearAPIKey(provider.Gemini); err != nil {
+		t.Fatal(err)
+	}
+	h.Status(context.Background(), provider.Gemini)
+	if gem.seen.Mode != provider.AuthAPIKey || gem.seen.APIKey != "" {
+		t.Errorf("after clearing the key: %+v", gem.seen)
+	}
+	if err := h.SetBaseURL(provider.Gemini, ""); err != nil {
+		t.Errorf("clearing the base URL: %v", err)
+	}
+}
+
+func TestModelCacheForgetsWhenKeyOrBaseChanges(t *testing.T) {
+	h, gem := newHTTPHub(t)
+	ctx := context.Background()
+	_, _ = h.Models(ctx, provider.Gemini, false)
+	_, _ = h.Models(ctx, provider.Gemini, false)
+	if gem.modelCalls != 1 {
+		t.Fatalf("cache not used: %d", gem.modelCalls)
+	}
+	_ = h.SetAPIKey(provider.Gemini, key)
+	_, _ = h.Models(ctx, provider.Gemini, false)
+	if gem.modelCalls != 2 {
+		t.Errorf("saving a key must refetch: %d", gem.modelCalls)
+	}
+	_ = h.SetBaseURL(provider.Gemini, "https://other.example/v1")
+	_, _ = h.Models(ctx, provider.Gemini, false)
+	if gem.modelCalls != 3 {
+		t.Errorf("changing the base URL must refetch: %d", gem.modelCalls)
+	}
+}
+
+func TestAllProvidersAreListed(t *testing.T) {
+	h, _ := newHTTPHub(t)
+	ids := h.IDs()
+	if len(ids) != 7 || ids[0] != provider.Claude || ids[6] != provider.Grok {
+		t.Errorf("%v", ids)
+	}
+	if err := h.SetDefault(provider.Grok); err == nil {
+		// a provider that is Known but not registered in this hub must be refused
+		t.Error("default set to a provider the hub does not have")
+	}
+	if err := h.SetDefault(provider.Gemini); err != nil || h.Default() != provider.Gemini {
+		t.Errorf("%v %v", err, h.Default())
 	}
 }

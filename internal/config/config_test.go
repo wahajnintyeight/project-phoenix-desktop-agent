@@ -125,3 +125,49 @@ func TestStoreUpdateWritesAndNormalizes(t *testing.T) {
 		}
 	})
 }
+
+func TestHTTPProvidersRoundTripAndAreSanitized(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "c.yaml")
+	raw := "providers:\n  default: grok\n  gemini:\n    auth: cli\n    model: gemini-x\n    base_url: https://proxy.example/v1\n" +
+		"  mistral:\n    base_url: http://evil.example/v1\n    model: --bad\n  nonsense:\n    model: x\n"
+	if err := os.WriteFile(path, []byte(raw), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	c, err := Load(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	g := c.Provider("gemini")
+	if g.Auth != provider.AuthAPIKey || g.Model != "gemini-x" || g.BaseURL != "https://proxy.example/v1" {
+		t.Errorf("gemini: %+v", g)
+	}
+	if m := c.Provider("mistral"); m.BaseURL != "" || m.Model != "" {
+		t.Errorf("an insecure base URL or a flag-like model survived: %+v", m)
+	}
+	if _, ok := c.Providers.Others["nonsense"]; ok {
+		t.Error("unknown provider key kept")
+	}
+	if c.Providers.Default != "grok" {
+		t.Errorf("default %q", c.Providers.Default)
+	}
+	if c.Provider("zai").Auth != provider.AuthAPIKey {
+		t.Error("an unconfigured HTTP provider must default to API-key mode")
+	}
+
+	c.SetProvider("zai", ProviderConfig{Model: "glm-x", BaseURL: "https://open.bigmodel.cn/api/paas/v4"})
+	c.SetProvider("evil", ProviderConfig{Model: "x"})
+	if err := c.Save(path); err != nil {
+		t.Fatal(err)
+	}
+	c2, _ := Load(path)
+	if z := c2.Provider("zai"); z.Model != "glm-x" || z.BaseURL == "" || z.Auth != provider.AuthAPIKey {
+		t.Errorf("zai after reload: %+v", z)
+	}
+	if _, ok := c2.Providers.Others["evil"]; ok {
+		t.Error("unknown provider stored")
+	}
+	b, _ := os.ReadFile(path)
+	if strings.Contains(string(b), "nonsense") {
+		t.Error("stray key written back")
+	}
+}
