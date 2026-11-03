@@ -181,6 +181,10 @@ type Request struct {
 	Effort  string    // overrides Settings.Effort
 	WorkDir string    // the run's working root; an empty directory is created if blank
 
+	// UseMCP asks the hub to attach the user's enabled MCP servers to this run (providers
+	// that support them; the others ignore it).
+	UseMCP bool
+
 	// MCPConfig is the path of a JSON file of MCP servers (Phoenix's own tool server).
 	MCPConfig    string
 	AllowedTools []string // tool names the CLI may use without asking, e.g. "mcp__phoenix__*"

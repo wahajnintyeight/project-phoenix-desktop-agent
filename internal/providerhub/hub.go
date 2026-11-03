@@ -293,6 +293,13 @@ func (h *Hub) Run(ctx context.Context, id provider.ID, req provider.Request, emi
 	if err != nil {
 		return provider.Result{}, err
 	}
+	if req.UseMCP && id == provider.Claude && req.MCPConfig == "" {
+		cleanup, err := h.attachMCP(&req)
+		if err != nil {
+			return provider.Result{}, err
+		}
+		defer cleanup()
+	}
 	return p.Run(ctx, r.Settings, req, emit)
 }
 

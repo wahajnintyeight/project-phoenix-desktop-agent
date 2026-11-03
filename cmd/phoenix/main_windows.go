@@ -165,8 +165,14 @@ func onMessage(message string) {
 			logf("msg g %s", f[1])
 		}
 	case "v":
-		// Provider messages can carry an API key: log the operation, never the fields.
-		if len(f) > 2 {
+		// Provider messages can carry an API key: log the operation, never the fields. For
+		// MCP the second field can be pasted JSON holding secrets, so only the operation is
+		// logged.
+		switch {
+		case len(f) < 2:
+		case strings.HasPrefix(f[1], "mcp-"):
+			logf("msg v %s", f[1])
+		case len(f) > 2:
 			logf("msg v %s %s", f[1], f[2])
 		}
 	default:

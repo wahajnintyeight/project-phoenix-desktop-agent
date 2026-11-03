@@ -23,7 +23,7 @@ func TestRoundTripKeepsUnknownSections(t *testing.T) {
 	p := filepath.Join(t.TempDir(), "config.yaml")
 	src := `storage:
   data_dir: D:\Phoenix
-mcp_servers:
+future_section:
   - name: resume-matcher
 providers:
   default: codex
@@ -169,5 +169,44 @@ func TestHTTPProvidersRoundTripAndAreSanitized(t *testing.T) {
 	b, _ := os.ReadFile(path)
 	if strings.Contains(string(b), "nonsense") {
 		t.Error("stray key written back")
+	}
+}
+
+func TestMCPServersRoundTripAndValidate(t *testing.T) {
+	p := filepath.Join(t.TempDir(), "config.yaml")
+	src := `mcp_servers:
+  files:
+    transport: stdio
+    command: npx
+    args: [-y, some-server]
+    env:
+      TOKEN: vault:mcp-files-e0
+    enabled: true
+  remote:
+    transport: http
+    url: https://example.com/mcp
+  evil:
+    transport: http
+    url: http://attacker.example/mcp
+  Bad_Name:
+    transport: stdio
+    command: x
+`
+	if err := os.WriteFile(p, []byte(src), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	c, err := Load(p)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(c.MCPServers) != 2 || c.MCPServers["files"].Name != "files" || !c.MCPServers["files"].Enabled || c.MCPServers["remote"].Enabled {
+		t.Fatalf("%+v", c.MCPServers)
+	}
+	if err := c.Save(p); err != nil {
+		t.Fatal(err)
+	}
+	out, _ := os.ReadFile(p)
+	if strings.Contains(string(out), "attacker") || strings.Contains(string(out), "name:") || !strings.Contains(string(out), "vault:mcp-files-e0") {
+		t.Fatalf("saved file:\n%s", out)
 	}
 }

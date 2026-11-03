@@ -126,6 +126,7 @@
           <nav class="sticky top-10 flex flex-col gap-0.5 self-start" data-settings-nav aria-label="Settings sections">
             <h1 class="mb-4 px-3">Settings</h1>
             <button class="nav-item" data-section-btn="providers" aria-current="true">AI providers</button>
+            <button class="nav-item" data-section-btn="mcp" aria-current="false">Tools (MCP)</button>
             <button class="nav-item" data-section-btn="browser" aria-current="false">Browser</button>
             <button class="nav-item" data-section-btn="general" aria-current="false">General</button>
           </nav>
@@ -163,6 +164,14 @@
                   <ph-provider id="prov-grok" data-provider="grok"></ph-provider>
                 </div>
               </section>
+            </div>
+
+            <div class="flex-col gap-6" data-for="mcp">
+              <div class="flex flex-col gap-2">
+                <h2>Tools (MCP)</h2>
+                <p class="max-w-[62ch] text-base text-fg-muted">MCP servers give the agent tools: files, databases, other apps. Install as many as you like, then choose which ones the agent may use. For now the agent uses them when the default provider is Claude; Codex and the API providers are next.
+              </div>
+              <ph-mcp id="mcp-servers"></ph-mcp>
             </div>
 
             <div class="flex-col gap-6" data-for="browser">

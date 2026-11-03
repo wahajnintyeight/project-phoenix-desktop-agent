@@ -6,7 +6,7 @@ import { icon } from "./icons";
 import { send } from "./protocol";
 
 export interface ChatEvent {
-  k: "user" | "note" | "start" | "delta" | "done" | "error" | "stopped" | "reset";
+  k: "user" | "note" | "tool" | "start" | "delta" | "done" | "error" | "stopped" | "reset";
   text?: string;
   provider?: string;
   model?: string;
@@ -29,6 +29,7 @@ export class PhChat extends HTMLElement {
   #running = false;
   #current: { box: HTMLElement; body: Text; meta: HTMLElement } | null = null;
   #lastUser: HTMLElement | null = null; // where a "page shared" note goes
+  #who = "Agent"; // the label for the agent's messages this turn: provider and model
 
   connectedCallback(): void {
     if (this.childElementCount > 0) return;
@@ -178,17 +179,31 @@ export class PhChat extends HTMLElement {
         this.#setRunning(true);
         break;
       }
+      case "tool": {
+        // One quiet line per tool call, so the user can see what the agent did. The next
+        // reply text starts a new message below it, keeping the order of events.
+        const t = el("p", "chat-tool");
+        t.append(icon("bolt", 12), document.createTextNode(ev.text ?? ""));
+        this.#empty.hidden = true;
+        // A reply box that is still empty (the agent went straight to a tool) is dropped; the
+        // text that follows gets a fresh one below the tool line.
+        if (this.#current && this.#current.body.data === "") this.#current.box.remove();
+        this.#log.append(t);
+        this.#current = null;
+        break;
+      }
       case "note":
         if (this.#lastUser) this.#lastUser.textContent = ev.text ?? "";
         break;
       case "start": {
-        this.#current = this.#message([ev.provider, ev.model].filter(Boolean).join(" · ") || "Agent", "chat-ai");
+        this.#who = [ev.provider, ev.model].filter(Boolean).join(" · ") || "Agent";
+        this.#current = this.#message(this.#who, "chat-ai");
         this.#current.box.dataset["streaming"] = "true";
         break;
       }
       case "delta": {
         // A reply that begins without a start event (or after a reset) still needs a box.
-        this.#current ??= this.#message("Agent", "chat-ai");
+        this.#current ??= this.#message(this.#who, "chat-ai");
         this.#current.box.dataset["streaming"] = "true";
         this.#current.body.appendData(ev.text ?? "");
         break;

@@ -4,6 +4,7 @@ import "./provider-card";
 import "./model-list";
 import "./quick-model";
 import "./browser-settings";
+import "./mcp-settings";
 import "./chat";
 import "./quick-actions";
 

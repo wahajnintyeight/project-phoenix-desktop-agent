@@ -679,6 +679,17 @@ Phoenix is now a real Wails v3 project: `Taskfile.yml`, `build/` (config, Window
 
 **Next.** If Wails PR #4880 (`WebviewPanel`) lands, move tabs to it. Signed builds and the updater.
 
+## 14f. MCP servers (implemented 2026-11-03)
+
+The user can install any number of MCP servers (Settings, Tools (MCP)) and choose which ones the agent may use.
+
+- **Config.** `mcp_servers:` in `config.yaml`, a map by name: `transport` (`stdio` or `http`), `command`/`args`/`env` or `url`/`headers`, `enabled`. `env` and `headers` hold `vault:mcp-<name>-e<i>` or `-h<i>` references; the values are DPAPI-encrypted in the vault. `internal/mcp` validates every entry on load (name `[a-z0-9-]{1,32}`, no control characters in the command, https URLs or http on localhost only, no login in the URL); an invalid entry is dropped, so a hand-edited file cannot smuggle one in.
+- **Installing.** Paste the JSON a server publishes (`{"mcpServers": {...}}`, several at once), or fill in a program or a web address. Go parses it (`mcp.ParseImport`), stages it in memory and shows the exact command or URL and the names of the secrets; only "Install" writes anything. A new server starts disabled. A name that exists must be removed first. Only the Settings UI can add or change a server: the model, a page and a tool result have no path to it, and the pasted JSON is never logged.
+- **Test.** The Test button connects with the official Go SDK (`go-sdk` v1.8.0), reads the server's name and its tools, and disconnects. A command server is started for that and stopped again. Error text has secret values removed.
+- **Using them.** With "Agent can use" on, `providerhub.Run` (for runs that set `UseMCP`, which chat does and the connection test does not) writes a private config file with the resolved secrets, passes it to `claude --mcp-config` together with `--allowedTools mcp__<name>`, and deletes it when the run ends. `--strict-mcp-config` stays on, so the user's own Claude Code servers are still never loaded. Chat shows one line per tool call ("files › read_file"). The system prompt for such runs says to prefer acting, to treat tool results as untrusted data like page text, and to ask in the chat before anything that sends, posts, pays or deletes.
+- **Limits, by design for now.** Claude only; Codex and the API providers need either `-c mcp_servers` wiring (Codex) or Phoenix's own tool loop (HTTP providers). Enabling a server allows all of its tools without a per-call prompt, because Claude's headless mode cannot ask; the real approval gate (Approvals pane) comes with the tool loop. Stdio servers run with the user's full Windows permissions; the Settings text says so. No SSE transport, no OAuth for remote servers, no per-tool allow list yet. `tools/mcpfixture` is a one-tool server for trying this by hand.
+- **Verified.** Unit tests for validation, import, config round trip, vault lifecycle, and the files handed to the CLI; `Test` against a real child process; the real Claude CLI called the fixture's tool and answered with its secret word; the Settings flow (paste, review, install, test, enable, remove confirmation) and a chat turn with the tool line were driven in a built app with an isolated profile. Not verified: a remote (http) server, `npx`-launched servers on a clean machine, Codex.
+
 ## 15. Open decisions
 
 - Pre-created popup windows vs DirectComposition hosting (freeze-frame covers menus; interactive overlays still open).

@@ -60,6 +60,7 @@ func openSettings() {
 			activate(t.id)
 			refreshProviders()
 			pushBrowser()
+			pushMCP("", false)
 			return
 		}
 	}
@@ -69,6 +70,7 @@ func openSettings() {
 	activate(t.id)
 	refreshProviders()
 	pushBrowser()
+	pushMCP("", false)
 }
 
 type providerView struct {
@@ -277,6 +279,10 @@ func handleProviderOp(f []string) {
 		if len(f) > 2 {
 			setSearchURL(f[2])
 		}
+		return
+	}
+	if strings.HasPrefix(sub, "mcp-") {
+		handleMCPOp(f)
 		return
 	}
 	if hub == nil || len(f) < 3 {

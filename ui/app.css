@@ -255,6 +255,7 @@
   .nav-item[aria-current="true"] { @apply bg-raised font-medium text-fg; }
   .settings [data-for] { display: none; }
   .settings[data-section="providers"] [data-for="providers"],
+  .settings[data-section="mcp"] [data-for="mcp"],
   .settings[data-section="browser"] [data-for="browser"],
   .settings[data-section="general"] [data-for="general"] { display: flex; }
   .path { @apply block rounded-md border border-line bg-sunken px-3 py-2 font-mono text-xs text-fg-muted; overflow-wrap: anywhere; user-select: text; }
@@ -295,6 +296,33 @@
   .row { @apply flex flex-wrap items-center gap-2; }
 
   ph-browser-settings { @apply flex flex-col items-start gap-3; }
+
+  /* ── MCP servers ─────────────────────────────────────────────────── */
+  ph-mcp { @apply flex flex-col gap-6; }
+  .mcp-list { @apply flex flex-col rounded-lg border border-line; }
+  .mcp-item { @apply flex flex-col gap-3 px-4 py-3; }
+  .mcp-item + .mcp-item { @apply border-t border-line; }
+  .mcp-head { @apply flex items-center gap-3; }
+  .mcp-id { @apply flex min-w-0 flex-1 flex-col; }
+  .mcp-name { @apply font-semibold; }
+  .mcp-sub { @apply truncate font-mono text-xs text-fg-muted; }
+  .mcp-use { @apply inline-flex shrink-0 cursor-pointer items-center gap-2 text-fg-muted; }
+  .mcp-use input { @apply size-4 accent-[var(--color-accent)]; }
+  .mcp-use:has(input:checked) { @apply text-fg; }
+  .mcp-tools { @apply flex flex-col gap-1 border-t border-line pt-3; }
+  .mcp-tool { @apply grid grid-cols-[minmax(0,12rem)_minmax(0,1fr)] gap-3 text-xs; }
+  .mcp-tool b { @apply truncate font-mono font-medium; }
+  .mcp-tool span { @apply text-fg-muted; overflow-wrap: anywhere; }
+  .mcp-add > summary { @apply inline-flex cursor-pointer items-center gap-1.5 text-fg-muted; }
+  .mcp-add > summary:hover, .mcp-add[open] > summary { @apply text-fg; }
+  .mcp-add[open] > summary svg { @apply rotate-90; }
+  .mcp-add > summary svg { @apply transition-transform; }
+  .mcp-form { @apply flex flex-col gap-3 pt-3; }
+  .mcp-form label { @apply flex flex-col gap-1 text-sm font-medium; }
+  .mcp-form label small { @apply font-normal text-fg-muted; }
+  .mcp-form textarea.field { @apply h-auto min-h-16 py-2 font-mono text-xs; resize: vertical; }
+  .mcp-review { @apply flex flex-col gap-3 rounded-lg border border-warn p-4; }
+  .mcp-review code { @apply block whitespace-pre-wrap rounded-md bg-raised px-3 py-2 font-mono text-xs; overflow-wrap: anywhere; user-select: text; }
 
   /* ── model picker ────────────────────────────────────────────────── */
   ph-model-list { @apply flex w-full flex-col gap-3 self-stretch; }
@@ -366,6 +394,8 @@
   .chat-msg { @apply flex flex-col gap-1; content-visibility: auto; contain-intrinsic-size: auto 96px; }
   .chat-msg[data-streaming="true"] { content-visibility: visible; }
   .chat-who { @apply text-xs font-medium text-fg-subtle; }
+  .chat-tool { @apply flex items-center gap-1.5 text-xs text-fg-subtle; overflow-wrap: anywhere; }
+  .chat-tool svg { @apply shrink-0; }
   .chat-text { @apply text-base whitespace-pre-wrap; overflow-wrap: anywhere; }
   .chat-user .chat-text { @apply rounded-xl bg-raised px-3 py-2; }
   .chat-msg[data-streaming="true"] .chat-text::after {

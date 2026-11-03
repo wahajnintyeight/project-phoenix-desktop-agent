@@ -20,6 +20,7 @@ Phoenix brings a multi-tab browser and AI provider controls into one native desk
 - A quick-action bar under the page: one-click requests that change with the page you are on (a job posting, an article, a form, search results, or text you have selected), so you send a request without typing it.
 - Provider setup, model selection, connection checks, and a quick model picker.
 - Streaming chat with the selected model, with an optional **Share page** control to include the active page's readable text in your message.
+- **MCP servers:** install as many as you like (paste the JSON from a server's install instructions, or enter a program or web address), review the exact command before it is saved, test the connection and list its tools, then choose which servers the agent may use. Secrets go to the encrypted vault. Used when the default provider is Claude for now; every tool call is shown in the chat.
 - Claude and OpenAI Codex through their command-line clients, plus API-key connections for Gemini, OpenRouter, Mistral, Z.ai, and Grok.
 - API keys stored in a Windows DPAPI-encrypted vault; Phoenix does not put vault-backed keys in `config.yaml` or show them again in the UI.
 

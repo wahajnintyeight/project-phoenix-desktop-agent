@@ -16,6 +16,7 @@ import (
 
 	"gopkg.in/yaml.v3"
 
+	"phoenix/internal/mcp"
 	"phoenix/internal/provider"
 )
 
@@ -62,9 +63,12 @@ type Providers struct {
 // Config is the whole file. Sections Phoenix does not know yet are kept in Rest so a
 // rewrite does not drop them. Comments are not preserved.
 type Config struct {
-	Providers Providers      `yaml:"providers"`
-	Browser   Browser        `yaml:"browser,omitempty"`
-	Rest      map[string]any `yaml:",inline"`
+	Providers Providers `yaml:"providers"`
+	Browser   Browser   `yaml:"browser,omitempty"`
+	// MCPServers are the installed MCP servers by name. Entries run programs or call URLs, so
+	// they are validated on load and only the Settings UI may change them.
+	MCPServers map[string]mcp.Server `yaml:"mcp_servers,omitempty"`
+	Rest       map[string]any        `yaml:",inline"`
 }
 
 // SearchURL is the configured search template, or the default.
@@ -174,6 +178,7 @@ func (c *Config) normalize() {
 	if c.Browser.SearchURL != "" && !ValidSearchURL(c.Browser.SearchURL) {
 		c.Browser.SearchURL = ""
 	}
+	c.MCPServers = mcp.CleanMap(c.MCPServers)
 }
 
 // cleanProvider drops values that cannot be trusted. The model and effort become
