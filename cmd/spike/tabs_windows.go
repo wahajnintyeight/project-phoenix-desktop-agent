@@ -217,6 +217,7 @@ func activate(id int) {
 	}
 	pushTabs()
 	pushToolbar()
+	refreshActions(true)
 }
 
 func createWebTab(rawURL string) {
@@ -236,6 +237,10 @@ func createWebTab(rawURL string) {
 	cv.NavigationCompletedCallback = func(_ *edge.ICoreWebView2, _ *edge.ICoreWebView2NavigationCompletedEventArgs) {
 		t.loading = false
 		pushTabs()
+		if t.id == activeID {
+			runLater(func() { refreshActions(false) })
+			scheduleActionRefresh(t.id, 1500*time.Millisecond) // pages that build themselves late
+		}
 	}
 
 	if !cv.Embed(hwnd) {
@@ -276,6 +281,7 @@ func createWebTab(rawURL string) {
 		pushTabs()
 		if t.id == activeID {
 			pushToolbar()
+			refreshActions(true)
 		}
 	})
 	must(wvAddSourceChanged, "SourceChanged", func(_, _ unsafe.Pointer) {

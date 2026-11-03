@@ -11,6 +11,7 @@ const STROKES = {
   page: "M4 2.5h5l3 3v8H4v-11ZM9 2.5v3h3",
   plus: "M8 3v10M3 8h10",
   close: "m4 4 8 8M12 4l-8 8",
+  bolt: "M9 1.5 3.5 9H8l-1 5.5L12.5 7H8l1-5.5Z",
 } as const;
 
 export type IconName = keyof typeof STROKES | "stop";

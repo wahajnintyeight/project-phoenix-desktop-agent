@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"phoenix/internal/provider"
+	"phoenix/internal/quick"
 )
 
 // Chat with the agent. The conversation lives in Go (the UI only draws it), is sent to the
@@ -55,10 +56,13 @@ func setAgentState(state, label string, running bool) {
 		"a"+fs+"agent-pill"+fs+"data-state"+fs+state,
 		"t"+fs+"agent-status"+fs+label,
 		"u"+fs+"agent-stop"+fs+"disabled"+fs+jsonString(!running),
+		// One request at a time: the quick actions wait while a reply is on its way.
+		"u"+fs+"quick-actions"+fs+"disabled"+fs+jsonString(running),
 	)
 }
 
-// handleChatOp handles UI → Go "g" messages: g send <text>, g stop, g new.
+// handleChatOp handles UI → Go "g" messages: g send <text> [1|0], g act <id>, g probe,
+// g stop, g new.
 func handleChatOp(f []string) {
 	if len(f) < 2 {
 		return
@@ -68,6 +72,12 @@ func handleChatOp(f []string) {
 		if len(f) > 2 {
 			sendChat(f[2], len(f) > 3 && f[3] == "1")
 		}
+	case "act":
+		if len(f) > 2 {
+			runAction(f[2])
+		}
+	case "probe":
+		refreshActions(false)
 	case "stop":
 		stopChat()
 	case "new":
@@ -102,7 +112,24 @@ func friendlyChatError(id provider.ID, err error) string {
 	return msg
 }
 
-func sendChat(text string, sharePage bool) {
+// runAction sends a quick action as the user's message. The chat shows the short label (what
+// they clicked); the model gets the full wording. An action that reads the page shares it for
+// this turn without the user having to turn Share page on.
+func runAction(id string) {
+	a, ok := quick.Lookup(id)
+	if !ok || chat.busy {
+		return
+	}
+	logf("chat action %s", a.ID) // the id only, like every other chat log line
+	sendTurn(a.Label, a.Prompt, a.Page)
+}
+
+func sendChat(text string, sharePage bool) { sendTurn(text, text, sharePage) }
+
+// sendTurn runs one turn. display is what the user sees as their message; text is what the
+// model is asked and what the history keeps.
+func sendTurn(display, text string, sharePage bool) {
+	same := display == text // typed text: show exactly what is sent
 	text = strings.TrimSpace(text)
 	if text == "" || chat.busy {
 		return
@@ -114,13 +141,16 @@ func sendChat(text string, sharePage bool) {
 	if r := []rune(text); len(r) > chatMaxInput {
 		text = string(r[:chatMaxInput])
 	}
+	if same {
+		display = text
+	}
 	id := hub.Default()
 	gen := chat.gen
 	history := trimHistory(chat.history)
 
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Minute)
 	chat.cancel, chat.busy = cancel, true
-	postChat(chatEvent{K: "user", Text: text})
+	postChat(chatEvent{K: "user", Text: display})
 	setAgentState("running", "Agent running", true)
 
 	if !sharePage {

@@ -47,41 +47,48 @@ var errPageTimeout = errors.New("the page did not answer in time")
 
 // readPage reads the tab's visible text and calls done exactly once, on the UI thread.
 func readPage(t *tab, done func(pageSnap, error)) {
+	var p pageSnap
+	runScript(t, pageScript, &p, func(err error) { done(p, err) })
+}
+
+// runScript runs one fixed script in the tab's top frame, decodes its JSON result into v and
+// calls done exactly once, on the UI thread. The script must be a constant of ours: nothing
+// from the user, the model or a page is ever placed inside it.
+func runScript(t *tab, script string, v any, done func(error)) {
 	if t == nil || t.wv == nil || t.kind != kindWeb {
-		done(pageSnap{}, errors.New("no web page is open"))
+		done(errors.New("no web page is open"))
 		return
 	}
 	finished := false
-	finish := func(p pageSnap, err error) {
+	finish := func(err error) {
 		if finished {
 			return
 		}
 		finished = true
-		done(p, err)
+		done(err)
 	}
-	js, err := windows.UTF16PtrFromString(pageScript)
+	js, err := windows.UTF16PtrFromString(script)
 	if err != nil {
-		finish(pageSnap{}, err)
+		finish(err)
 		return
 	}
 	h := newHandler(func(errCode, res unsafe.Pointer) {
 		if uintptr(errCode) != 0 || res == nil {
-			finish(pageSnap{}, fmt.Errorf("the page could not be read (0x%x)", uintptr(errCode)))
+			finish(fmt.Errorf("the page could not be read (0x%x)", uintptr(errCode)))
 			return
 		}
-		var p pageSnap
-		if err := json.Unmarshal([]byte(windows.UTF16PtrToString((*uint16)(res))), &p); err != nil {
-			finish(pageSnap{}, errors.New("the page returned something unreadable"))
+		if err := json.Unmarshal([]byte(windows.UTF16PtrToString((*uint16)(res))), v); err != nil {
+			finish(errors.New("the page returned something unreadable"))
 			return
 		}
-		finish(p, nil)
+		finish(nil)
 	})
 	if err := hrErr("ExecuteScript", comCall(t.wv, wvExecuteScript, uintptr(unsafe.Pointer(js)), uintptr(unsafe.Pointer(h)))); err != nil {
-		finish(pageSnap{}, err)
+		finish(err)
 		return
 	}
-	// A hung page must not leave the chat waiting forever.
-	time.AfterFunc(pageTimeout, func() { runLater(func() { finish(pageSnap{}, errPageTimeout) }) })
+	// A hung page must not leave the caller waiting forever.
+	time.AfterFunc(pageTimeout, func() { runLater(func() { finish(errPageTimeout) }) })
 }
 
 // pageBlock is the page, written for the model. Page text is attacker-controlled, so it is

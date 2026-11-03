@@ -530,6 +530,20 @@ The agent panel's first tab is a chat. It talks to the default provider and mode
 
 **Not yet checked.** A keyboard-only walkthrough, other window sizes and DPI, and Windows 11. There is no light theme.
 
+## 9f. Quick actions (implemented 2026-11-03)
+
+Purpose: less talking, more action. A bar of one-click buttons sits under the page at all times (`<ph-quick-actions>`, `ui/src/quick-actions.ts`). Each button is a request the user would otherwise type; the buttons change with what the tab looks like.
+
+- **Go chooses, the UI draws.** `internal/quick` is pure Go: `Classify(Signals)` guesses the page kind (job posting, article, product, form, sign-in, video, search results, generic, or start for home/settings/blank) and `For(kind, hasSelection)` returns up to six actions, most likely first (drawn as the one accent-outlined button). With text selected, the actions on the selection come first. Tests cover classification (including near misses such as a LinkedIn feed or a careers page with the wrong title) and that every id exists.
+- **Signals are read locally.** `cmd/spike/actions_windows.go` runs one fixed script in the tab (JSON-LD `@type`s, `og:type`, visible form fields, password field, `<article>` length, price markup, selection length). The result is used to pick buttons and is not sent to a model, not logged and not kept beyond the kind. `runScript` in `page_windows.go` is the shared helper for such fixed scripts and for reading the page.
+- **When it runs.** On tab switch and navigation start (a guess from address and title shows at once, so the old page's buttons never linger), on load end and 1.5 s later (sites that build themselves late), and when the pointer enters the bar (the cue that the user may have just selected something). An unchanged answer redraws nothing, so buttons do not move under the pointer.
+- **A click sends an id.** `g act <id>`; Go looks it up and the wording lives in `quick.catalog`, so this path cannot carry arbitrary text. The chat shows the short label as the user's message and the model gets the full request. Actions that read the page attach it for that turn without the Share page toggle. Prompts that need personal facts say to ask up to three questions instead of inventing them. The log records `chat action <id>` only.
+- **One request at a time.** The buttons are disabled while a reply streams and come back on done, stop or error.
+- **Honest about what they do.** The buttons only ask the model; none of them acts on a page yet. Prompts that would imply acting (for example form answers) say the user pastes them in. When the tool loop with approvals arrives, an action becomes a task instead of a prompt, behind the same ids.
+- **Verified** with a fake provider and test pages: job, article, form and plain pages classify correctly; a selection switches the set; a click sends the label, attaches the page and selection and the model sees both; chips disable during a stream and return after Stop.
+
+**Next:** user-defined actions in `config.yaml`, keyboard shortcuts for the first nine, ordering by use, and actions that run tasks once the agent can act.
+
 ## 10. Data (SQLite)
 
 Tables: history (+ FTS5), bookmarks (+ FTS5), vault entries (encrypted), profile facts, applications, agent runs and actions, settings. Imports: Netscape bookmark HTML; Chrome/Edge `History` (copy first; timestamps are microseconds since 1601); Firefox `places.sqlite`; password CSV exports (no decryption of browser stores).

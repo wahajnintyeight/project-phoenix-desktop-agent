@@ -17,6 +17,7 @@ Phoenix brings a multi-tab browser and AI provider controls into one native desk
 
 - Native Windows app shell with a redesigned dark interface (calm neutrals, one ember accent) and a multi-tab browser powered by WebView2.
 - Address bar for URLs and web searches, with a configurable HTTPS search provider.
+- A quick-action bar under the page: one-click requests that change with the page you are on (a job posting, an article, a form, search results, or text you have selected), so you send a request without typing it.
 - Provider setup, model selection, connection checks, and a quick model picker.
 - Streaming chat with the selected model, with an optional **Share page** control to include the active page's readable text in your message.
 - Claude and OpenAI Codex through their command-line clients, plus API-key connections for Gemini, OpenRouter, Mistral, Z.ai, and Grok.

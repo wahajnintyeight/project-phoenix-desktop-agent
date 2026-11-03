@@ -225,6 +225,8 @@ func onMessage(message string, _ *edge.ICoreWebView2, _ *edge.ICoreWebView2WebMe
 			windowState(),
 		)
 		pushTabs()
+		quickState.key = "" // the UI is new: draw the bar even if it looks unchanged
+		refreshActions(true)
 		if hub != nil {
 			refreshProviders() // the agent panel and start page need to know what is ready
 		}

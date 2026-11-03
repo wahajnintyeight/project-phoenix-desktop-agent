@@ -1,6 +1,7 @@
 // <ph-chat>: the conversation with the agent. Go owns the conversation; this element only
 // draws what Go reports (`events`) and sends what the user types ("g send", "g stop",
 // "g new"). Every message is placed with textContent: model output is untrusted text.
+import { el } from "./dom";
 import { icon } from "./icons";
 import { send } from "./protocol";
 
@@ -16,13 +17,6 @@ export interface ChatEvent {
 }
 
 const IDEAS = ["Summarise this page", "What are the key points here?", "Draft a short reply to this"];
-
-function el<K extends keyof HTMLElementTagNameMap>(tag: K, cls?: string, text?: string): HTMLElementTagNameMap[K] {
-  const e = document.createElement(tag);
-  if (cls) e.className = cls;
-  if (text !== undefined) e.textContent = text;
-  return e;
-}
 
 export class PhChat extends HTMLElement {
   readonly #log = el("div", "chat-log");

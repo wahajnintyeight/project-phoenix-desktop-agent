@@ -219,7 +219,22 @@
   .rail-settings { @apply mt-auto; }
 
   /* ── page slot: Go places the page's WebView2 exactly over this box ─ */
-  .slot { @apply scroll relative min-h-0 min-w-0 overflow-auto bg-canvas; }
+  .stage { @apply flex min-h-0 min-w-0 flex-col; }
+  .slot { @apply scroll relative min-h-0 min-w-0 flex-1 overflow-auto bg-canvas; }
+
+  /* ── quick actions: one-click requests under the page ─────────────── */
+  .qa { @apply flex h-11 shrink-0 items-center gap-3 border-t border-line bg-canvas px-3; }
+  .qa-lead { @apply flex shrink-0 items-center gap-1.5 text-xs text-fg-subtle; }
+  .qa-list { @apply scroll flex min-w-0 flex-1 items-center gap-1.5 overflow-x-auto overflow-y-hidden py-1; scrollbar-width: none; }
+  .qa-chip {
+    @apply h-7 shrink-0 rounded-full border border-line-strong bg-raised px-3 text-xs font-medium whitespace-nowrap text-fg-muted transition-colors;
+  }
+  .qa-chip:hover:not(:disabled) { @apply bg-overlay text-fg; }
+  .qa-chip:active:not(:disabled) { @apply bg-line; }
+  .qa-chip:disabled { @apply opacity-45; }
+  /* The most likely request for this page: the one place the accent shows in the bar. */
+  .qa-chip[data-primary="true"] { border-color: color-mix(in oklab, var(--color-accent) 55%, transparent); @apply text-accent; }
+  .qa-chip[data-primary="true"]:hover:not(:disabled) { @apply text-accent-hover; }
   .freeze { @apply absolute inset-0 size-full; object-fit: fill; }
   .home { display: none; }
   [data-view="home"] .home { display: flex; }

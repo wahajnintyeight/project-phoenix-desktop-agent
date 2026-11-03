@@ -5,11 +5,12 @@ import "./model-list";
 import "./quick-model";
 import "./browser-settings";
 import "./chat";
+import "./quick-actions";
 
 const $ = (id: string): HTMLElement | null => document.getElementById(id);
 
 // Go may only set these. Anything else is ignored.
-const SETTABLE_PROPS = new Set(["tabs", "value", "disabled", "src", "hidden", "data", "result", "models", "events"]);
+const SETTABLE_PROPS = new Set(["tabs", "value", "disabled", "src", "hidden", "data", "result", "models", "events", "actions"]);
 const SETTABLE_ATTRS = new Set(["data-view", "data-state"]);
 
 // ── Message handling (Go → UI) ──────────────────────────────────────────

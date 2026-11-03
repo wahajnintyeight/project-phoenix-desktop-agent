@@ -47,6 +47,7 @@ Scale, about 1.15 per step: 12 / 13 / 14 / 16 / 19 / 22 px (`text-xs` to `text-2
 - **Status.** A filled dot means state (ready, busy, error). A hollow ring means "not set up yet". The agent pill in the title bar shows idle or running and turns into a Stop control while a run is active.
 - **Selection.** Selected = `raised` background plus an accent icon or check. Never a coloured stripe.
 - **Chat.** User messages sit in a raised bubble; agent replies are plain text with the model name above and cost line below. Errors say what happened in plain words. The Share page chip is a toggle (`aria-pressed`), off until the user turns it on, and stays as chosen.
+- **Quick actions.** A 44 px bar under the page, always visible. A small label says what Phoenix thinks the page is (a guess, so it is worded as a label, not a claim), then up to six pill buttons. The first is the likeliest request and is the only accent in the bar. Buttons disable while a reply streams. The set changes only when the page or selection changes, never under the pointer.
 - **Empty states** teach the next step (the chat's empty state explains Share page; Get started lists the three things to do).
 - **Popovers** use the native `popover` attribute; the list inside scrolls, the popover does not.
 

@@ -73,6 +73,7 @@
     </nav>
 
     <!-- The page slot: the host positions the active page's WebView2 exactly over this box. -->
+    <div class="stage">
     <main class="slot" id="page-slot">
 
       <div class="home mx-auto min-h-full w-full max-w-xl flex-col justify-center gap-8 px-8 pt-12 pb-24">
@@ -207,6 +208,8 @@
 
       <img id="freeze" class="freeze" alt="" src="data:image/gif;base64,R0lGODlhAQABAAAAACH5BAEKAAEALAAAAAABAAEAAAICTAEAOw==" hidden>
     </main>
+    <ph-quick-actions id="quick-actions" class="qa"></ph-quick-actions>
+    </div>
 
     <aside class="agent" data-pane="chat" aria-label="Agent panel">
       <div class="agent-tabs" role="tablist" aria-label="Agent panel sections">
