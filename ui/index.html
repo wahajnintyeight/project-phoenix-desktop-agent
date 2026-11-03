@@ -2,9 +2,11 @@
 <html lang="en" data-theme="dark">
 <head>
 <meta charset="utf-8">
-<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src {{SCRIPT_HASH}}; style-src {{STYLE_HASH}}; img-src data:">
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'self' {{SCRIPT_HASH}}; connect-src 'self'; style-src {{STYLE_HASH}}; img-src data:">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Phoenix</title>
+<!-- The Wails runtime: it tells the host the page is ready, which lets the host send messages in. -->
+<script type="module" src="/wails/runtime.js"></script>
 <style>{{CSS}}</style>
 </head>
 <body>

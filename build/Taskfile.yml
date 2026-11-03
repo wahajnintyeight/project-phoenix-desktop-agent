@@ -1,0 +1,46 @@
+version: '3'
+
+# Shared tasks. Phoenix's UI is built by the project's own pipeline (TypeScript check,
+# Tailwind, esbuild into one HTML file), not by a Vite frontend.
+tasks:
+  go:mod:tidy:
+    summary: Runs `go mod tidy`
+    internal: true
+    run: once
+    cmds:
+      - go mod tidy
+
+  install:ui:deps:
+    summary: Installs the UI's development tools exactly as package-lock.json pins them
+    run: once
+    sources:
+      - package.json
+      - package-lock.json
+    generates:
+      - node_modules/.package-lock.json
+    preconditions:
+      - sh: npm version
+        msg: "npm is required. It comes with Node: https://nodejs.org/en/download/"
+    cmds:
+      - npm ci --ignore-scripts --no-audit --no-fund
+
+  build:frontend:
+    summary: Type-checks the UI, compiles its Tailwind CSS and bundles it into internal/ui/dist/index.html
+    run: once
+    deps:
+      - task: install:ui:deps
+    sources:
+      - ui/**/*
+      - tools/buildui/**/*
+      - package.json
+    generates:
+      - internal/ui/dist/index.html
+    cmds:
+      - npx tsc --noEmit -p ui
+      - npm run --silent build:css
+      - go run ./tools/buildui
+
+  dev:frontend:
+    summary: Serves the built UI for `wails3 dev` (Wails proxies the page to this server)
+    cmds:
+      - go run ./tools/devserve -port {{.VITE_PORT}}

@@ -15,6 +15,7 @@ import (
 	"phoenix/internal/config"
 
 	"github.com/wailsapp/go-webview2/pkg/edge"
+	"github.com/wailsapp/wails/v3/pkg/application"
 )
 
 // Tabs. Each web tab owns a WebView2 controller (a child HWND of the main window) that
@@ -22,8 +23,6 @@ import (
 // strip; Go owns the list, the selection, and every page.
 
 const (
-	wmRunPending = 0x8001 // WM_APP + 1: drain the runLater queue
-
 	kindHome     = "home"
 	kindWeb      = "web"
 	kindSettings = "settings" // UI content like home: no page window
@@ -65,14 +64,17 @@ var (
 	deferredMu sync.Mutex
 )
 
-// runLater queues fn to run from the message loop, outside any WebView2 callback.
-// Creating a controller pumps messages, so it must never happen inside a callback.
-// It is safe to call from any goroutine; the function itself always runs on the UI thread.
+// runLater queues fn to run on the UI thread after the current callback has returned.
+// Creating a controller pumps messages, so it must never happen inside a WebView2 callback.
+// It is safe to call from any goroutine, and queued functions run in the order queued.
+//
+// Wails runs a function inline when it is already on the UI thread, so the hop through a
+// goroutine is deliberate: it makes Wails post a message instead.
 func runLater(fn func()) {
 	deferredMu.Lock()
 	deferred = append(deferred, fn)
 	deferredMu.Unlock()
-	pPostMessageW.Call(hwnd, wmRunPending, 0, 0)
+	go application.InvokeAsync(runDeferred)
 }
 
 func runDeferred() {
@@ -120,20 +122,12 @@ func initTabs() {
 
 // ── Layout ─────────────────────────────────────────────────────────────────
 
-func paddingPx() int32 {
-	if isZoomed(hwnd) {
-		return 0
-	}
-	return int32(math.Round(5 * float64(dpiFor(hwnd)) / 96))
-}
-
 // slotBounds converts the UI's CSS-pixel slot rectangle to physical pixels in the main
 // window's client area.
 func slotBounds() edge.Rect {
 	s := float64(dpiFor(hwnd)) / 96
-	p := paddingPx()
-	l := p + int32(math.Round(slot.x*s))
-	t := p + int32(math.Round(slot.y*s))
+	l := int32(math.Round(slot.x * s))
+	t := int32(math.Round(slot.y * s))
 	return edge.Rect{
 		Left:   l,
 		Top:    t,

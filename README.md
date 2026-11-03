@@ -15,7 +15,7 @@ Phoenix brings a multi-tab browser and AI provider controls into one native desk
 
 ## What works today
 
-- Native Windows app shell with a redesigned dark interface (calm neutrals, one ember accent) and a multi-tab browser powered by WebView2.
+- Wails v3 desktop app (system tray, single instance, installer) with a redesigned dark interface (calm neutrals, one ember accent) and a multi-tab browser powered by WebView2.
 - Address bar for URLs and web searches, with a configurable HTTPS search provider.
 - A quick-action bar under the page: one-click requests that change with the page you are on (a job posting, an article, a form, search results, or text you have selected), so you send a request without typing it.
 - Provider setup, model selection, connection checks, and a quick model picker.
@@ -36,19 +36,23 @@ Page sharing is opt-in. Phoenix sends the page's readable text with your message
 
 ### Build from source
 
+Phoenix is a [Wails v3](https://v3.wails.io) application. Install the Wails CLI once:
+
+```powershell
+go install github.com/wailsapp/wails/v3/cmd/wails3@v3.1.0
+```
+
+Then:
+
 ```powershell
 git clone https://github.com/wahajnintyeight/project-phoenix-desktop-agent.git
 cd project-phoenix-desktop-agent
-pwsh ./scripts/build.ps1
+wails3 dev        # run in development mode: rebuilds and restarts when a file changes
+wails3 build      # build bin/phoenix.exe
+wails3 package    # build the Windows installer (needs NSIS)
 ```
 
-The script type-checks the UI, compiles its Tailwind CSS, bundles everything into one HTML file, then builds `bin/phoenix-spike.exe`. Run it with:
-
-```powershell
-./bin/phoenix-spike.exe
-```
-
-Or build and launch in one step with `pwsh ./scripts/build.ps1 -Run`. The first build runs `npm ci --ignore-scripts` if `node_modules` is missing, which installs the development tools (TypeScript and the Tailwind CSS CLI). Nothing from npm ships inside the app: Tailwind is only a build-time compiler.
+`wails3 build` type-checks the UI, compiles its Tailwind CSS, bundles everything into one HTML page, then builds `bin/phoenix.exe`. The first build runs `npm ci --ignore-scripts` if `node_modules` is missing, which installs the development tools (TypeScript and the Tailwind CSS CLI). Nothing from npm ships inside the app: Tailwind is only a build-time compiler. `pwsh ./scripts/build.ps1 [-Run]` does the same and installs the CLI if it is missing.
 
 ## Provider setup
 
@@ -63,7 +67,7 @@ Phoenix stores its configuration at `%APPDATA%\Phoenix\config.yaml` and the encr
 ```powershell
 npm run typecheck
 npm run build:css
-go test ./cmd/spike ./internal/...
+go test ./cmd/phoenix ./internal/...
 npx impeccable detect internal/ui/dist/index.html
 ```
 

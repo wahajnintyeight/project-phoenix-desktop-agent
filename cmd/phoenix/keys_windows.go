@@ -122,7 +122,7 @@ func shortcutFor(vk uint32) func() {
 }
 
 func focusOmnibox() {
-	chromium.Focus() // OS keyboard focus to the UI webview so typing reaches the address bar
+	win.Focus() // OS keyboard focus to the UI webview so typing reaches the address bar
 	post("f" + fs + "omnibox")
 }
 

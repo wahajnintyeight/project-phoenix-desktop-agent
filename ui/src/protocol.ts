@@ -22,26 +22,29 @@ const RS = "\u001e";
 
 interface WebViewBridge {
   postMessage(message: string): void;
-  addEventListener(type: "message", listener: (e: MessageEvent<string>) => void): void;
 }
 
 declare global {
   interface Window {
     chrome: { webview: WebViewBridge };
+    /** Called by the Wails host (WebviewWindow.ExecJS) with one batch of records. */
+    __phx?: (batch: string) => void;
   }
 }
 
+/** UI to Go. Wails delivers the string to the application's RawMessageHandler. */
 export function send(op: string, ...fields: string[]): void {
   window.chrome.webview.postMessage([op, ...fields].join(FS));
 }
 
 export type Handler = (op: string, fields: string[]) => void;
 
+/** Go to UI. The host calls `window.__phx(batch)`; records are split here. */
 export function listen(handler: Handler): void {
-  window.chrome.webview.addEventListener("message", (e) => {
-    for (const record of e.data.split(RS)) {
+  window.__phx = (batch: string) => {
+    for (const record of batch.split(RS)) {
       const [op = "", ...fields] = record.split(FS);
       handler(op, fields);
     }
-  });
+  };
 }
