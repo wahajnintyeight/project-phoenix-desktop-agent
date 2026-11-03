@@ -1,0 +1,5 @@
+/bin/
+/node_modules/
+/internal/ui/dist/
+*.log
+*.exe

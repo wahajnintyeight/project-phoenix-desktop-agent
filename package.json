@@ -1,0 +1,10 @@
+﻿{
+  "name": "phoenix-ui",
+  "private": true,
+  "scripts": {
+    "typecheck": "tsc --noEmit -p ui"
+  },
+  "devDependencies": {
+    "typescript": "^5.9.0"
+  }
+}
