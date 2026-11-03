@@ -54,6 +54,10 @@ var (
 	headerRE = regexp.MustCompile("^[!#$%&'*+.^_`|~0-9A-Za-z-]{1,64}$")
 )
 
+// Reserved names belong to servers Phoenix adds itself (the desktop tools); a user cannot
+// install one, so nothing can pose as a built-in.
+func Reserved(name string) bool { return strings.HasPrefix(name, "phoenix-") }
+
 // ValidName reports whether s can name a server.
 func ValidName(s string) bool { return nameRE.MatchString(s) }
 
@@ -155,7 +159,7 @@ func CleanMap(in map[string]Server) map[string]Server {
 	for _, k := range names {
 		s := in[k]
 		s.Name = k
-		if len(out) >= maxServers || s.Validate() != nil {
+		if len(out) >= maxServers || Reserved(k) || s.Validate() != nil {
 			continue
 		}
 		out[k] = s

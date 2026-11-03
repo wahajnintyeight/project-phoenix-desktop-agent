@@ -45,6 +45,9 @@ func mcpSecretName(server, kind string, i int) string {
 // remove it first.
 func (h *Hub) MCPAdd(s mcp.Server, env, headers map[string]string) error {
 	s.Name = strings.TrimSpace(s.Name)
+	if mcp.Reserved(s.Name) {
+		return errors.New("names starting with phoenix- are reserved")
+	}
 	s.Enabled = false
 	s.Env, s.Headers = nil, nil
 	if err := s.Validate(); err != nil {
@@ -175,16 +178,17 @@ func (h *Hub) MCPTest(ctx context.Context, name string) (mcp.Info, error) {
 // the run ends.
 func (h *Hub) attachMCP(req *provider.Request) (cleanup func(), err error) {
 	servers := h.MCPEnabled()
-	if len(servers) == 0 {
-		return func() {}, nil
-	}
-	res := make([]mcp.Resolved, 0, len(servers))
+	res := make([]mcp.Resolved, 0, len(servers)+len(req.MCPServers))
 	for _, s := range servers {
 		r, err := h.resolveMCP(s)
 		if err != nil {
 			return nil, fmt.Errorf("MCP server %s: %w", s.Name, err)
 		}
 		res = append(res, r)
+	}
+	res = append(res, req.MCPServers...)
+	if len(res) == 0 {
+		return func() {}, nil
 	}
 	raw, err := mcp.ClaudeConfig(res)
 	if err != nil {
@@ -203,4 +207,16 @@ func (h *Hub) attachMCP(req *provider.Request) (cleanup func(), err error) {
 	req.MCPConfig = path
 	req.AllowedTools = append(req.AllowedTools, mcp.ClaudeAllowed(res)...)
 	return cleanup, nil
+}
+
+// Desktop reports whether computer use is on and where the agent-desktop program was
+// configured to be ("" means search for it).
+func (h *Hub) Desktop() (enabled bool, cliPath string) {
+	h.store.View(func(c *config.Config) { enabled, cliPath = c.Desktop.Enabled, c.Desktop.CLIPath })
+	return
+}
+
+// SetDesktopEnabled turns computer use on or off.
+func (h *Hub) SetDesktopEnabled(on bool) error {
+	return h.store.Update(func(c *config.Config) { c.Desktop.Enabled = on })
 }

@@ -3,7 +3,6 @@ package main
 import (
 	"context"
 	"sort"
-	"strings"
 	"time"
 
 	"phoenix/internal/mcp"
@@ -171,14 +170,4 @@ func startMCPTest(name string) {
 			post("u" + fs + "mcp-servers" + fs + "result" + fs + jsonString(out))
 		})
 	}()
-}
-
-// mcpToolLine turns a Claude tool name such as mcp__files__read_file into "files › read_file".
-func mcpToolLine(name string) string {
-	if rest, ok := strings.CutPrefix(name, "mcp__"); ok {
-		if server, tool, ok := strings.Cut(rest, "__"); ok {
-			return server + " › " + tool
-		}
-	}
-	return name
 }

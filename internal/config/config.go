@@ -51,6 +51,15 @@ func ValidSearchURL(s string) bool {
 	return err == nil && u.Scheme == "https" && u.Host != "" && u.User == nil
 }
 
+// Desktop is the computer-use section: whether the agent may be offered the desktop tools
+// (screenshot, click, scroll, drag, copy, paste, ...).
+type Desktop struct {
+	Enabled bool `yaml:"enabled"`
+	// CLIPath is the agent-desktop program, when it is not on PATH. Like a provider's
+	// cli_path it names a program to run, so only the file can set it.
+	CLIPath string `yaml:"cli_path,omitempty"`
+}
+
 // Providers is the providers section.
 type Providers struct {
 	Default string         `yaml:"default,omitempty"`
@@ -65,6 +74,7 @@ type Providers struct {
 type Config struct {
 	Providers Providers `yaml:"providers"`
 	Browser   Browser   `yaml:"browser,omitempty"`
+	Desktop   Desktop   `yaml:"desktop,omitempty"`
 	// MCPServers are the installed MCP servers by name. Entries run programs or call URLs, so
 	// they are validated on load and only the Settings UI may change them.
 	MCPServers map[string]mcp.Server `yaml:"mcp_servers,omitempty"`
@@ -179,6 +189,9 @@ func (c *Config) normalize() {
 		c.Browser.SearchURL = ""
 	}
 	c.MCPServers = mcp.CleanMap(c.MCPServers)
+	if p := c.Desktop.CLIPath; p != "" && (!filepath.IsAbs(p) || !strings.HasSuffix(strings.ToLower(p), ".exe")) {
+		c.Desktop.CLIPath = ""
+	}
 }
 
 // cleanProvider drops values that cannot be trusted. The model and effort become

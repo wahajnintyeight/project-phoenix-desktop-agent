@@ -293,7 +293,7 @@ func (h *Hub) Run(ctx context.Context, id provider.ID, req provider.Request, emi
 	if err != nil {
 		return provider.Result{}, err
 	}
-	if req.UseMCP && id == provider.Claude && req.MCPConfig == "" {
+	if (req.UseMCP || len(req.MCPServers) > 0) && id == provider.Claude && req.MCPConfig == "" {
 		cleanup, err := h.attachMCP(&req)
 		if err != nil {
 			return provider.Result{}, err

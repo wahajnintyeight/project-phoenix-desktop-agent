@@ -256,6 +256,7 @@
   .settings [data-for] { display: none; }
   .settings[data-section="providers"] [data-for="providers"],
   .settings[data-section="mcp"] [data-for="mcp"],
+  .settings[data-section="desktop"] [data-for="desktop"],
   .settings[data-section="browser"] [data-for="browser"],
   .settings[data-section="general"] [data-for="general"] { display: flex; }
   .path { @apply block rounded-md border border-line bg-sunken px-3 py-2 font-mono text-xs text-fg-muted; overflow-wrap: anywhere; user-select: text; }
@@ -296,6 +297,23 @@
   .row { @apply flex flex-wrap items-center gap-2; }
 
   ph-browser-settings { @apply flex flex-col items-start gap-3; }
+
+  /* ── computer use ────────────────────────────────────────────────── */
+  ph-desktop { @apply flex flex-col gap-6; }
+  .skill-list { @apply flex flex-col rounded-lg border border-line; }
+  .skill { @apply flex items-center justify-between gap-4 px-4 py-2.5; }
+  .skill + .skill { @apply border-t border-line; }
+  .skill-badge { @apply shrink-0 whitespace-nowrap rounded-full bg-raised px-2.5 py-0.5 text-xs text-fg-muted; }
+  .skill-badge.is-act { background: color-mix(in oklab, var(--color-accent) 14%, transparent); @apply text-fg; }
+
+  /* The agent asks before it looks or acts: a card in the chat, with the answer on it. */
+  .chat-approval { @apply flex flex-col gap-2.5 rounded-lg border border-accent bg-sunken p-3; }
+  .chat-approval[data-answered] { @apply border-line; }
+  .chat-approval-what { @apply text-base; overflow-wrap: anywhere; }
+  .chat-approval-label { @apply text-xs font-semibold text-accent; }
+  .chat-approval[data-answered] .chat-approval-label { @apply text-fg-subtle; }
+  .chat-approval-actions { @apply flex flex-wrap items-center gap-2; }
+  .chat-approval-result { @apply text-xs text-fg-muted; }
 
   /* ── MCP servers ─────────────────────────────────────────────────── */
   ph-mcp { @apply flex flex-col gap-6; }
@@ -396,8 +414,45 @@
   .chat-who { @apply text-xs font-medium text-fg-subtle; }
   .chat-tool { @apply flex items-center gap-1.5 text-xs text-fg-subtle; overflow-wrap: anywhere; }
   .chat-tool svg { @apply shrink-0; }
-  .chat-text { @apply text-base whitespace-pre-wrap; overflow-wrap: anywhere; }
-  .chat-user .chat-text { @apply rounded-xl bg-raised px-3 py-2; }
+  .chat-text { @apply text-base; overflow-wrap: anywhere; }
+  /* The agent's reply is the page's main content: full width, no bubble, comfortable measure.
+     What the user typed is quieter, small and set to the right. */
+  .chat-ai { @apply gap-1.5; }
+  .chat-ai .chat-text { @apply text-fg; line-height: 1.6; }
+  .chat-user { @apply items-end; }
+  .chat-user .chat-text { @apply max-w-[92%] rounded-xl bg-raised px-3 py-1.5 text-sm whitespace-pre-wrap text-fg-muted; }
+  .chat-error .chat-text { @apply whitespace-pre-wrap; }
+
+  /* Markdown in replies */
+  .chat-ai .chat-text > :first-child { margin-top: 0; }
+  .chat-ai .chat-text > :last-child { margin-bottom: 0; }
+  .md-p { @apply my-2; }
+  .md-h { @apply mt-4 mb-1.5 font-semibold text-fg; line-height: 1.3; }
+  h2.md-h { @apply text-lg; }
+  h3.md-h { @apply text-[1.0625rem]; }
+  h4.md-h, h5.md-h { @apply text-base; }
+  .md-list { @apply my-2 flex flex-col gap-1 pl-5; }
+  ul.md-list { list-style: disc; }
+  ol.md-list { list-style: decimal; }
+  .md-list .md-list { @apply my-1; }
+  .md-list li::marker { @apply text-fg-subtle; }
+  .md-list input[type="checkbox"] { @apply mr-1 align-middle; }
+  .md-code { @apply rounded-sm bg-raised px-1 py-px font-mono text-[0.85em]; overflow-wrap: anywhere; }
+  .md-link-host { @apply text-fg-subtle; }
+  .md-quote { @apply my-2 border-l-2 border-line-strong pl-3 text-fg-muted; }
+  .md-hr { @apply my-4 border-line; }
+  .md-pre { @apply my-2.5 overflow-hidden rounded-lg border border-line bg-sunken; }
+  .md-pre-head { @apply flex items-center justify-between border-b border-line px-3 py-1 text-xs text-fg-subtle; }
+  .md-copy { @apply rounded-sm px-1.5 py-0.5 text-xs text-fg-muted transition-colors; }
+  .md-copy:hover { @apply bg-raised text-fg; }
+  .md-pre pre { @apply scroll m-0 overflow-x-auto p-3 font-mono text-xs; line-height: 1.55; }
+  .md-pre code { @apply whitespace-pre; }
+  .md-table-wrap { @apply scroll my-2.5 overflow-x-auto rounded-lg border border-line; }
+  .md-table { @apply w-full border-collapse text-sm; }
+  .md-table th, .md-table td { @apply px-3 py-1.5 text-left align-top; }
+  .md-table th { @apply border-b border-line bg-raised font-semibold; }
+  .md-table td { @apply border-t border-line; }
+  .md-table tbody tr:first-child td { border-top: 0; }
   .chat-msg[data-streaming="true"] .chat-text::after {
     content: ""; display: inline-block; width: 2px; height: 1em; margin-left: 2px; vertical-align: text-bottom;
     background: var(--color-accent); animation: caret 1s steps(2, start) infinite;

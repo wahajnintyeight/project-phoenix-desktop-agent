@@ -47,6 +47,10 @@ func logf(format string, args ...any) {
 }
 
 func main() {
+	// The agent's CLI starts this program as its desktop tool server; no window, no Wails.
+	if len(os.Args) > 1 && os.Args[1] == "mcp-desktop" {
+		os.Exit(runDesktopMCP())
+	}
 	if os.Getenv("PHOENIX_LOG") == "1" {
 		logFile, _ = os.Create(filepath.Join(os.TempDir(), "phoenix.log"))
 	}

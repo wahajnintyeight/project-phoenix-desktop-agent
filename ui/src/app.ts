@@ -5,6 +5,7 @@ import "./model-list";
 import "./quick-model";
 import "./browser-settings";
 import "./mcp-settings";
+import "./desktop-settings";
 import "./chat";
 import "./quick-actions";
 

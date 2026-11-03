@@ -11,6 +11,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"phoenix/internal/mcp"
 	"regexp"
 	"strings"
 )
@@ -180,6 +181,10 @@ type Request struct {
 	Model   string    // overrides Settings.Model
 	Effort  string    // overrides Settings.Effort
 	WorkDir string    // the run's working root; an empty directory is created if blank
+
+	// MCPServers are servers Phoenix adds for this run itself (the desktop tools), already
+	// resolved. Providers that support MCP get them next to the user's enabled servers.
+	MCPServers []mcp.Resolved
 
 	// UseMCP asks the hub to attach the user's enabled MCP servers to this run (providers
 	// that support them; the others ignore it).

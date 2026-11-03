@@ -61,6 +61,7 @@ func openSettings() {
 			refreshProviders()
 			pushBrowser()
 			pushMCP("", false)
+			pushDesktop()
 			return
 		}
 	}
@@ -71,6 +72,7 @@ func openSettings() {
 	refreshProviders()
 	pushBrowser()
 	pushMCP("", false)
+	pushDesktop()
 }
 
 type providerView struct {
@@ -283,6 +285,10 @@ func handleProviderOp(f []string) {
 	}
 	if strings.HasPrefix(sub, "mcp-") {
 		handleMCPOp(f)
+		return
+	}
+	if strings.HasPrefix(sub, "desktop-") {
+		handleDesktopOp(f)
 		return
 	}
 	if hub == nil || len(f) < 3 {

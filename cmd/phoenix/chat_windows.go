@@ -7,6 +7,7 @@ import (
 	"sync"
 	"time"
 
+	"phoenix/internal/mcp"
 	"phoenix/internal/provider"
 	"phoenix/internal/quick"
 )
@@ -54,6 +55,9 @@ type chatEvent struct {
 	In       int     `json:"in,omitempty"`
 	Out      int     `json:"out,omitempty"`
 	Cost     float64 `json:"cost,omitempty"`
+	ID       string  `json:"id,omitempty"`       // approve, approved: which request
+	Cls      string  `json:"cls,omitempty"`      // approve: look or act
+	Decision string  `json:"decision,omitempty"` // approved: allow, all or deny
 }
 
 func postChat(evs ...chatEvent) {
@@ -87,6 +91,10 @@ func handleChatOp(f []string) {
 		}
 	case "probe":
 		refreshActions(false)
+	case "approve": // g approve <id> <allow|all|deny>
+		if len(f) > 3 {
+			answerApproval(f[2], f[3])
+		}
 	case "stop":
 		stopChat()
 	case "new":
@@ -194,6 +202,20 @@ func startChatRun(ctx context.Context, cancel context.CancelFunc, id provider.ID
 	if id == provider.Claude && len(hub.MCPEnabled()) > 0 {
 		system = chatSystemMCP
 	}
+	// Computer use: a broker run for this turn, and the desktop server added next to the
+	// user's own MCP servers. The run ends with the turn, which also refuses anything still
+	// waiting for an answer.
+	var extra []mcp.Resolved
+	if cli, on := desktopCLI(); on && id == provider.Claude {
+		if run, err := approvalBroker().NewRun(ctx); err != nil {
+			logf("desktop approvals: %v", err)
+		} else if srv, err := desktopServer(run, cli); err != nil {
+			logf("desktop server: %v", err)
+		} else {
+			extra = append(extra, srv)
+			system = chatSystemMCP + chatDesktop
+		}
+	}
 	go func() {
 		defer cancel()
 		started := time.Now()
@@ -218,11 +240,11 @@ func startChatRun(ctx context.Context, cancel context.CancelFunc, id provider.ID
 				})
 			}
 		}
-		res, err := hub.Run(ctx, id, provider.Request{Prompt: prompt, History: history, System: system, UseMCP: true}, func(ev provider.Event) {
+		res, err := hub.Run(ctx, id, provider.Request{Prompt: prompt, History: history, System: system, UseMCP: true, MCPServers: extra}, func(ev provider.Event) {
 			switch ev.Kind {
 			case provider.EvToolUse:
 				// Show every tool call, so the user can see what the agent did.
-				line := mcpToolLine(ev.ToolName)
+				line := mcpToolLine(ev.ToolName, ev.ToolInput)
 				flush()
 				runLater(func() {
 					if gen == chat.gen {

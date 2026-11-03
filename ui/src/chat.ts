@@ -3,10 +3,11 @@
 // "g new"). Every message is placed with textContent: model output is untrusted text.
 import { el } from "./dom";
 import { icon } from "./icons";
+import { MarkdownView } from "./markdown";
 import { send } from "./protocol";
 
 export interface ChatEvent {
-  k: "user" | "note" | "tool" | "start" | "delta" | "done" | "error" | "stopped" | "reset";
+  k: "user" | "note" | "tool" | "approve" | "approved" | "start" | "delta" | "done" | "error" | "stopped" | "reset";
   text?: string;
   provider?: string;
   model?: string;
@@ -14,6 +15,53 @@ export interface ChatEvent {
   in?: number;
   out?: number;
   cost?: number;
+  id?: string;
+  cls?: "look" | "act";
+  decision?: "allow" | "all" | "deny";
+}
+
+/** One message in the log. The agent's replies are Markdown; everything else is plain text. */
+class Msg {
+  readonly box: HTMLElement;
+  readonly text = el("div", "chat-text");
+  readonly meta = el("p", "chat-meta");
+  readonly who: string;
+  #raw = "";
+  #md: MarkdownView | null = null;
+  #frame = 0;
+
+  constructor(who: string, cls: string, markdown: boolean) {
+    this.who = who;
+    this.box = el("article", `chat-msg ${cls}`);
+    // The name is for screen readers; sighted users read it in the footer line.
+    this.box.append(el("h3", cls.includes("chat-error") ? "chat-who" : "sr-only", who), this.text, this.meta);
+    if (markdown) this.#md = new MarkdownView(this.text);
+  }
+
+  get empty(): boolean {
+    return this.#raw === "";
+  }
+
+  set(text: string): void {
+    this.#raw = text;
+    this.text.textContent = text;
+  }
+
+  /** Adds streamed text; the Markdown is redrawn at most once per frame. */
+  append(text: string): void {
+    this.#raw += text;
+    if (!this.#md) {
+      this.text.append(document.createTextNode(text));
+    } else if (!this.#frame) {
+      this.#frame = requestAnimationFrame(() => this.flush());
+    }
+  }
+
+  flush(): void {
+    if (this.#frame) cancelAnimationFrame(this.#frame);
+    this.#frame = 0;
+    this.#md?.set(this.#raw);
+  }
 }
 
 const IDEAS = ["Summarise this page", "What are the key points here?", "Draft a short reply to this"];
@@ -27,7 +75,7 @@ export class PhChat extends HTMLElement {
   readonly #newChat = el("button", "btn btn-quiet btn-sm", "New chat");
   #shareOn = false;
   #running = false;
-  #current: { box: HTMLElement; body: Text; meta: HTMLElement } | null = null;
+  #current: Msg | null = null;
   #lastUser: HTMLElement | null = null; // where a "page shared" note goes
   #who = "Agent"; // the label for the agent's messages this turn: provider and model
 
@@ -55,7 +103,7 @@ export class PhChat extends HTMLElement {
     }
     this.#empty.append(
       el("h2", undefined, "Ask Phoenix"),
-      el("p", undefined, "Ask about the tab you have open. Turn on Share page and the agent reads it. It cannot click, type or open files yet."),
+      el("p", undefined, "Ask about the tab you have open. Turn on Share page and the agent reads it. With Computer use on in Settings it can also look at and operate your apps, and it asks first."),
       ideas,
     );
     this.#log.append(this.#empty);
@@ -149,17 +197,53 @@ export class PhChat extends HTMLElement {
     this.#syncSend();
   }
 
-  #message(who: string, cls: string): { box: HTMLElement; body: Text; meta: HTMLElement } {
+  #message(who: string, cls: string, markdown = false): Msg {
     this.#empty.hidden = true;
     this.#newChat.hidden = false;
-    const box = el("article", `chat-msg ${cls}`);
-    const body = document.createTextNode("");
-    const text = el("div", "chat-text");
-    text.append(body);
-    const meta = el("p", "chat-meta");
-    box.append(el("h3", "chat-who", who), text, meta);
-    this.#log.append(box);
-    return { box, body, meta };
+    const m = new Msg(who, cls, markdown);
+    this.#log.append(m.box);
+    return m;
+  }
+
+  /** The agent asks before it looks at or acts on the desktop. The wording comes from Phoenix. */
+  #approval(ev: ChatEvent): void {
+    this.#empty.hidden = true;
+    if (this.#current?.empty) this.#current.box.remove();
+    this.#current = null; // the reply continues in a new message below the card
+    const card = el("div", "chat-approval");
+    card.dataset["id"] = ev.id ?? "";
+    card.setAttribute("role", "group");
+    card.setAttribute("aria-label", "The agent is asking for permission");
+    const act = ev.cls === "act";
+    card.append(el("p", "chat-approval-label", act ? "Needs your OK" : "Wants to look"), el("p", "chat-approval-what", ev.text ?? ""));
+    const actions = el("div", "chat-approval-actions");
+    const button = (label: string, decision: string, cls: string): HTMLButtonElement => {
+      const b = el("button", cls, label);
+      b.type = "button";
+      b.addEventListener("click", () => {
+        actions.querySelectorAll("button").forEach((x) => { x.disabled = true; });
+        send("g", "approve", ev.id ?? "", decision);
+      }, { passive: true });
+      return b;
+    };
+    actions.append(button("Allow", "allow", "btn btn-primary btn-sm"));
+    if (act) actions.append(button("Allow all this message", "all", "btn btn-sm"));
+    actions.append(button("Decline", "deny", "btn btn-quiet btn-sm"));
+    card.append(actions);
+    this.#log.append(card);
+    // The question is the most important thing on screen: bring it into view and to the
+    // keyboard without stealing focus from what the user is typing.
+    card.scrollIntoView({ block: "nearest" });
+  }
+
+  #answer(card: HTMLElement, text: string): void {
+    card.dataset["answered"] = "";
+    card.querySelector(".chat-approval-actions")?.replaceWith(el("p", "chat-approval-result", text));
+  }
+
+  /** A turn that ends leaves any unanswered card behind; Go has already refused it. */
+  #expireCards(): void {
+    this.#log.querySelectorAll<HTMLElement>(".chat-approval:not([data-answered])").forEach((card) => this.#answer(card, "No answer, so it was declined"));
   }
 
   #apply(ev: ChatEvent): void {
@@ -173,7 +257,7 @@ export class PhChat extends HTMLElement {
         break;
       case "user": {
         const m = this.#message("You", "chat-user");
-        m.body.data = ev.text ?? "";
+        m.set(ev.text ?? "");
         this.#lastUser = m.meta;
         this.#current = null;
         this.#setRunning(true);
@@ -187,9 +271,17 @@ export class PhChat extends HTMLElement {
         this.#empty.hidden = true;
         // A reply box that is still empty (the agent went straight to a tool) is dropped; the
         // text that follows gets a fresh one below the tool line.
-        if (this.#current && this.#current.body.data === "") this.#current.box.remove();
+        if (this.#current?.empty) this.#current.box.remove();
         this.#log.append(t);
         this.#current = null;
+        break;
+      }
+      case "approve":
+        this.#approval(ev);
+        break;
+      case "approved": {
+        const card = this.#log.querySelector<HTMLElement>(`.chat-approval[data-id="${CSS.escape(ev.id ?? "")}"]`);
+        if (card) this.#answer(card, ev.decision === "deny" ? "Declined" : ev.decision === "all" ? "Allowed, and all actions this message" : "Allowed");
         break;
       }
       case "note":
@@ -197,22 +289,28 @@ export class PhChat extends HTMLElement {
         break;
       case "start": {
         this.#who = [ev.provider, ev.model].filter(Boolean).join(" · ") || "Agent";
-        this.#current = this.#message(this.#who, "chat-ai");
+        this.#current = this.#message(this.#who, "chat-ai", true);
+        this.#current.meta.textContent = this.#who;
         this.#current.box.dataset["streaming"] = "true";
         break;
       }
       case "delta": {
         // A reply that begins without a start event (or after a reset) still needs a box.
-        this.#current ??= this.#message(this.#who, "chat-ai");
+        if (!this.#current) {
+          this.#current = this.#message(this.#who, "chat-ai", true);
+          this.#current.meta.textContent = this.#who;
+        }
         this.#current.box.dataset["streaming"] = "true";
-        this.#current.body.appendData(ev.text ?? "");
+        this.#current.append(ev.text ?? "");
         break;
       }
       case "done": {
+        this.#expireCards();
         const c = this.#current;
         if (c) {
+          c.flush();
           delete c.box.dataset["streaming"];
-          const bits = [ev.ms ? `${(ev.ms / 1000).toFixed(1)} s` : "", ev.out ? `${ev.in ?? 0} in, ${ev.out} out` : "", ev.cost ? `about $${ev.cost.toFixed(4)}` : ""];
+          const bits = [c.who, ev.ms ? `${(ev.ms / 1000).toFixed(1)} s` : "", ev.out ? `${ev.in ?? 0} in, ${ev.out} out` : "", ev.cost ? `about $${ev.cost.toFixed(4)}` : ""];
           c.meta.textContent = bits.filter(Boolean).join(" · ");
         }
         this.#current = null;
@@ -220,18 +318,24 @@ export class PhChat extends HTMLElement {
         break;
       }
       case "stopped": {
+        this.#expireCards();
         if (this.#current) {
+          this.#current.flush();
           delete this.#current.box.dataset["streaming"];
-          this.#current.meta.textContent = "Stopped";
+          this.#current.meta.textContent = `${this.#current.who} · Stopped`;
         }
         this.#current = null;
         this.#setRunning(false);
         break;
       }
       case "error": {
-        if (this.#current) delete this.#current.box.dataset["streaming"];
+        this.#expireCards();
+        if (this.#current) {
+          this.#current.flush();
+          delete this.#current.box.dataset["streaming"];
+        }
         const m = this.#message("Something went wrong", "chat-error");
-        m.body.data = ev.text ?? "";
+        m.set(ev.text ?? "");
         this.#current = null;
         this.#setRunning(false);
         break;
