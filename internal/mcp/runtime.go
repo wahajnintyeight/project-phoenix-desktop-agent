@@ -11,6 +11,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/modelcontextprotocol/go-sdk/auth"
 	sdk "github.com/modelcontextprotocol/go-sdk/mcp"
 )
 
@@ -59,11 +60,12 @@ type target struct {
 // the same authenticated connection. Close it when the provider run ends.
 type Runtime struct {
 	sessions  []*sdk.ClientSession
+	cleanups  []func()
 	functions []Function
 	targets   map[string]target
 }
 
-func transport(s Resolved) sdk.Transport {
+func transport(s Resolved, oauthHandler auth.OAuthHandler) sdk.Transport {
 	switch s.Transport {
 	case Stdio:
 		cmd := exec.Command(s.Command, s.Args...)
@@ -72,7 +74,8 @@ func transport(s Resolved) sdk.Transport {
 		return &sdk.CommandTransport{Command: cmd, TerminateDuration: 3 * time.Second}
 	case HTTP:
 		return &sdk.StreamableClientTransport{
-			Endpoint: s.URL,
+			Endpoint:     s.URL,
+			OAuthHandler: oauthHandler,
 			HTTPClient: &http.Client{
 				Transport:     headerTransport{h: s.HeaderValues, next: http.DefaultTransport},
 				CheckRedirect: func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse },
@@ -84,16 +87,31 @@ func transport(s Resolved) sdk.Transport {
 	}
 }
 
-func connect(ctx context.Context, s Resolved) (*sdk.ClientSession, error) {
+func connect(ctx context.Context, s Resolved) (*sdk.ClientSession, func(), error) {
 	if err := s.Validate(); err != nil {
-		return nil, err
+		return nil, nil, err
 	}
-	tr := transport(s)
+	cleanup := func() {}
+	var oauthHandler auth.OAuthHandler
+	if s.Transport == HTTP {
+		var err error
+		oauthHandler, cleanup, err = s.oauthHandler()
+		if err != nil {
+			return nil, nil, err
+		}
+	}
+	tr := transport(s, oauthHandler)
 	if tr == nil {
-		return nil, errors.New("unknown MCP transport")
+		cleanup()
+		return nil, nil, errors.New("unknown MCP transport")
 	}
 	client := sdk.NewClient(&sdk.Implementation{Name: "phoenix", Version: "0.1"}, nil)
-	return client.Connect(ctx, tr, nil)
+	session, err := client.Connect(ctx, tr, nil)
+	if err != nil {
+		cleanup()
+		return nil, nil, err
+	}
+	return session, cleanup, nil
 }
 
 // Open connects to all enabled servers and collects their functions. If any server is
@@ -104,12 +122,13 @@ func Open(ctx context.Context, servers []Resolved) (*Runtime, error) {
 	cleanup := func() { r.Close() }
 	totalSchemaBytes := 0
 	for _, server := range servers {
-		session, err := connect(ctx, server)
+		session, cleanupSession, err := connect(ctx, server)
 		if err != nil {
 			cleanup()
 			return nil, fmt.Errorf("MCP server %s: could not connect: %w", server.Name, scrub(err, server))
 		}
 		r.sessions = append(r.sessions, session)
+		r.cleanups = append(r.cleanups, cleanupSession)
 		for tool, err := range session.Tools(ctx, nil) {
 			if err != nil {
 				cleanup()
@@ -240,4 +259,8 @@ func (r *Runtime) Close() {
 		_ = session.Close()
 	}
 	r.sessions = nil
+	for _, cleanup := range r.cleanups {
+		cleanup()
+	}
+	r.cleanups = nil
 }

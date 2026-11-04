@@ -34,6 +34,7 @@ type Server struct {
 	Env       map[string]string `yaml:"env,omitempty" json:"env,omitempty"`
 	URL       string            `yaml:"url,omitempty" json:"url,omitempty"`
 	Headers   map[string]string `yaml:"headers,omitempty" json:"headers,omitempty"`
+	OAuthRef  string            `yaml:"oauth_ref,omitempty" json:"-"`
 	// Enabled servers are offered to the agent. A server that is installed but not enabled is
 	// only ever started by the Test button.
 	Enabled bool `yaml:"enabled" json:"enabled"`

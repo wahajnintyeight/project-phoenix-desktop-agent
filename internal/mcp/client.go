@@ -21,6 +21,8 @@ type Resolved struct {
 	EnvValues       map[string]string
 	HeaderValues    map[string]string
 	RequireApproval bool // HTTP-provider function calls ask the user before invoking this server.
+	OAuthRecord     *OAuthRecord
+	SaveOAuthRecord func(OAuthRecord) error
 }
 
 // Resolve fills in a server's secrets.
@@ -59,7 +61,7 @@ type Info struct {
 const (
 	maxTools    = 500
 	maxDescLen  = 300
-	testTimeout = 45 * time.Second
+	testTimeout = 5 * time.Minute
 )
 
 // Test connects to a server, reads its name and tool list, and disconnects. A stdio server
@@ -72,10 +74,11 @@ func Test(ctx context.Context, s Resolved) (Info, error) {
 	ctx, cancel := context.WithTimeout(ctx, testTimeout)
 	defer cancel()
 
-	session, err := connect(ctx, s)
+	session, cleanup, err := connect(ctx, s)
 	if err != nil {
 		return Info{}, fmt.Errorf("could not connect: %w", scrub(err, s))
 	}
+	defer cleanup()
 	defer session.Close()
 
 	info := Info{}
@@ -107,7 +110,9 @@ type headerTransport struct {
 func (t headerTransport) RoundTrip(r *http.Request) (*http.Response, error) {
 	r = r.Clone(r.Context())
 	for k, v := range t.h {
-		r.Header.Set(k, v)
+		if r.Header.Get(k) == "" {
+			r.Header.Set(k, v)
+		}
 	}
 	return t.next.RoundTrip(r)
 }
@@ -127,7 +132,8 @@ func envPairs(m map[string]string) []string {
 
 // scrub removes secret values from an error before it reaches the screen or the log.
 func scrub(err error, s Resolved) error {
-	return errors.New(clip(redactValues(err.Error(), s), 400))
+	message := redactOAuthToken(err.Error(), s.OAuthRecord)
+	return errors.New(clip(redactValues(message, s), 400))
 }
 
 func redactValues(msg string, s Resolved) string {

@@ -1,0 +1,15 @@
+{
+  "client_id": "https://raw.githubusercontent.com/wahajnintyeight/project-phoenix-desktop-agent/main/oauth/phoenix-client.json",
+  "client_name": "Phoenix Desktop Agent",
+  "client_uri": "https://github.com/wahajnintyeight/project-phoenix-desktop-agent",
+  "application_type": "native",
+  "redirect_uris": [
+    "http://127.0.0.1/oauth/callback"
+  ],
+  "grant_types": [
+    "authorization_code",
+    "refresh_token"
+  ],
+  "response_types": ["code"],
+  "token_endpoint_auth_method": "none"
+}

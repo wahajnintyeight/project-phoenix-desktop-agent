@@ -316,31 +316,77 @@
   .chat-approval-result { @apply text-xs text-fg-muted; }
 
   /* ── MCP servers ─────────────────────────────────────────────────── */
-  ph-mcp { @apply flex flex-col gap-6; }
-  .mcp-list { @apply flex flex-col rounded-lg border border-line; }
-  .mcp-item { @apply flex flex-col gap-3 px-4 py-3; }
-  .mcp-item + .mcp-item { @apply border-t border-line; }
-  .mcp-head { @apply flex items-center gap-3; }
-  .mcp-id { @apply flex min-w-0 flex-1 flex-col; }
-  .mcp-name { @apply font-semibold; }
-  .mcp-sub { @apply truncate font-mono text-xs text-fg-muted; }
+  ph-mcp { @apply flex min-w-0 flex-col gap-4; }
+  .mcp-notice { @apply rounded-md; }
+  .mcp-overview, .mcp-detail, .mcp-editor { @apply flex min-w-0 flex-col gap-4; }
+  .mcp-summary { @apply tabular text-xs text-fg-subtle; }
+  .mcp-list { @apply flex min-w-0 flex-col; }
+  .mcp-item { @apply flex min-w-0 items-center justify-between gap-4 py-3; }
+  .mcp-item + .mcp-item { box-shadow: inset 0 1px 0 var(--color-line); }
+  .mcp-item-main { @apply flex min-w-0 flex-1 flex-col gap-1; }
+  .mcp-item-title { @apply flex min-w-0 flex-wrap items-center gap-3; }
+  .mcp-open { @apply min-w-0 truncate text-left font-semibold text-fg transition-colors; }
+  .mcp-open:hover { @apply text-accent; }
+  .mcp-sub { @apply block max-w-full truncate font-mono text-xs text-fg-muted; }
+  .mcp-item-actions { @apply flex shrink-0 items-center gap-3; }
+  .mcp-status { @apply inline-flex shrink-0 items-center gap-1.5 text-xs text-fg-subtle; }
+  .mcp-status:has(.dot[data-tone="ok"]) { @apply text-ok; }
+  .mcp-status:has(.dot[data-tone="busy"]) { @apply text-accent; }
+  .mcp-status:has(.dot[data-tone="error"]) { @apply text-danger; }
   .mcp-use { @apply inline-flex shrink-0 cursor-pointer items-center gap-2 text-fg-muted; }
   .mcp-use input { @apply size-4 accent-[var(--color-accent)]; }
   .mcp-use:has(input:checked) { @apply text-fg; }
-  .mcp-tools { @apply flex flex-col gap-1 border-t border-line pt-3; }
-  .mcp-tool { @apply grid grid-cols-[minmax(0,12rem)_minmax(0,1fr)] gap-3 text-xs; }
-  .mcp-tool b { @apply truncate font-mono font-medium; }
+  .mcp-empty { @apply flex flex-col items-start gap-2 border-t border-line pt-4; }
+  .mcp-empty h3 { @apply text-base; }
+  .mcp-empty p { @apply max-w-[52ch]; }
+  .mcp-add { @apply flex flex-col gap-3 border-t border-line pt-4; }
+  .mcp-add-trigger { @apply w-fit; list-style: none; }
+  .mcp-add-trigger::-webkit-details-marker { display: none; }
+  .mcp-add-trigger svg { @apply shrink-0; }
+  .mcp-add[open] > .mcp-form { @apply pt-1; }
+  .mcp-safety { @apply max-w-[62ch] border-t border-line pt-3; }
+  .mcp-detail-top { @apply flex items-center justify-between gap-3; }
+  .mcp-back { @apply w-fit; }
+  .mcp-back svg { @apply shrink-0; }
+  .mcp-detail-heading { @apply flex flex-wrap items-center gap-2.5; }
+  .mcp-detail-title { @apply text-lg; }
+  .mcp-detail-endpoint { @apply block whitespace-pre-wrap rounded-md border border-line bg-sunken px-3 py-2 font-mono text-xs text-fg; overflow-wrap: anywhere; user-select: text; }
+  .mcp-detail-actions { @apply flex flex-wrap items-center gap-2; }
+  .mcp-detail-intro { @apply max-w-[62ch]; }
+  .mcp-section { @apply flex flex-col gap-2 border-t border-line pt-3; }
+  .mcp-section h4 { @apply text-sm font-semibold; }
+  .mcp-test-pending { @apply text-fg-muted; }
+  .mcp-test-failure { @apply flex flex-col gap-1.5 rounded-md border p-3; border-color: color-mix(in oklab, var(--color-danger) 45%, transparent); }
+  .mcp-failure-title { @apply font-medium text-danger; }
+  .mcp-error-details { @apply flex flex-col gap-2 pt-1 text-xs text-fg-subtle; }
+  .mcp-error-details summary { @apply w-fit cursor-pointer hover:text-fg; }
+  .mcp-error-details code { @apply whitespace-pre-wrap rounded-md bg-sunken px-2.5 py-2 text-xs text-fg-muted; overflow-wrap: anywhere; user-select: text; }
+  .mcp-connected { @apply font-medium text-ok; }
+  .mcp-tools { @apply scroll flex max-h-64 flex-col overflow-auto; }
+  .mcp-tool { @apply grid grid-cols-[minmax(0,12rem)_minmax(0,1fr)] gap-3 py-2 text-xs; }
+  .mcp-tool + .mcp-tool { box-shadow: inset 0 1px 0 var(--color-line); }
+  .mcp-tool b { @apply truncate font-mono font-medium text-fg; }
   .mcp-tool span { @apply text-fg-muted; overflow-wrap: anywhere; }
-  .mcp-add > summary { @apply inline-flex cursor-pointer items-center gap-1.5 text-fg-muted; }
-  .mcp-add > summary:hover, .mcp-add[open] > summary { @apply text-fg; }
-  .mcp-add[open] > summary svg { @apply rotate-90; }
-  .mcp-add > summary svg { @apply transition-transform; }
+  .mcp-remove-section { @apply mt-2; }
+  .btn-danger { border-color: color-mix(in oklab, var(--color-danger) 45%, transparent); @apply text-danger; }
+  .btn-danger:hover:not(:disabled) { background: color-mix(in oklab, var(--color-danger) 12%, var(--color-raised)); }
+  .mcp-editor { @apply gap-3; }
+  .mcp-editor-title { @apply text-lg; }
+  .mcp-editor-help, .mcp-form-hint { @apply max-w-[62ch]; }
   .mcp-form { @apply flex flex-col gap-3 pt-3; }
   .mcp-form label { @apply flex flex-col gap-1 text-sm font-medium; }
   .mcp-form label small { @apply font-normal text-fg-muted; }
   .mcp-form textarea.field { @apply h-auto min-h-16 py-2 font-mono text-xs; resize: vertical; }
   .mcp-review { @apply flex flex-col gap-3 rounded-lg border border-warn p-4; }
-  .mcp-review code { @apply block whitespace-pre-wrap rounded-md bg-raised px-3 py-2 font-mono text-xs; overflow-wrap: anywhere; user-select: text; }
+  .mcp-review-name { @apply mb-0; }
+  .mcp-review-command { @apply block whitespace-pre-wrap rounded-md bg-sunken px-3 py-2 font-mono text-xs; overflow-wrap: anywhere; user-select: text; }
+
+  @media (max-width: 850px) {
+    .mcp-item { @apply flex-col items-stretch; }
+    .mcp-item-actions { @apply justify-between; }
+    .mcp-tool { grid-template-columns: minmax(0, 1fr); gap: 0.25rem; }
+    .mcp-tool b { white-space: normal; overflow-wrap: anywhere; }
+  }
 
   /* ── model picker ────────────────────────────────────────────────── */
   ph-model-list { @apply flex w-full flex-col gap-3 self-stretch; }
