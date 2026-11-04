@@ -7,7 +7,9 @@ import "./quick-model";
 import "./browser-settings";
 import "./mcp-settings";
 import "./desktop-settings";
+// Keep the bare import: chat registers the <ph-chat> custom element as a side effect.
 import "./chat";
+import type { PhChat } from "./chat";
 import "./activity";
 import "./quick-actions";
 import { initPanelResize } from "./panel-resize";
@@ -165,6 +167,7 @@ document.querySelector(".agent-tabs")?.addEventListener("click", (e) => {
   if (!b || !name || !agent) return;
   agent.dataset["pane"] = name;
   document.querySelectorAll<HTMLElement>("[data-pane-btn]").forEach((t) => t.setAttribute("aria-selected", String(t === b)));
+  if (name === "chat") document.querySelector<PhChat>("#chat")?.scrollToLatest();
 }, { passive: true });
 
 // The start page's first step follows the quick picker: done once some provider can run.

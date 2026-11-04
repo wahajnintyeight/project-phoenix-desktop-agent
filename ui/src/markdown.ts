@@ -3,7 +3,7 @@
 // as HTML, and links are shown as text (their address in muted type), never as clickable
 // anchors. Supported: headings, paragraphs (single newlines kept), bold, italic, strike,
 // inline code, fenced code with a copy button, bulleted, numbered and nested lists,
-// quotes, rules and tables.
+// quotes and tables.
 //
 // Streaming: a reply is re-rendered as it grows. The text is split into blocks at blank
 // lines, and blocks before the one still being written keep their DOM.
@@ -196,7 +196,9 @@ export function blocks(src: string): HTMLElement[] {
       i++;
       continue;
     }
-    if (RULE.test(line)) { out.push(el("hr", "md-hr")); i++; continue; }
+    // Agent models often emit ___ as a visual separator between tool updates. In the narrow
+    // chat column those become repeated rules with no useful meaning, so treat them as spacing.
+    if (RULE.test(line)) { i++; continue; }
     if (QUOTE.test(line)) {
       const body: string[] = [];
       while (i < lines.length && QUOTE.test(lines[i] ?? "")) body.push(QUOTE.exec(lines[i++] ?? "")?.[1] ?? "");

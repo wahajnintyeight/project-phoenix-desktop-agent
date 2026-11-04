@@ -88,6 +88,8 @@ func refreshProvidersForce(forceModels bool) {
 	if hub == nil {
 		post("u" + fs + "settings-error" + fs + "hidden" + fs + "false")
 		post("t" + fs + "settings-error" + fs + settingsUnavailable())
+		pushQuickModelData("", []modelsView{})
+		post("t" + fs + "step-provider-text" + fs + "Provider setup could not load. Open Settings to see the error.")
 		return
 	}
 	post("u" + fs + "settings-error" + fs + "hidden" + fs + "true")
@@ -100,6 +102,21 @@ func refreshProvidersForce(forceModels bool) {
 		sts := hub.Statuses(ctx)
 		setReady(sts)
 		def := hub.Default()
+		quickViews := make([]modelsView, len(sts))
+		for i, st := range sts {
+			choice := hub.Selected(st.ID)
+			kind := "cli"
+			models := []provider.Model{}
+			if provider.IsHTTP(st.ID) {
+				kind = "api"
+			} else {
+				models = append(models, provider.Model{ID: "", Name: "CLI default"})
+			}
+			quickViews[i] = modelsView{
+				ID: string(st.ID), Name: providerName(st.ID), Models: models,
+				Model: choice.Model, Effort: choice.Effort, Ready: st.Ready, Kind: kind, Loading: st.Ready,
+			}
+		}
 		runLater(func() {
 			for _, st := range sts {
 				post(
@@ -107,6 +124,7 @@ func refreshProvidersForce(forceModels bool) {
 					"a"+fs+"prov-"+string(st.ID)+fs+"data-state"+fs+"idle",
 				)
 			}
+			pushQuickModelData(def, quickViews)
 		})
 		pushModelsNow(ctx, forceModels)
 	}()
@@ -116,14 +134,22 @@ func refreshProvidersForce(forceModels bool) {
 // quick picker. Everything in it comes from the CLI or from config.yaml, so the UI shows it
 // with textContent only.
 type modelsView struct {
-	ID     string           `json:"id"`
-	Name   string           `json:"name"`
-	Models []provider.Model `json:"models"`
-	Model  string           `json:"model"`
-	Effort string           `json:"effort"`
-	Error  string           `json:"error,omitempty"`
-	Ready  bool             `json:"ready"` // can run now (installed and signed in, or has a key)
-	Kind   string           `json:"kind"`  // "cli" or "api"
+	ID      string           `json:"id"`
+	Name    string           `json:"name"`
+	Models  []provider.Model `json:"models"`
+	Model   string           `json:"model"`
+	Effort  string           `json:"effort"`
+	Error   string           `json:"error,omitempty"`
+	Ready   bool             `json:"ready"` // can run now (installed and signed in, or has a key)
+	Kind    string           `json:"kind"`  // "cli" or "api"
+	Loading bool             `json:"loading,omitempty"`
+}
+
+func pushQuickModelData(def provider.ID, views []modelsView) {
+	post("u" + fs + "quick-model" + fs + "data" + fs + jsonString(struct {
+		Default   string       `json:"default"`
+		Providers []modelsView `json:"providers"`
+	}{string(def), views}))
 }
 
 func providerName(id provider.ID) string {
@@ -205,10 +231,7 @@ func pushModelsNow(ctx context.Context, force bool) {
 		for _, v := range views {
 			post("u" + fs + "prov-" + v.ID + fs + "models" + fs + jsonString(v))
 		}
-		post("u" + fs + "quick-model" + fs + "data" + fs + jsonString(struct {
-			Default   string       `json:"default"`
-			Providers []modelsView `json:"providers"`
-		}{def, views}))
+		pushQuickModelData(provider.ID(def), views)
 	})
 }
 

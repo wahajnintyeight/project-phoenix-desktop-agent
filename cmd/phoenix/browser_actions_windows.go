@@ -77,6 +77,14 @@ func browserClick(ctx context.Context, state browserTabState, ref browserRef) (b
 	if err != nil {
 		return browser.Output{}, err
 	}
+	if showBrowserAgentPointer(ctx, state, x, y, "click") {
+		if err := browserPointerBeat(ctx); err != nil {
+			return browser.Output{}, err
+		}
+	}
+	if err := dispatchMouse(ctx, state, "mouseMoved", x, y, 0, 0, 0); err != nil {
+		return browser.Output{}, err
+	}
 	pressErr := dispatchMouse(ctx, state, "mousePressed", x, y, 0, 0, 1)
 	releaseCtx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
 	defer cancel()
@@ -102,6 +110,25 @@ func browserEnterText(ctx context.Context, state browserTabState, ref browserRef
 	}
 	if desc.Node.NodeID == 0 {
 		return browser.Output{}, errors.New("the page field is no longer available")
+	}
+	if _, _, err := cdpCall(ctx, state.ID, state.Epoch, "DOM.scrollIntoViewIfNeeded", map[string]any{"backendNodeId": ref.BackendNodeID}); err != nil {
+		return browser.Output{}, err
+	}
+	var box nodeBox
+	if err := cdpCallJSON(ctx, state.ID, state.Epoch, "DOM.getBoxModel", map[string]any{"backendNodeId": ref.BackendNodeID}, &box); err != nil {
+		return browser.Output{}, err
+	}
+	x, y, err := quadCenter(box.Model.Content)
+	if err != nil {
+		return browser.Output{}, err
+	}
+	if showBrowserAgentPointer(ctx, state, x, y, "type") {
+		if err := browserPointerBeat(ctx); err != nil {
+			return browser.Output{}, err
+		}
+	}
+	if err := dispatchMouse(ctx, state, "mouseMoved", x, y, 0, 0, 0); err != nil {
+		return browser.Output{}, err
 	}
 	if _, _, err := cdpCall(ctx, state.ID, state.Epoch, "DOM.focus", map[string]any{"nodeId": desc.Node.NodeID}); err != nil {
 		return browser.Output{}, err
@@ -173,6 +200,25 @@ func browserSelect(ctx context.Context, state browserTabState, ref browserRef, v
 	if strings.ToLower(desc.Node.LocalName) != "select" || desc.Node.NodeID == 0 {
 		return browser.Output{}, errors.New("that page control is not a native select element")
 	}
+	if _, _, err := cdpCall(ctx, state.ID, state.Epoch, "DOM.scrollIntoViewIfNeeded", map[string]any{"backendNodeId": ref.BackendNodeID}); err != nil {
+		return browser.Output{}, err
+	}
+	var box nodeBox
+	if err := cdpCallJSON(ctx, state.ID, state.Epoch, "DOM.getBoxModel", map[string]any{"backendNodeId": ref.BackendNodeID}, &box); err != nil {
+		return browser.Output{}, err
+	}
+	x, y, err := quadCenter(box.Model.Content)
+	if err != nil {
+		return browser.Output{}, err
+	}
+	if showBrowserAgentPointer(ctx, state, x, y, "select") {
+		if err := browserPointerBeat(ctx); err != nil {
+			return browser.Output{}, err
+		}
+	}
+	if err := dispatchMouse(ctx, state, "mouseMoved", x, y, 0, 0, 0); err != nil {
+		return browser.Output{}, err
+	}
 	var resolved struct {
 		Object struct {
 			ObjectID string `json:"objectId"`
@@ -196,6 +242,16 @@ func browserSelect(ctx context.Context, state browserTabState, ref browserRef, v
 }
 
 func browserPress(ctx context.Context, state browserTabState, args browser.PressArgs) (browser.Output, error) {
+	if point, ok := browserFocusedPoint(ctx, state); ok {
+		if showBrowserAgentPointer(ctx, state, point.X, point.Y, "press") {
+			if err := browserPointerBeat(ctx); err != nil {
+				return browser.Output{}, err
+			}
+		}
+		if err := dispatchMouse(ctx, state, "mouseMoved", point.X, point.Y, 0, 0, 0); err != nil {
+			return browser.Output{}, err
+		}
+	}
 	if err := dispatchKey(ctx, state, args); err != nil {
 		return browser.Output{}, err
 	}
@@ -313,8 +369,8 @@ func browserScroll(ctx context.Context, state browserTabState, args browser.Scro
 		if err := cdpCallJSON(ctx, state.ID, state.Epoch, "Page.getLayoutMetrics", map[string]any{}, &metrics); err != nil {
 			return browser.Output{}, err
 		}
-		x = metrics.VisualViewport.PageX + metrics.VisualViewport.ClientWidth/2
-		y = metrics.VisualViewport.PageY + metrics.VisualViewport.ClientHeight/2
+		x = metrics.VisualViewport.ClientWidth / 2
+		y = metrics.VisualViewport.ClientHeight / 2
 	}
 	amount := args.Amount
 	if amount == 0 {
@@ -330,6 +386,14 @@ func browserScroll(ctx context.Context, state browserTabState, args browser.Scro
 		dx = -float64(amount)
 	case "right":
 		dx = float64(amount)
+	}
+	if showBrowserAgentPointer(ctx, state, x, y, "scroll") {
+		if err := browserPointerBeat(ctx); err != nil {
+			return browser.Output{}, err
+		}
+	}
+	if err := dispatchMouse(ctx, state, "mouseMoved", x, y, 0, 0, 0); err != nil {
+		return browser.Output{}, err
 	}
 	if err := dispatchMouse(ctx, state, "mouseWheel", x, y, dx, dy, 0); err != nil {
 		return browser.Output{}, err

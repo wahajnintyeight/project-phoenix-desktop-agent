@@ -144,6 +144,7 @@ export class PhChat extends HTMLElement {
   #activeCommand = 0;
   #current: Msg | null = null;
   #scrollFrame = 0;
+  #scrollDirty = false;
   #inputWidth = 0;
   readonly #inputObserver = new ResizeObserver((entries) => {
     const width = entries[0]?.contentRect.width ?? 0;
@@ -275,15 +276,32 @@ export class PhChat extends HTMLElement {
   }
 
   set events(list: ChatEvent[]) {
-    const stick = this.#nearBottom() || list.some((ev) => ev.k === "user" || ev.k === "done" || ev.k === "stopped" || ev.k === "error" || ev.k === "restore");
     for (const ev of list) this.#apply(ev);
-    if (stick && !this.#scrollFrame) {
+    if (list.length) this.scrollToLatest();
+  }
+
+  scrollToLatest(): void {
+    this.#scrollDirty = true;
+    if (this.#scrollFrame) return;
+
+    // content-visibility can expand a message after scrolling reveals its real height.
+    const follow = (): void => {
+      this.#scrollFrame = 0;
+      if (!this.#log.clientHeight) return;
+      if (this.#scrollDirty) {
+        this.#current?.flush();
+        this.#scrollDirty = false;
+      }
+      this.#log.scrollTop = this.#log.scrollHeight;
       this.#scrollFrame = requestAnimationFrame(() => {
         this.#scrollFrame = 0;
-        this.#current?.flush();
-        this.#log.scrollTop = this.#log.scrollHeight;
+        if (this.#log.clientHeight && (this.#scrollDirty || this.#log.scrollHeight - this.#log.scrollTop - this.#log.clientHeight > 1)) {
+          this.#scrollFrame = requestAnimationFrame(follow);
+        }
       });
-    }
+    };
+
+    this.#scrollFrame = requestAnimationFrame(follow);
   }
 
   set chats(list: SavedChatSummary[]) {
@@ -437,12 +455,7 @@ export class PhChat extends HTMLElement {
       : "No enabled MCP servers have passed a connection test this session. Open Settings → Tools (MCP) and test a server first.";
     const message = this.#message("Phoenix", "chat-local");
     message.set(text);
-    this.#log.scrollTop = this.#log.scrollHeight;
-  }
-
-  #nearBottom(): boolean {
-    const l = this.#log;
-    return l.scrollHeight - l.scrollTop - l.clientHeight < 48;
+    this.scrollToLatest();
   }
 
   #setRunning(on: boolean): void {
@@ -538,7 +551,6 @@ export class PhChat extends HTMLElement {
           }
         }
         this.#setRunning(false);
-        this.#log.scrollTop = this.#log.scrollHeight;
         break;
       }
       case "user": {

@@ -262,8 +262,8 @@ func uiReady() {
 	}
 	quickState.key = "" // the UI is new: draw the bar even if it looks unchanged
 	refreshActions(true)
+	refreshProviders() // also reports a configuration error instead of leaving Home in "checking"
 	if hub != nil {
-		refreshProviders() // the agent panel and start page need to know what is ready
 		pushMCP("", false) // slash commands need the installed server list before Settings opens
 	}
 	pushToolbar()

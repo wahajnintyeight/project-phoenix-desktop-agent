@@ -26,6 +26,14 @@ func browserDrag(ctx context.Context, state browserTabState, from, to browserRef
 	if err != nil {
 		return browser.Output{}, err
 	}
+	if showBrowserAgentPointer(ctx, state, x1, y1, "drag") {
+		if err := browserPointerBeat(ctx); err != nil {
+			return browser.Output{}, err
+		}
+	}
+	if err := dispatchMouse(ctx, state, "mouseMoved", x1, y1, 0, 0, 0); err != nil {
+		return browser.Output{}, err
+	}
 	pressErr := dispatchMouse(ctx, state, "mousePressed", x1, y1, 0, 0, 1)
 	released := false
 	defer func() {
@@ -40,6 +48,7 @@ func browserDrag(ctx context.Context, state browserTabState, from, to browserRef
 	if pressErr != nil {
 		return browser.Output{}, pressErr
 	}
+	showBrowserAgentPointer(ctx, state, x2, y2, "drag")
 	// Intermediate points give pages a chance to observe drag-start and drag-over.
 	for step := 1; step <= 8; step++ {
 		fraction := float64(step) / 8
@@ -89,6 +98,20 @@ func browserClipboardKey(ctx context.Context, state browserTabState, tool string
 			return browser.Output{}, err
 		}
 		key, result = "Ctrl+V", "Sent Ctrl+V to the focused page field."
+	}
+	if point, ok := browserFocusedPoint(ctx, state); ok {
+		action := "copy"
+		if tool == "browser_paste" {
+			action = "paste"
+		}
+		if showBrowserAgentPointer(ctx, state, point.X, point.Y, action) {
+			if err := browserPointerBeat(ctx); err != nil {
+				return browser.Output{}, err
+			}
+		}
+		if err := dispatchMouse(ctx, state, "mouseMoved", point.X, point.Y, 0, 0, 0); err != nil {
+			return browser.Output{}, err
+		}
 	}
 	if err := dispatchKey(ctx, state, browser.PressArgs{Key: key}); err != nil {
 		return browser.Output{}, err

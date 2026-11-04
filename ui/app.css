@@ -594,8 +594,7 @@
   .md-list input[type="checkbox"] { @apply mr-1 align-middle; }
   .md-code { @apply rounded-sm bg-raised px-1 py-px font-mono text-[0.85em]; overflow-wrap: anywhere; }
   .md-link-host { @apply text-fg-subtle; }
-  .md-quote { @apply my-2 border-l-2 border-line-strong pl-3 text-fg-muted; }
-  .md-hr { @apply my-4 border-line; }
+  .md-quote { @apply my-2 border-l border-line-strong pl-3 text-fg-muted; }
   .md-pre { @apply my-2.5 overflow-hidden rounded-lg border border-line bg-sunken; }
   .md-pre-head { @apply flex items-center justify-between border-b border-line px-3 py-1 text-xs text-fg-subtle; }
   .md-copy { @apply rounded-sm px-1.5 py-0.5 text-xs text-fg-muted transition-colors; }

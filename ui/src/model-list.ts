@@ -26,6 +26,7 @@ export interface ModelsData {
   effort: string;
   error?: string;
   ready?: boolean;
+  loading?: boolean;
 }
 
 const MAX_ROWS = 40; // rows drawn at once; a filter narrows the rest
@@ -257,7 +258,7 @@ export class PhModelList extends HTMLElement {
       }
     }
 
-    this.#note.textContent = d.error ?? (d.models.length === 0 ? "No models found. Install the CLI, then re-check." : "");
+    this.#note.textContent = d.error ?? (d.loading ? "Loading models…" : d.models.length === 0 ? "No models found. Install the CLI, then re-check." : "");
     this.#note.classList.toggle("is-error", Boolean(d.error));
     if (focus) {
       Array.from(this.querySelectorAll<HTMLElement>("[data-act]"))
