@@ -55,8 +55,7 @@ func ValidSearchURL(s string) bool {
 // (screenshot, click, scroll, drag, copy, paste, ...).
 type Desktop struct {
 	Enabled bool `yaml:"enabled"`
-	// CLIPath is the agent-desktop program, when it is not on PATH. Like a provider's
-	// cli_path it names a program to run, so only the file can set it.
+	// CLIPath is retained for compatibility with older configuration files; it is ignored.
 	CLIPath string `yaml:"cli_path,omitempty"`
 }
 

@@ -88,10 +88,11 @@ type Run struct {
 	URL   string // where the MCP server posts requests
 	Token string
 
-	mu       sync.Mutex
-	allowAll bool
-	looked   map[string]bool
-	done     chan struct{}
+	mu        sync.Mutex
+	allowAll  bool
+	automatic bool
+	looked    map[string]bool
+	done      chan struct{}
 }
 
 // NewBroker creates a broker. notify is called from a server goroutine for every request
@@ -147,6 +148,18 @@ func (b *Broker) NewRun(ctx context.Context) (*Run, error) {
 	return r, nil
 }
 
+// NewAutomaticRun keeps per-run authentication but permits tools without interrupting the user.
+func (b *Broker) NewAutomaticRun(ctx context.Context) (*Run, error) {
+	r, err := b.NewRun(ctx)
+	if err != nil {
+		return nil, err
+	}
+	r.mu.Lock()
+	r.automatic = true
+	r.mu.Unlock()
+	return r, nil
+}
+
 // Respond delivers the user's answer for a pending request. It reports whether the request
 // was still waiting.
 func (b *Broker) Respond(id string, d Decision) bool {
@@ -198,8 +211,18 @@ func (b *Broker) serve(rw http.ResponseWriter, r *http.Request) {
 }
 
 func (b *Broker) decide(ctx context.Context, run *Run, req Request) Decision {
+	select {
+	case <-ctx.Done():
+		return Deny
+	case <-run.done:
+		return Deny
+	default:
+	}
 	run.mu.Lock()
 	switch {
+	case run.automatic:
+		run.mu.Unlock()
+		return Allow
 	case req.Class == Look && run.looked[req.App]:
 		run.mu.Unlock()
 		return Allow

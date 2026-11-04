@@ -107,3 +107,27 @@ func TestLiveCodexUsesPhoenixTool(t *testing.T) {
 		t.Fatalf("result=%+v calls=%d approved=%d", result, calls, approved)
 	}
 }
+func TestUnavailableServerDoesNotBlockOtherTools(t *testing.T) {
+	goodServer := sdk.NewServer(&sdk.Implementation{Name: "fixture", Version: "1"}, nil)
+	type input struct {
+		Value string `json:"value"`
+	}
+	sdk.AddTool(goodServer, &sdk.Tool{Name: "echo"}, func(_ context.Context, _ *sdk.CallToolRequest, _ input) (*sdk.CallToolResult, any, error) {
+		return &sdk.CallToolResult{Content: []sdk.Content{&sdk.TextContent{Text: "ok"}}}, nil, nil
+	})
+	good := httptest.NewServer(sdk.NewStreamableHTTPHandler(func(*http.Request) *sdk.Server { return goodServer }, nil))
+	defer good.Close()
+	bad := httptest.NewServer(http.NotFoundHandler())
+	defer bad.Close()
+	h, _, _, _ := newHub(t)
+	probe := &captureRun{fake: fake{id: provider.Codex}}
+	h.providers[provider.Codex] = probe
+	req := provider.Request{MCPServers: []mcp.Resolved{{Server: mcp.Server{Name: "broken", Transport: mcp.HTTP, URL: bad.URL, Enabled: true}}, {Server: mcp.Server{Name: "working", Transport: mcp.HTTP, URL: good.URL, Enabled: true}}}}
+	var events []provider.Event
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+	_, err := h.Run(ctx, provider.Codex, req, func(e provider.Event) { events = append(events, e) })
+	if err != nil || len(probe.req.Tools) != 1 || !strings.Contains(probe.req.System, "broken") || len(events) != 1 || !strings.Contains(events[0].ToolName, "broken") {
+		t.Fatalf("tools=%v events=%v err=%v", probe.req.Tools, events, err)
+	}
+}

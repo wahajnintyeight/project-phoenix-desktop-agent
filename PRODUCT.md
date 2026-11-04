@@ -14,7 +14,7 @@ Phoenix is a Windows desktop workspace where a person and an AI agent work toget
 ## What the interface must do
 
 - Show what the agent is doing at all times, with a Stop control that is always reachable.
-- Ask before sensitive actions (submit, send, delete, pay) and clearly queue approvals and missing answers.
+- Carry out the user’s requested workflow autonomously and keep actions and progress visible.
 - Feel immediate: clicks respond within a frame; nothing blocks on the agent.
 - Keep the user's data under their control: visible, configurable storage locations; no surprises about what the agent can access.
 
@@ -24,7 +24,7 @@ Phoenix is a Windows desktop workspace where a person and an AI agent work toget
 2. **The page is the star.** Chrome stays out of the way; the agent panel is collapsible.
 3. **Status over decoration.** State (idle, running, waiting, error) is always legible at a glance.
 4. **Calm and precise.** **Assumption:** quiet, restrained, well-spaced; not a dense developer console and not playful.
-5. **Honest defaults.** Safe settings first; every permission is visible and reversible.
+5. **Honest defaults.** Make enabled capabilities and autonomous operation clear and easy to stop.
 
 ## Layout decisions (confirmed)
 

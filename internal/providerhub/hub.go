@@ -296,20 +296,23 @@ func (h *Hub) Run(ctx context.Context, id provider.ID, req provider.Request, emi
 	}
 	if (provider.IsHTTP(id) || id == provider.Codex || (id == provider.Claude && req.MCPConfig == "")) && (req.UseMCP || len(req.MCPServers) > 0) {
 		servers := make([]mcp.Resolved, 0, len(req.MCPServers)+len(h.MCPEnabled()))
+		var unavailable []string
 		for _, server := range h.MCPEnabled() {
 			resolved, err := h.resolveMCP(server)
 			if err != nil {
-				return provider.Result{}, fmt.Errorf("MCP server %s: %w", server.Name, err)
+				unavailable = append(unavailable, server.Name)
+				continue
 			}
 			resolved.RequireApproval = true
 			servers = append(servers, resolved)
 		}
 		servers = append(servers, req.MCPServers...)
 		if len(servers) > 0 {
-			runtime, err := mcp.Open(ctx, servers)
+			runtime, missing, err := mcp.OpenAvailable(ctx, servers)
 			if err != nil {
 				return provider.Result{}, err
 			}
+			unavailable = append(unavailable, missing...)
 			defer runtime.Close()
 			for _, function := range runtime.Functions() {
 				req.Tools = append(req.Tools, provider.Tool{
@@ -344,6 +347,12 @@ func (h *Hub) Run(ctx context.Context, id provider.ID, req provider.Request, emi
 					}
 					defer cleanup()
 				}
+			}
+		}
+		if len(unavailable) > 0 {
+			req.System += "\nUnavailable tools for this run: " + strings.Join(unavailable, ", ") + ". Do not claim to use unavailable tools; continue with available tools when possible."
+			for _, name := range unavailable {
+				emit(provider.Event{Kind: provider.EvToolUse, ToolName: "Unavailable MCP: " + name})
 			}
 		}
 	}

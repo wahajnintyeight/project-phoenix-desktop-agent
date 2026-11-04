@@ -464,7 +464,7 @@ export class PhMcp extends HTMLElement {
     controls.append(test, edit);
 
     const intro = el("p", "text-fg-muted mcp-detail-intro", server.enabled
-      ? "This server is available to supported providers. API-provider calls ask before each tool runs."
+      ? "This server is available automatically to supported providers."
       : "This server is installed but off. Test it, then turn on agent access when you are ready.");
     const authHint = server.transport === "http"
       ? el("p", "text-fg-muted mcp-detail-intro", "If the server requires sign-in, Phoenix opens its authorization page in your browser.")

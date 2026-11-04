@@ -2,6 +2,8 @@
 
 Status: design proposal. Items marked **[unverified]** are hypotheses to confirm in the prototype. No performance numbers in this document have been measured.
 
+> Current implementation: Phoenix runs native Go Windows UI Automation, window capture, input, and clipboard tools without `agent-desktop`. Enabled browser, computer-use, and MCP tools run automatically within each authenticated chat run; actions remain visible in Activity and can be stopped. The older sections below record earlier designs and approval behavior.
+
 Decisions locked in: **WebView2** as the engine; **vanilla TypeScript + HTML5 + CSS** with custom components (no framework) for Phoenix's own UI; agent tooling modeled on **vercel-labs/agent-desktop**; UI design discipline taken from **pbakaus/impeccable**.
 
 ## 1. Goals
@@ -531,16 +533,17 @@ The agent panel's first tab is a chat. It talks to the default provider and mode
 
 **Not yet checked.** A keyboard-only walkthrough, other window sizes and DPI, and Windows 11. There is no light theme.
 
-## 9f. Quick actions (implemented 2026-11-03)
+## 9f. Quick actions (implemented 2026-11-03, extended 2026-11-04)
 
 Purpose: less talking, more action. A bar of one-click buttons sits under the page at all times (`<ph-quick-actions>`, `ui/src/quick-actions.ts`). Each button is a request the user would otherwise type; the buttons change with what the tab looks like.
 
-- **Go chooses, the UI draws.** `internal/quick` is pure Go: `Classify(Signals)` guesses the page kind (job posting, article, product, form, sign-in, video, search results, generic, or start for home/settings/blank) and `For(kind, hasSelection)` returns up to six actions, most likely first (drawn as the one accent-outlined button). With text selected, the actions on the selection come first. Tests cover classification (including near misses such as a LinkedIn feed or a careers page with the wrong title) and that every id exists.
-- **Signals are read locally.** `cmd/spike/actions_windows.go` runs one fixed script in the tab (JSON-LD `@type`s, `og:type`, visible form fields, password field, `<article>` length, price markup, selection length). The result is used to pick buttons and is not sent to a model, not logged and not kept beyond the kind. `runScript` in `page_windows.go` is the shared helper for such fixed scripts and for reading the page.
+- **Go chooses, the UI draws.** `internal/quick` is pure Go: `Classify(Signals)` distinguishes individual job postings from job-search results (using ATS search paths and query terms), along with articles, products, forms, sign-in pages, videos, general search results, generic pages, and the start page. `For(kind, hasSelection)` returns up to six actions, most useful first. With text selected, selection actions come first.
+- **Patterns are provider-neutral.** `internal/quick/pattern.go` formats a goal, sources, numbered workflow, deliverables, and guardrails as plain text. Job actions ask the model to use the active Phoenix browser and any connected resume MCP, compare only verifiable resume evidence, and keep the user moving without preliminary questions. If no resume source is connected, they complete the page-side work and mark fit as unknown. The same prompt goes to every provider; it does not depend on a vendor-specific tool schema.
+- **Signals are read locally.** `cmd/phoenix/actions_windows.go` runs one fixed script in the tab (JSON-LD `@type`s, `og:type`, visible form fields, password field, `<article>` length, price markup, selection length). The result is used to pick buttons and is not sent to a model, not logged and not kept beyond the kind. `runScript` in `page_windows.go` is the shared helper for such fixed scripts and for reading the page.
 - **When it runs.** On tab switch and navigation start (a guess from address and title shows at once, so the old page's buttons never linger), on load end and 1.5 s later (sites that build themselves late), and when the pointer enters the bar (the cue that the user may have just selected something). An unchanged answer redraws nothing, so buttons do not move under the pointer.
-- **A click sends an id.** `g act <id>`; Go looks it up and the wording lives in `quick.catalog`, so this path cannot carry arbitrary text. The chat shows the short label as the user's message and the model gets the full request. Actions that read the page attach it for that turn without the Share page toggle. Prompts that need personal facts say to ask up to three questions instead of inventing them. The log records `chat action <id>` only.
+- **A click sends an id.** `g act <id>`; Go looks it up and the wording lives in `quick.catalog`, so this path cannot carry arbitrary text. The chat shows the short label as the user's message and the model gets the formatted request. Actions that read the page attach it for that turn without the Share page toggle. Job-search actions can inspect listings, refine search filters, and build a resume-aware shortlist when tools are available. They never apply or send recruiter messages. The log records `chat action <id>` only.
 - **One request at a time.** The buttons are disabled while a reply streams and come back on done, stop or error.
-- **Honest about what they do.** The buttons only ask the model; none of them acts on a page yet. Prompts that would imply acting (for example form answers) say the user pastes them in. When the tool loop with approvals arrives, an action becomes a task instead of a prompt, behind the same ids.
+- **Honest about what they do.** Job search/filter and listing-inspection actions may use the attached browser when the selected provider can call tools. Writing actions return drafts; they do not submit applications or send messages.
 - **Verified** with a fake provider and test pages: job, article, form and plain pages classify correctly; a selection switches the set; a click sends the label, attaches the page and selection and the model sees both; chips disable during a stream and return after Stop.
 
 **Next:** user-defined actions in `config.yaml`, keyboard shortcuts for the first nine, ordering by use, and actions that run tasks once the agent can act.

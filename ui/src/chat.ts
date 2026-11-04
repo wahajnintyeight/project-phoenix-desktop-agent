@@ -9,7 +9,7 @@ import { send } from "./protocol";
 import { resolveSlashCommand, searchSlashCommands, type SlashCommandDefinition } from "./slash-commands";
 
 export interface ChatEvent {
-  k: "user" | "note" | "tool" | "approve" | "approved" | "start" | "delta" | "done" | "error" | "stopped" | "reset" | "restore";
+  k: "user" | "note" | "processing" | "tool" | "tool-result" | "approve" | "approved" | "start" | "delta" | "done" | "error" | "stopped" | "reset" | "restore";
   text?: string;
   provider?: string;
   model?: string;
@@ -20,6 +20,12 @@ export interface ChatEvent {
   id?: string;
   cls?: "look" | "act";
   decision?: "allow" | "all" | "deny";
+  toolId?: string;
+  server?: string;
+  toolName?: string;
+  input?: string;
+  output?: string;
+  toolError?: boolean;
   messages?: ChatTranscriptMessage[];
 }
 
@@ -41,16 +47,26 @@ class Msg {
   readonly box: HTMLElement;
   readonly text = el("div", "chat-text");
   readonly meta = el("p", "chat-meta");
+  readonly copy = el("button", "chat-copy");
   readonly who: string;
   #raw = "";
   #md: MarkdownView | null = null;
   #frame = 0;
+  #copyTimer = 0;
 
   constructor(who: string, cls: string, markdown: boolean) {
     this.who = who;
     this.box = el("article", `chat-msg ${cls}`);
+    const footer = el("div", "chat-msg-footer");
+    const copyable = cls.includes("chat-user") || cls.includes("chat-ai");
+    this.copy.type = "button";
+    this.copy.hidden = !copyable || this.#raw === "";
+    this.copy.setAttribute("aria-label", "Copy message");
+    this.copy.append(icon("copy", 12), el("span", undefined, "Copy"));
+    this.copy.addEventListener("click", () => this.#copyText(), { passive: true });
+    footer.append(this.meta, this.copy);
     // The name is for screen readers; sighted users read it in the footer line.
-    this.box.append(el("h3", cls.includes("chat-error") ? "chat-who" : "sr-only", who), this.text, this.meta);
+    this.box.append(el("h3", cls.includes("chat-error") ? "chat-who" : "sr-only", who), this.text, footer);
     if (markdown) this.#md = new MarkdownView(this.text);
   }
 
@@ -61,11 +77,13 @@ class Msg {
   set(text: string): void {
     this.#raw = text;
     this.text.textContent = text;
+    if (this.copy.isConnected && (this.who === "You" || this.box.classList.contains("chat-ai"))) this.copy.hidden = text === "";
   }
 
   /** Adds streamed text; the Markdown is redrawn at most once per frame. */
   append(text: string): void {
     this.#raw += text;
+    if (this.#raw && (this.who === "You" || this.box.classList.contains("chat-ai"))) this.copy.hidden = false;
     if (!this.#md) {
       this.text.append(document.createTextNode(text));
     } else if (!this.#frame) {
@@ -78,6 +96,30 @@ class Msg {
     this.#frame = 0;
     this.#md?.set(this.#raw);
   }
+
+  #copyText(): void {
+    if (!this.#raw || !navigator.clipboard?.writeText) return;
+    void navigator.clipboard.writeText(this.#raw).then(() => {
+      this.copy.lastElementChild!.textContent = "Copied";
+      window.clearTimeout(this.#copyTimer);
+      this.#copyTimer = window.setTimeout(() => { this.copy.lastElementChild!.textContent = "Copy"; }, 1500);
+    }, () => {
+      this.copy.lastElementChild!.textContent = "Copy failed";
+      window.clearTimeout(this.#copyTimer);
+      this.#copyTimer = window.setTimeout(() => { this.copy.lastElementChild!.textContent = "Copy"; }, 1500);
+    });
+  }
+}
+
+interface ToolCardState {
+  card: HTMLDetailsElement;
+  status: HTMLElement;
+  output: HTMLPreElement;
+  outputSection: HTMLElement;
+}
+
+function prettyToolText(value: string): string {
+  try { return JSON.stringify(JSON.parse(value), null, 2) ?? value; } catch { return value; }
 }
 
 const IDEAS = ["Summarise this page", "What are the key points here?", "Draft a short reply to this"];
@@ -85,6 +127,8 @@ const IDEAS = ["Summarise this page", "What are the key points here?", "Draft a 
 export class PhChat extends HTMLElement {
   readonly #log = el("div", "chat-log");
   readonly #empty = el("div", "chat-empty");
+  readonly #processing = el("div", "chat-processing");
+  readonly #processingText = el("span");
   readonly #input = el("textarea", "chat-input");
   readonly #commandMenu = el("div", "slash-menu");
   readonly #send = el("button", "send-btn");
@@ -96,6 +140,7 @@ export class PhChat extends HTMLElement {
   #shareOn = false;
   #running = false;
   #commands: SlashCommandDefinition[] = [];
+  readonly #toolCalls = new Map<string, ToolCardState>();
   #activeCommand = 0;
   #current: Msg | null = null;
   #scrollFrame = 0;
@@ -121,6 +166,10 @@ export class PhChat extends HTMLElement {
     // The log would announce every streamed word; the status pill and the finished reply do
     // that job instead.
     this.#log.setAttribute("aria-live", "off");
+    this.#processing.setAttribute("role", "status");
+    this.#processing.setAttribute("aria-live", "polite");
+    this.#processing.hidden = true;
+    this.#processing.append(el("span", "chat-spinner"), this.#processingText);
 
     // The empty state teaches the one non-obvious feature: sharing the open tab.
     const ideas = el("div", "chat-ideas");
@@ -138,7 +187,7 @@ export class PhChat extends HTMLElement {
     }
     this.#empty.append(
       el("h2", undefined, "What can we work on?"),
-      el("p", undefined, "Ask a question or share the current page for context. Phoenix asks before using tools."),
+      el("p", undefined, "Give Phoenix a task. It can inspect and use your browser to make progress."),
       ideas,
     );
     this.#log.append(this.#empty);
@@ -458,6 +507,8 @@ export class PhChat extends HTMLElement {
     switch (ev.k) {
       case "reset":
         this.#log.replaceChildren(this.#empty);
+        this.#processing.hidden = true;
+        this.#toolCalls.clear();
         this.#empty.hidden = false;
         this.#newChat.hidden = true;
         this.#current = null;
@@ -466,6 +517,8 @@ export class PhChat extends HTMLElement {
         break;
       case "restore": {
         this.#log.replaceChildren(this.#empty);
+        this.#processing.hidden = true;
+        this.#toolCalls.clear();
         this.#empty.hidden = false;
         this.#newChat.hidden = true;
         this.#current = null;
@@ -489,6 +542,8 @@ export class PhChat extends HTMLElement {
         break;
       }
       case "user": {
+        this.#processing.hidden = true;
+        this.#toolCalls.clear();
         const m = this.#message("You", "chat-user");
         m.set(ev.text ?? "");
         this.#lastUser = m.meta;
@@ -496,18 +551,68 @@ export class PhChat extends HTMLElement {
         this.#setRunning(true);
         break;
       }
+      case "processing": {
+        if (!ev.text) {
+          this.#processing.hidden = true;
+          break;
+        }
+        this.#processingText.textContent = ev.text;
+        this.#processing.hidden = false;
+        this.#log.append(this.#processing);
+        break;
+      }
       case "tool": {
-        // One quiet line per tool call, so the user can see what the agent did. The next
-        // reply text starts a new message below it, keeping the order of events.
-        const t = el("p", "chat-tool");
-        t.append(icon("bolt", 12), document.createTextNode(ev.text ?? ""));
+        this.#processing.hidden = true;
         this.#empty.hidden = true;
         // A reply box that is still empty (the agent went straight to a tool) is dropped; the
         // text that follows gets a fresh one below the tool line.
         if (this.#current?.empty) this.#current.box.remove();
         else this.#current?.flush();
-        this.#log.append(t);
         this.#current = null;
+        if (!ev.toolId) {
+          const t = el("p", "chat-tool");
+          t.append(icon("bolt", 12), document.createTextNode(ev.text ?? ""));
+          this.#log.append(t);
+          break;
+        }
+        const card = el("details", "chat-tool-card") as HTMLDetailsElement;
+        const summary = document.createElement("summary");
+        const status = el("span", "chat-tool-status", "Running");
+        const chevron = icon("chevronRight", 14);
+        chevron.classList.add("chat-tool-chevron");
+        summary.append(icon("bolt", 13), el("span", "chat-tool-title", ev.text ?? ev.toolName ?? "Tool call"), status, chevron);
+        card.append(summary);
+        const body = el("div", "chat-tool-body");
+        if (ev.server || ev.toolName) {
+          const target = el("p", "chat-tool-target");
+          if (ev.server) target.append(el("span", "chat-tool-label", "MCP"), el("code", undefined, ev.server));
+          if (ev.toolName) target.append(el("span", "chat-tool-label", "Tool"), el("code", undefined, ev.toolName));
+          body.append(target);
+        }
+        if (ev.input) {
+          const section = el("section", "chat-tool-section");
+          section.append(el("h4", "chat-tool-section-title", "Input"), el("pre", "chat-tool-code", prettyToolText(ev.input)));
+          body.append(section);
+        }
+        const outputSection = el("section", "chat-tool-section");
+        outputSection.hidden = true;
+        const output = el("pre", "chat-tool-code") as HTMLPreElement;
+        outputSection.append(el("h4", "chat-tool-section-title", "Result"), output);
+        body.append(outputSection);
+        card.append(body);
+        this.#log.append(card);
+        this.#toolCalls.set(ev.toolId, { card, status, output, outputSection });
+        break;
+      }
+      case "tool-result": {
+        const call = ev.toolId ? this.#toolCalls.get(ev.toolId) : undefined;
+        if (call) {
+          call.status.textContent = ev.toolError ? "Error" : "Done";
+          call.card.dataset["state"] = ev.toolError ? "error" : "done";
+          call.output.textContent = prettyToolText(ev.output || "No text result returned.");
+          call.outputSection.hidden = false;
+          this.#toolCalls.delete(ev.toolId!);
+        }
         break;
       }
       case "approve":
@@ -523,12 +628,11 @@ export class PhChat extends HTMLElement {
         break;
       case "start": {
         this.#who = [ev.provider, ev.model].filter(Boolean).join(" · ") || "Agent";
-        this.#current = this.#message(this.#who, "chat-ai", true);
-        this.#current.meta.textContent = this.#who;
-        this.#current.box.dataset["streaming"] = "true";
+        this.#current = null;
         break;
       }
       case "delta": {
+        this.#processing.hidden = true;
         // A reply that begins without a start event (or after a reset) still needs a box.
         if (!this.#current) {
           this.#current = this.#message(this.#who, "chat-ai", true);
@@ -539,6 +643,8 @@ export class PhChat extends HTMLElement {
         break;
       }
       case "done": {
+        this.#processing.hidden = true;
+        this.#finishToolCalls("No result");
         this.#expireCards();
         const c = this.#current;
         if (c) {
@@ -552,6 +658,8 @@ export class PhChat extends HTMLElement {
         break;
       }
       case "stopped": {
+        this.#processing.hidden = true;
+        this.#finishToolCalls("Stopped");
         this.#expireCards();
         if (this.#current) {
           this.#current.flush();
@@ -563,6 +671,8 @@ export class PhChat extends HTMLElement {
         break;
       }
       case "error": {
+        this.#processing.hidden = true;
+        this.#finishToolCalls("Interrupted");
         this.#expireCards();
         if (this.#current) {
           this.#current.flush();
@@ -574,6 +684,16 @@ export class PhChat extends HTMLElement {
         this.#setRunning(false);
         break;
       }
+    }
+  }
+
+  #finishToolCalls(label: string): void {
+    for (const [id, call] of this.#toolCalls) {
+      call.status.textContent = label;
+      call.card.dataset["state"] = "incomplete";
+      call.output.textContent = label;
+      call.outputSection.hidden = false;
+      this.#toolCalls.delete(id);
     }
   }
 }

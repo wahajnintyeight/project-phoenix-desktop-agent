@@ -546,8 +546,29 @@
   .chat-msg { @apply flex flex-col gap-1; content-visibility: auto; contain-intrinsic-size: auto 96px; }
   .chat-msg[data-streaming="true"] { content-visibility: visible; }
   .chat-who { @apply text-xs font-medium text-fg-subtle; }
+  .chat-processing { @apply flex min-h-5 items-center gap-2 text-sm text-fg-subtle; }
+  .chat-spinner { @apply size-3 shrink-0 rounded-full border border-line-strong; border-top-color: var(--color-accent); animation: chat-spin 800ms linear infinite; }
+  @keyframes chat-spin { to { transform: rotate(360deg); } }
   .chat-tool { @apply flex items-center gap-1.5 text-xs text-fg-subtle; overflow-wrap: anywhere; }
   .chat-tool svg { @apply shrink-0; }
+  .chat-tool-card { @apply overflow-hidden rounded-lg border border-line bg-sunken; }
+  .chat-tool-card > summary { @apply flex min-w-0 cursor-pointer list-none items-center gap-2 px-3 py-2 text-sm text-fg-muted; }
+  .chat-tool-card > summary::-webkit-details-marker { display: none; }
+  .chat-tool-card > summary:hover { @apply bg-raised; }
+  .chat-tool-title { @apply min-w-0 flex-1 truncate; }
+  .chat-tool-status { @apply shrink-0 rounded-full bg-raised px-2 py-0.5 text-xs text-fg-subtle; }
+  .chat-tool-card[data-state="done"] .chat-tool-status { @apply text-ok; }
+  .chat-tool-card[data-state="error"] .chat-tool-status, .chat-tool-card[data-state="incomplete"] .chat-tool-status { @apply text-warn; }
+  .chat-tool-chevron { @apply shrink-0 text-fg-subtle transition-transform; }
+  .chat-tool-card[open] .chat-tool-chevron { transform: rotate(90deg); }
+  .chat-tool-body { @apply flex flex-col gap-2 border-t border-line px-3 py-2; }
+  .chat-tool-target { @apply m-0 flex flex-wrap items-center gap-x-2 gap-y-1 text-xs; }
+  .chat-tool-target code { @apply rounded bg-raised px-1.5 py-0.5 font-mono text-xs text-fg-muted; overflow-wrap: anywhere; }
+  .chat-tool-label { @apply text-fg-subtle; }
+  .chat-tool-section { @apply flex flex-col gap-1; }
+  .chat-tool-section[hidden] { display: none; }
+  .chat-tool-section-title { @apply text-xs font-medium text-fg-subtle; }
+  .chat-tool-code { @apply scroll m-0 max-h-48 overflow-auto rounded-md bg-raised p-2 font-mono text-xs text-fg-muted whitespace-pre-wrap; overflow-wrap: anywhere; }
   .chat-text { @apply text-base; overflow-wrap: anywhere; }
   /* The agent's reply is the page's main content: full width, no bubble, comfortable measure.
      What the user typed is quieter, small and set to the right. */
@@ -592,8 +613,13 @@
     background: var(--color-accent); animation: caret 1s steps(2, start) infinite;
   }
   @keyframes caret { to { visibility: hidden; } }
-  .chat-meta { @apply tabular text-xs text-fg-subtle; }
+  .chat-msg-footer { @apply flex min-w-0 items-center justify-between gap-2; }
+  .chat-user .chat-msg-footer { @apply max-w-[92%]; }
+  .chat-meta { @apply min-w-0 flex-1 tabular text-xs text-fg-subtle; }
   .chat-meta:empty { display: none; }
+  .chat-copy { @apply inline-flex shrink-0 items-center gap-1 rounded px-1.5 py-0.5 text-xs text-fg-subtle transition-colors; }
+  .chat-copy:hover { @apply bg-raised text-fg; }
+  .chat-copy[hidden] { display: none; }
   .chat-error .chat-who, .chat-error .chat-text { @apply text-danger; }
   .chat-local .chat-text { @apply text-sm whitespace-pre-wrap text-fg-muted; }
 

@@ -1,3 +1,5 @@
+go.sum
+
 /bin/
 /node_modules/
 /internal/ui/dist/

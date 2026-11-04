@@ -3,6 +3,7 @@ module phoenix
 go 1.27.3
 
 require (
+	github.com/auuunya/go-element v1.0.1
 	github.com/evanw/esbuild v0.28.2
 	github.com/modelcontextprotocol/go-sdk v1.8.0
 	github.com/wailsapp/go-webview2 v1.0.23

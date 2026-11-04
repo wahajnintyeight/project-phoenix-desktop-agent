@@ -1,3 +1,5 @@
+github.com/auuunya/go-element v1.0.1 h1:cwTjR0EoI6PvJSLBmlUAZ+00Dd4FHxgTvI/9b10kb1o=
+github.com/auuunya/go-element v1.0.1/go.mod h1:P2YGqdgcwe3r8b+xjnRjvFeL7VtlGAKfh7dmBqk6tHY=
 github.com/coder/websocket v1.8.14 h1:9L0p0iKiNOibykf283eHkKUHHrpG7f65OE3BhhO7v9g=
 github.com/coder/websocket v1.8.14/go.mod h1:NX3SzP+inril6yawo5CQXx8+fk145lPDC6pumgx0mVg=
 github.com/davecgh/go-spew v1.1.1 h1:vj9j/u1bqnvCEfJOwUhtlOARqs3+rkHYY13jYWTU97c=

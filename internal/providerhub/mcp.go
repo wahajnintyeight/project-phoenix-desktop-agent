@@ -388,8 +388,7 @@ func attachClaudeProxy(req *provider.Request, proxy *codexToolProxy) (func(), er
 	return cleanup, nil
 }
 
-// Desktop reports whether computer use is on and where the agent-desktop program was
-// configured to be ("" means search for it).
+// Desktop reports whether computer use is on and the legacy configured CLI path.
 func (h *Hub) Desktop() (enabled bool, cliPath string) {
 	h.store.View(func(c *config.Config) { enabled, cliPath = c.Desktop.Enabled, c.Desktop.CLIPath })
 	return

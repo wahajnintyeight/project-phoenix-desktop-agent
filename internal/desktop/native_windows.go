@@ -33,6 +33,10 @@ type nativeWindow struct {
 	Focused   bool   `json:"is_focused"`
 	Minimized bool   `json:"minimized"`
 	Visible   bool   `json:"visible"`
+	X         int32  `json:"x"`
+	Y         int32  `json:"y"`
+	Width     int32  `json:"width"`
+	Height    int32  `json:"height"`
 }
 
 func nativeWindows(ctx context.Context) ([]nativeWindow, error) {
@@ -74,7 +78,9 @@ func nativeWindows(ctx context.Context) ([]nativeWindow, error) {
 			return 1
 		}
 		minimized, _, _ := procIsIconic.Call(hwnd)
-		out = append(out, nativeWindow{App: app, Title: windows.UTF16ToString(title[:n]), ID: fmt.Sprintf("w-%d", hwnd), Focused: hwnd == foreground, Minimized: minimized != 0, Visible: true})
+		var bounds windowRect
+		procGetWindowRect.Call(hwnd, uintptr(unsafe.Pointer(&bounds)))
+		out = append(out, nativeWindow{App: app, Title: windows.UTF16ToString(title[:n]), ID: fmt.Sprintf("w-%d", hwnd), Focused: hwnd == foreground, Minimized: minimized != 0, Visible: true, X: bounds.Left, Y: bounds.Top, Width: bounds.Right - bounds.Left, Height: bounds.Bottom - bounds.Top})
 		return 1
 	})
 	result, _, callErr := procEnumWindows.Call(cb, 0)
@@ -120,15 +126,12 @@ func nativeEnvelope(command string, v any) (Envelope, error) {
 	return Envelope{OK: true, Command: command, Data: data}, nil
 }
 
-func runNative(ctx context.Context, standalone bool, args []string) (Envelope, bool, error) {
+func runNative(ctx context.Context, args []string) (Envelope, bool, error) {
 	if len(args) == 0 {
 		return Envelope{}, false, nil
 	}
 	switch args[0] {
 	case "list-windows":
-		if !standalone {
-			return Envelope{}, false, nil
-		}
 		ws, err := nativeWindows(ctx)
 		if err != nil {
 			return Envelope{}, true, err
@@ -136,9 +139,6 @@ func runNative(ctx context.Context, standalone bool, args []string) (Envelope, b
 		env, err := nativeEnvelope(args[0], ws)
 		return env, true, err
 	case "screenshot":
-		if !standalone {
-			return Envelope{}, false, nil
-		}
 		var app, id, path string
 		for i := 1; i < len(args); i++ {
 			switch args[i] {

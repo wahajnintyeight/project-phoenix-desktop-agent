@@ -13,36 +13,31 @@ import (
 	sdk "github.com/modelcontextprotocol/go-sdk/mcp"
 )
 
-// TestMain doubles as a fake agent-desktop: started with FAKE_AD=1 the test binary prints
-// canned envelopes and records its arguments, so the tools run against a real child process.
-func TestMain(m *testing.M) {
-	if os.Getenv("FAKE_AD") == "1" {
-		args := os.Args[1:]
-		if f, err := os.OpenFile(os.Getenv("FAKE_AD_LOG"), os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0o600); err == nil {
-			fmt.Fprintln(f, strings.Join(args, " "))
-			f.Close()
-		}
-		for len(args) > 0 && args[0] == "--headed" {
-			args = args[1:]
-		}
-		switch args[0] {
-		case "list-windows":
-			fmt.Println(`{"ok":true,"command":"list-windows","data":[{"app_name":"notepad.exe","title":"Untitled","id":"w-11","is_focused":true},{"app_name":"slack.exe","title":"General","id":"w-12","minimized":true}]}`)
-		case "screenshot":
-			_ = os.WriteFile(args[len(args)-1], []byte("\x89PNG-fake"), 0o600)
-			fmt.Println(`{"ok":true,"command":"screenshot","data":{"format":"png"}}`)
-		case "snapshot":
-			fmt.Println(`{"ok":true,"command":"snapshot","data":{"snapshot_id":"s1","tree":{"role":"window","children":[{"ref_id":"@s1:e1","role":"button","name":"Send","states":["focused"]},{"role":"group","children":[{"ref_id":"@s1:e2","role":"edit","name":"Message","value":"hi"}]}]}}}`)
-		case "clipboard-get":
-			fmt.Println(`{"ok":true,"command":"clipboard-get","data":{"text":"copied words","type":"text"}}`)
-		case "click":
-			fmt.Println(`{"ok":false,"command":"click","error":{"code":"STALE_REF","message":"gone","suggestion":"snapshot again"}}`)
-		default:
-			fmt.Printf(`{"ok":true,"command":%q,"data":{}}`+"\n", args[0])
-		}
-		return
+type fixtureDriver struct{ log string }
+
+func (f fixtureDriver) run(_ context.Context, args []string) (Envelope, bool, error) {
+	file, err := os.OpenFile(f.log, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0600)
+	if err != nil {
+		return Envelope{}, true, err
 	}
-	os.Exit(m.Run())
+	fmt.Fprintln(file, strings.Join(args, " "))
+	_ = file.Close()
+	raw := `{"ok":true,"data":{}}`
+	switch args[0] {
+	case "list-windows":
+		raw = `{"ok":true,"data":[{"app_name":"notepad.exe","title":"Untitled","id":"w-11","is_focused":true},{"app_name":"slack.exe","title":"General","id":"w-12","minimized":true}]}`
+	case "screenshot":
+		_ = os.WriteFile(args[len(args)-1], []byte("\x89PNG-fake"), 0600)
+	case "snapshot":
+		raw = `{"ok":true,"data":{"snapshot_id":"s1","tree":{"role":"window","children":[{"ref_id":"@s1:e1","role":"button","name":"Send","states":["focused"]},{"role":"group","children":[{"ref_id":"@s1:e2","role":"edit","name":"Message","value":"hi"}]}]}}}`
+	case "clipboard-get":
+		raw = `{"ok":true,"data":{"text":"copied words","type":"text"}}`
+	case "click":
+		raw = `{"ok":false,"error":{"code":"STALE_REF","message":"gone","suggestion":"snapshot again"}}`
+	}
+	var env Envelope
+	err = json.Unmarshal([]byte(raw), &env)
+	return env, true, err
 }
 
 type recorder struct {
@@ -60,13 +55,10 @@ func (r *recorder) Approve(_ context.Context, q Request) (bool, error) {
 
 func session(t *testing.T, a Approver) (*sdk.ClientSession, string) {
 	t.Helper()
-	exe, _ := os.Executable()
 	log := t.TempDir() + "/args.log"
-	t.Setenv("FAKE_AD", "1")
-	t.Setenv("FAKE_AD_LOG", log)
 	ct, st := sdk.NewInMemoryTransports()
 	ctx := context.Background()
-	srv := NewServer(CLI{Path: exe}, a)
+	srv := NewServer(CLI{driver: fixtureDriver{log: log}}, a)
 	if _, err := srv.Connect(ctx, st, nil); err != nil {
 		t.Fatal(err)
 	}
@@ -129,7 +121,7 @@ func TestLookToolsAndApprovalWording(t *testing.T) {
 		t.Fatalf("%+v", rec.reqs[1])
 	}
 	args, _ := os.ReadFile(log)
-	for _, want := range []string{"screenshot --app notepad.exe -- ", "snapshot --app notepad.exe -i --compact", "--headed type -- @s1:e2 hello"} {
+	for _, want := range []string{"screenshot --app notepad.exe -- ", "snapshot --app notepad.exe -i --compact", "type -- @s1:e2 hello"} {
 		if !strings.Contains(string(args), want) {
 			t.Errorf("missing %q in:\n%s", want, args)
 		}
@@ -148,7 +140,7 @@ func TestDeclinedActionNeverRuns(t *testing.T) {
 		t.Fatal("press should be refused")
 	}
 	if b, _ := os.ReadFile(log); len(b) != 0 {
-		t.Fatalf("the CLI ran after a refusal:\n%s", b)
+		t.Fatalf("the desktop driver ran after a refusal:\n%s", b)
 	}
 	if len(rec.reqs) != 2 {
 		t.Fatalf("%+v", rec.reqs)
@@ -187,9 +179,9 @@ func TestArgumentsAreChecked(t *testing.T) {
 		t.Fatalf("invalid calls must not reach the user: %+v", rec.reqs)
 	}
 	if b, _ := os.ReadFile(log); len(b) != 0 {
-		t.Fatalf("the CLI ran for invalid input:\n%s", b)
+		t.Fatalf("the desktop driver ran for invalid input:\n%s", b)
 	}
-	// Text that looks like a flag is passed after "--", so it is data to the CLI.
+	// Text that looks like a flag is passed after "--", so it is data to the driver.
 	call(t, cs, "desktop_set_value", map[string]any{"ref": "@s1:e1", "text": "--headed"})
 	if b, _ := os.ReadFile(log); !strings.Contains(string(b), "set-value -- @s1:e1 --headed") {
 		t.Fatalf("%s", b)
@@ -299,5 +291,35 @@ func TestEnvelopeError(t *testing.T) {
 	}
 	if got := e.Err().Error(); got != "X: m Suggestion: s" {
 		t.Fatal(got)
+	}
+}
+func TestAutomaticRunAllowsWithoutPrompt(t *testing.T) {
+	prompted := false
+	broker := NewBroker(func(Pending) { prompted = true })
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	run, err := broker.NewAutomaticRun(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	allowed, err := (HTTPApprover{URL: run.URL, Token: run.Token}).Approve(ctx, Request{Class: Act, Tool: "test", Summary: "test action"})
+	if err != nil || !allowed || prompted {
+		t.Fatalf("allowed=%v prompted=%v err=%v", allowed, prompted, err)
+	}
+}
+func TestCoordinateClickValidatesAndTargetsWindow(t *testing.T) {
+	rec := &recorder{yes: true}
+	cs, log := session(t, rec)
+	result := call(t, cs, "desktop_click", map[string]any{"app": "notepad.exe", "window_id": "w-11", "x": 12, "y": 34})
+	if result.IsError {
+		t.Fatalf("coordinate click: %+v", result)
+	}
+	data, _ := os.ReadFile(log)
+	if !strings.Contains(string(data), "click-at --app notepad.exe --window-id w-11 --x 12 --y 34") {
+		t.Fatalf("driver args: %s", data)
+	}
+	result = call(t, cs, "desktop_click", map[string]any{"ref": "@s1:e1", "app": "notepad.exe", "x": 12, "y": 34})
+	if !result.IsError {
+		t.Fatal("accepted both ref and coordinates")
 	}
 }

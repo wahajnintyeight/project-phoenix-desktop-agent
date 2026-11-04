@@ -3,8 +3,10 @@
 package desktop
 
 import (
+	"context"
 	"errors"
 	"runtime"
+	"time"
 	"unicode/utf16"
 	"unsafe"
 
@@ -12,21 +14,22 @@ import (
 )
 
 var (
-	kernel32             = windows.NewLazySystemDLL("kernel32.dll")
-	ntdll                = windows.NewLazySystemDLL("ntdll.dll")
-	procCopyMemory       = ntdll.NewProc("RtlMoveMemory")
-	procCreateWindow     = user32.NewProc("CreateWindowExW")
-	procDestroyWindow    = user32.NewProc("DestroyWindow")
-	procOpenClipboard    = user32.NewProc("OpenClipboard")
-	procCloseClipboard   = user32.NewProc("CloseClipboard")
-	procEmptyClipboard   = user32.NewProc("EmptyClipboard")
-	procGetClipboardData = user32.NewProc("GetClipboardData")
-	procSetClipboardData = user32.NewProc("SetClipboardData")
-	procGlobalAlloc      = kernel32.NewProc("GlobalAlloc")
-	procGlobalFree       = kernel32.NewProc("GlobalFree")
-	procGlobalLock       = kernel32.NewProc("GlobalLock")
-	procGlobalUnlock     = kernel32.NewProc("GlobalUnlock")
-	procGlobalSize       = kernel32.NewProc("GlobalSize")
+	kernel32              = windows.NewLazySystemDLL("kernel32.dll")
+	ntdll                 = windows.NewLazySystemDLL("ntdll.dll")
+	procCopyMemory        = ntdll.NewProc("RtlMoveMemory")
+	procCreateWindow      = user32.NewProc("CreateWindowExW")
+	procDestroyWindow     = user32.NewProc("DestroyWindow")
+	procClipboardSequence = user32.NewProc("GetClipboardSequenceNumber")
+	procOpenClipboard     = user32.NewProc("OpenClipboard")
+	procCloseClipboard    = user32.NewProc("CloseClipboard")
+	procEmptyClipboard    = user32.NewProc("EmptyClipboard")
+	procGetClipboardData  = user32.NewProc("GetClipboardData")
+	procSetClipboardData  = user32.NewProc("SetClipboardData")
+	procGlobalAlloc       = kernel32.NewProc("GlobalAlloc")
+	procGlobalFree        = kernel32.NewProc("GlobalFree")
+	procGlobalLock        = kernel32.NewProc("GlobalLock")
+	procGlobalUnlock      = kernel32.NewProc("GlobalUnlock")
+	procGlobalSize        = kernel32.NewProc("GlobalSize")
 )
 
 const cfUnicodeText = 13
@@ -113,4 +116,25 @@ func nativeClipboardWrite(text string) error {
 	}
 	owned = false
 	return nil
+}
+
+func clipboardSequence() uint32 { n, _, _ := procClipboardSequence.Call(); return uint32(n) }
+
+func waitForClipboard(ctx context.Context, previous uint32) error {
+	ticker := time.NewTicker(20 * time.Millisecond)
+	defer ticker.Stop()
+	timeout := time.NewTimer(1500 * time.Millisecond)
+	defer timeout.Stop()
+	for {
+		if clipboardSequence() != previous {
+			return nil
+		}
+		select {
+		case <-ctx.Done():
+			return ctx.Err()
+		case <-timeout.C:
+			return errors.New("the app did not copy anything to the clipboard")
+		case <-ticker.C:
+		}
+	}
 }

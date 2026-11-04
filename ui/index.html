@@ -84,7 +84,7 @@
             <svg class="text-accent" viewBox="0 0 16 16" width="26" height="26" aria-hidden="true"><path d="M8 1.5c.4 2.2 2.8 3.3 2.8 6a2.8 2.8 0 0 1-5.6 0c0-1 .4-1.7.9-2.3.1.8.5 1.3 1 1.5C7 4.5 7.2 3 8 1.5Zm0 13a4.6 4.6 0 0 1-4.6-4.6c0-.5.1-1 .3-1.4.4 1.9 2 3 3.5 3.1h1.6c1.5-.1 3.1-1.2 3.5-3.1.2.4.3.9.3 1.4A4.6 4.6 0 0 1 8 14.5Z" fill="currentColor"/></svg>
             Phoenix
           </h1>
-          <p class="text-base text-pretty text-fg-muted">Browse with an AI agent beside you. You see every step it takes, and it asks before it submits, sends, deletes or pays.</p>
+          <p class="text-base text-pretty text-fg-muted">Browse with an AI agent beside you. Phoenix acts on your requests while you follow its progress.</p>
         </div>
 
         <div class="relative">
@@ -172,7 +172,7 @@
             <div class="flex-col gap-6" data-for="mcp">
               <div class="flex flex-col gap-2">
                 <h2>Tools (MCP)</h2>
-                <p class="max-w-[62ch] text-base text-fg-muted">Connect MCP servers to give the agent access to tools. Test a server before turning on agent access. Phoenix asks before connected server calls across supported providers.</p>
+                <p class="max-w-[62ch] text-base text-fg-muted">Connect MCP servers to give the agent access to tools. Test a server before turning on agent access. Enabled servers are available automatically to supported providers.</p>
               </div>
               <ph-mcp id="mcp-servers"></ph-mcp>
             </div>
@@ -180,7 +180,7 @@
             <div class="flex-col gap-6" data-for="desktop">
               <div class="flex flex-col gap-2">
                 <h2>Computer use</h2>
-                <p class="max-w-[62ch] text-base text-fg-muted">Let the agent look at your apps and do things in them: screenshot and analyze, click, scroll, drag, copy and paste. Off until you turn it on.</p>
+                <p class="max-w-[62ch] text-base text-fg-muted">Let the agent inspect and operate your apps: capture, click, scroll, drag, type, copy and paste. Actions run automatically when enabled.</p>
               </div>
               <ph-desktop id="desktop-settings"></ph-desktop>
             </div>
@@ -261,16 +261,11 @@
       <div class="agent-tabs" role="tablist" aria-label="Agent panel sections">
         <button class="agent-tab" role="tab" data-pane-btn="chat" aria-selected="true">Chat</button>
         <button class="agent-tab" role="tab" data-pane-btn="activity" aria-selected="false">Activity</button>
-        <button class="agent-tab" role="tab" data-pane-btn="approvals" aria-selected="false">Approvals</button>
       </div>
 
       <div class="agent-body">
         <ph-chat id="chat" role="tabpanel"></ph-chat>
         <ph-activity id="agent-activity" data-pane="activity" role="tabpanel"></ph-activity>
-        <div class="empty" data-pane="approvals" role="tabpanel">
-          <h2>Nothing to approve</h2>
-          <p>The agent asks here before it submits, sends, deletes or pays.</p>
-        </div>
       </div>
     </aside>
   </div>

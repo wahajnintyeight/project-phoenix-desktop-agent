@@ -35,7 +35,7 @@ func TestNativeWindowSelection(t *testing.T) {
 	}
 }
 
-func TestNativeServerAdvertisesOnlyAvailableToolsAndRequiresApproval(t *testing.T) {
+func TestNativeServerAdvertisesToolsAndSupportsDenial(t *testing.T) {
 	server, client := sdk.NewInMemoryTransports()
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
@@ -57,13 +57,10 @@ func TestNativeServerAdvertisesOnlyAvailableToolsAndRequiresApproval(t *testing.
 	for _, tool := range listed.Tools {
 		got[tool.Name] = true
 	}
-	for _, name := range []string{"desktop_windows", "desktop_screenshot", "desktop_clipboard_read", "desktop_clipboard_write"} {
+	for _, name := range []string{"desktop_windows", "desktop_screenshot", "desktop_snapshot", "desktop_click", "desktop_scroll", "desktop_drag", "desktop_type", "desktop_set_value", "desktop_press", "desktop_copy", "desktop_paste", "desktop_clipboard_read", "desktop_clipboard_write"} {
 		if !got[name] {
 			t.Errorf("missing %s", name)
 		}
-	}
-	if got["desktop_click"] || got["desktop_snapshot"] {
-		t.Fatal("unimplemented interaction advertised without adapter")
 	}
 	result, err := cs.CallTool(ctx, &sdk.CallToolParams{Name: "desktop_clipboard_read", Arguments: map[string]any{}})
 	if err != nil || !result.IsError || !strings.Contains(firstText(result), "did not allow") {
@@ -134,7 +131,7 @@ func TestNativeWindowCapture(t *testing.T) {
 		t.Fatal(err)
 	}
 	path := filepath.Join(t.TempDir(), "capture.png")
-	env, handled, err := runNative(ctx, true, []string{"screenshot", "--app", filepath.Base(exe), "--window-id", fmt.Sprintf("w-%d", hwnd), "--", path})
+	env, handled, err := runNative(ctx, []string{"screenshot", "--app", filepath.Base(exe), "--window-id", fmt.Sprintf("w-%d", hwnd), "--", path})
 	if err != nil || !handled || !env.OK {
 		t.Fatalf("capture result=%+v handled=%v err=%v (windows=%d)", env, handled, err, len(windowsList))
 	}

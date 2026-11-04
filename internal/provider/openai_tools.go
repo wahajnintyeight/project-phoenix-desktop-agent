@@ -16,13 +16,13 @@ import (
 )
 
 const (
-	maxToolRounds      = 8
-	maxToolCalls       = 24
+	maxToolRounds      = 32
+	maxToolCalls       = 96
 	maxToolDefinitions = 100
 	maxToolArgs        = 64 << 10
 	maxToolReply       = 32 << 10
 	maxToolContext     = 128 << 10
-	maxToolImages      = 4
+	maxToolImages      = 8
 	maxImageBytes      = 8 << 20
 )
 
@@ -154,15 +154,19 @@ func (p OpenAICompat) Run(ctx context.Context, s Settings, req Request, emit fun
 			var (
 				reply  string
 				output ToolOutput
+				failed bool
 			)
 			switch {
 			case len(args) > maxToolArgs:
 				reply = "Tool error: arguments are too large."
+				failed = true
 			case !json.Valid(args) || !isJSONObject(args):
 				reply = "Tool error: arguments must be a JSON object."
+				failed = true
 			default:
 				if tool.RequiresApproval {
 					if req.ApproveTool == nil {
+						emit(Event{Kind: EvToolResult, ToolID: call.ID, ToolName: "mcp__" + tool.Server + "__" + tool.MCPName, Text: "Phoenix could not ask for approval, so the tool was not run.", IsError: true})
 						return p.finishRun(start, text.String(), usage, false, emit, "Phoenix could not ask for approval, so I did not run the requested tool."), nil
 					}
 					if err := req.ApproveTool(ctx, toolCall); err != nil {
@@ -173,6 +177,7 @@ func (p OpenAICompat) Run(ctx context.Context, s Settings, req Request, emit fun
 						if errors.Is(err, ErrToolDenied) {
 							msg = "I did not run the requested tool because you declined it."
 						}
+						emit(Event{Kind: EvToolResult, ToolID: call.ID, ToolName: "mcp__" + tool.Server + "__" + tool.MCPName, Text: msg, IsError: true})
 						return p.finishRun(start, text.String(), usage, false, emit, msg), nil
 					}
 				}
@@ -182,11 +187,14 @@ func (p OpenAICompat) Run(ctx context.Context, s Settings, req Request, emit fun
 					return Result{}, ctx.Err()
 				}
 				if errors.Is(err, ErrToolDenied) {
+					emit(Event{Kind: EvToolResult, ToolID: call.ID, ToolName: "mcp__" + tool.Server + "__" + tool.MCPName, Text: "The tool call was declined and did not run.", IsError: true})
 					return p.finishRun(start, text.String(), usage, false, emit, "I did not run the requested tool because you declined it."), nil
 				}
 				if err != nil {
 					reply = "Tool error: " + scrub(err.Error(), s.APIKey)
+					failed = true
 				} else {
+					failed = output.IsError
 					reply = output.Text
 					var observedImages []messagePart
 					for _, image := range output.Images {
@@ -220,6 +228,7 @@ func (p OpenAICompat) Run(ctx context.Context, s Settings, req Request, emit fun
 			}
 			reply = clip(reply, remaining)
 			toolChars += len([]rune(reply))
+			emit(Event{Kind: EvToolResult, ToolID: call.ID, ToolName: "mcp__" + tool.Server + "__" + tool.MCPName, Text: reply, IsError: failed})
 			messages = append(messages, chatMessage{Role: "tool", Name: call.Function.Name, ToolCallID: call.ID, Content: reply})
 		}
 		if len(images) > 0 {
