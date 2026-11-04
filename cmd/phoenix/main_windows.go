@@ -142,6 +142,7 @@ func setupTray() {
 	menu.AddSeparator()
 	menu.Add("Quit Phoenix").OnClick(func(*application.Context) {
 		quitting = true
+		flushAgentDataWrites()
 		app.Quit()
 	})
 	tray := app.SystemTray.New()
@@ -228,6 +229,7 @@ func onMessage(message string) {
 
 func uiReady() {
 	hwnd = uintptr(win.NativeWindow())
+	restoreChat := !started
 	if !started {
 		started = true
 		// Everything in the Wails window so far is Wails's own UI webview. Tab pages are
@@ -236,6 +238,7 @@ func uiReady() {
 		lowerUI()
 		initTabs()
 		initHistory()
+		initAgentPersistence()
 		initProviders()
 	}
 	ready = true
@@ -252,6 +255,11 @@ func uiReady() {
 	)
 	pushTabs()
 	pushHistory()
+	pushSavedChats()
+	pushAgentActivity()
+	if restoreChat {
+		restoreLatestSavedChat()
+	}
 	quickState.key = "" // the UI is new: draw the bar even if it looks unchanged
 	refreshActions(true)
 	if hub != nil {

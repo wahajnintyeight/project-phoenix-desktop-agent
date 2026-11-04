@@ -4,6 +4,8 @@ import (
 	"strconv"
 	"strings"
 	"testing"
+
+	"phoenix/internal/browser"
 )
 
 func TestBrowserURLValidation(t *testing.T) {
@@ -76,5 +78,15 @@ func TestBrowserSnapshotCapsRefsAndText(t *testing.T) {
 	}
 	if len(out.Text) > maxBrowserText || !strings.Contains(out.Text, "capped at 250 nodes") {
 		t.Fatalf("snapshot was not bounded: len=%d", len(out.Text))
+	}
+}
+func TestBrowserDragArgumentsRequireBothSnapshotRefs(t *testing.T) {
+	good := browser.Call{Tool: "browser_drag", Arguments: []byte(`{"tab_id":1,"from_ref":"@s12345:e1","to_ref":"@s12345:e2"}`)}
+	if _, err := decodeBrowserCall(good); err != nil {
+		t.Fatal(err)
+	}
+	good.Arguments = []byte(`{"tab_id":1,"from_ref":"@s12345:e1","to_ref":"missing"}`)
+	if _, err := decodeBrowserCall(good); err == nil {
+		t.Fatal("invalid destination ref accepted")
 	}
 }

@@ -223,6 +223,9 @@ func dispatchKey(ctx context.Context, state browserTabState, args browser.PressA
 }
 
 func validBrowserKey(key string) bool {
+	if strings.EqualFold(key, "Ctrl+C") || strings.EqualFold(key, "Ctrl+V") {
+		return false
+	}
 	_, _, _, _, err := browserKeySpec(key)
 	return err == nil
 }
@@ -271,15 +274,17 @@ func browserKeySpec(raw string) (key string, modifiers int, code string, vk int,
 		key, code, vk = "PageDown", "PageDown", 34
 	case "Space":
 		key, code, vk = " ", "Space", 32
-	case "a", "A":
+	case "a", "A", "c", "C", "v", "V":
 		if modifiers != 2 {
-			return "", 0, "", 0, errors.New("only Ctrl+A is supported for letters")
+			return "", 0, "", 0, errors.New("only Ctrl+A, Ctrl+C and Ctrl+V are supported for letters")
 		}
-		key, code, vk = "a", "KeyA", 65
+		key = strings.ToLower(raw)
+		code = "Key" + strings.ToUpper(raw)
+		vk = int(strings.ToUpper(raw)[0])
 	default:
 		return "", 0, "", 0, errors.New("unsupported key")
 	}
-	if modifiers != 0 && key != "a" && !(modifiers == 8 && key == "Tab") {
+	if modifiers != 0 && key != "a" && key != "c" && key != "v" && !(modifiers == 8 && key == "Tab") {
 		return "", 0, "", 0, errors.New("that key chord is not supported")
 	}
 	return key, modifiers, code, vk, nil
@@ -334,6 +339,9 @@ func browserScroll(ctx context.Context, state browserTabState, args browser.Scro
 
 func dispatchMouse(ctx context.Context, state browserTabState, event string, x, y, dx, dy float64, button int) error {
 	params := map[string]any{"type": event, "x": x, "y": y, "button": "left", "clickCount": 1}
+	if event == "mousePressed" && button != 0 {
+		params["buttons"] = 1
+	}
 	if event == "mouseWheel" {
 		params["button"], params["deltaX"], params["deltaY"] = "none", dx, dy
 	} else if button == 0 {

@@ -27,6 +27,7 @@ const (
 // OAuthRecord keeps the refreshable token and the public OAuth client settings in one
 // encrypted vault entry. Only its reference is stored in the MCP server config.
 type OAuthRecord struct {
+	Resource     string          `json:"resource,omitempty"`
 	ClientID     string          `json:"client_id"`
 	ClientSecret string          `json:"client_secret,omitempty"`
 	Endpoint     oauth2.Endpoint `json:"endpoint"`
@@ -134,7 +135,14 @@ func (s Resolved) oauthHandler() (auth.OAuthHandler, func(), error) {
 		_ = listener.Close()
 	}
 
+	var resourceMu sync.Mutex
+	discoveredResource := s.URL
 	fetchCode := func(ctx context.Context, args *auth.AuthorizationArgs) (*auth.AuthorizationResult, error) {
+		if u, err := url.Parse(args.URL); err == nil && u.Query().Get("resource") != "" {
+			resourceMu.Lock()
+			discoveredResource = u.Query().Get("resource")
+			resourceMu.Unlock()
+		}
 		if err := openAuthorizationURL(args.URL); err != nil {
 			return nil, err
 		}
@@ -156,13 +164,19 @@ func (s Resolved) oauthHandler() (auth.OAuthHandler, func(), error) {
 		Client:                         client,
 		NewTokenSource: func(ctx context.Context, config *oauth2.Config, token *oauth2.Token) (oauth2.TokenSource, error) {
 			record := recordFrom(config, token)
-			return &persistedTokenSource{source: config.TokenSource(ctx, token), record: record, save: s.SaveOAuthRecord}, nil
+			resourceMu.Lock()
+			record.Resource = discoveredResource
+			resourceMu.Unlock()
+			return &persistedTokenSource{source: resourceTokenSource(ctx, config, token, record.Resource), record: record, save: s.SaveOAuthRecord}, nil
 		},
 	}
 	if s.OAuthRecord != nil && s.OAuthRecord.Token != nil {
 		record := *s.OAuthRecord
+		if record.Resource == "" {
+			record.Resource = s.URL
+		}
 		config.InitialTokenSource = &persistedTokenSource{
-			source: oauthConfig(record).TokenSource(context.WithValue(context.Background(), oauth2.HTTPClient, client), record.Token),
+			source: resourceTokenSource(context.Background(), oauthConfig(record), record.Token, record.Resource),
 			record: record,
 			last:   tokenFingerprint(record.Token),
 			save:   s.SaveOAuthRecord,

@@ -9,7 +9,7 @@ import { send } from "./protocol";
 import { resolveSlashCommand, searchSlashCommands, type SlashCommandDefinition } from "./slash-commands";
 
 export interface ChatEvent {
-  k: "user" | "note" | "tool" | "approve" | "approved" | "start" | "delta" | "done" | "error" | "stopped" | "reset";
+  k: "user" | "note" | "tool" | "approve" | "approved" | "start" | "delta" | "done" | "error" | "stopped" | "reset" | "restore";
   text?: string;
   provider?: string;
   model?: string;
@@ -20,6 +20,20 @@ export interface ChatEvent {
   id?: string;
   cls?: "look" | "act";
   decision?: "allow" | "all" | "deny";
+  messages?: ChatTranscriptMessage[];
+}
+
+interface ChatTranscriptMessage {
+  role: "user" | "assistant";
+  content: string;
+  provider?: string;
+  model?: string;
+}
+
+interface SavedChatSummary {
+  id: string;
+  title: string;
+  updatedAt: string;
 }
 
 /** One message in the log. The agent's replies are Markdown; everything else is plain text. */
@@ -76,16 +90,31 @@ export class PhChat extends HTMLElement {
   readonly #send = el("button", "send-btn");
   readonly #share = el("button", "share-chip");
   readonly #newChat = el("button", "btn btn-quiet btn-sm", "New chat");
+  readonly #chatHistory = el("details", "chat-history");
+  readonly #chatHistoryCount = el("span", "chat-history-count", "0");
+  readonly #chatHistoryList = el("div", "chat-history-list");
   #shareOn = false;
   #running = false;
   #commands: SlashCommandDefinition[] = [];
   #activeCommand = 0;
   #current: Msg | null = null;
+  #scrollFrame = 0;
+  #inputWidth = 0;
+  readonly #inputObserver = new ResizeObserver((entries) => {
+    const width = entries[0]?.contentRect.width ?? 0;
+    if (width > 0 && width !== this.#inputWidth) {
+      this.#inputWidth = width;
+      this.#resizeInput();
+    }
+  });
   #lastUser: HTMLElement | null = null; // where a "page shared" note goes
   #who = "Agent"; // the label for the agent's messages this turn: provider and model
 
   connectedCallback(): void {
-    if (this.childElementCount > 0) return;
+    if (this.childElementCount > 0) {
+      this.#inputObserver.observe(this.#input);
+      return;
+    }
 
     this.#log.setAttribute("role", "log");
     this.#log.setAttribute("aria-label", "Conversation");
@@ -101,21 +130,22 @@ export class PhChat extends HTMLElement {
       b.addEventListener("click", () => {
         this.#setShare(true);
         this.#input.value = text;
+        this.#resizeInput();
         this.#syncSend();
         this.#input.focus();
       }, { passive: true });
       ideas.append(b);
     }
     this.#empty.append(
-      el("h2", undefined, "Ask Phoenix"),
-      el("p", undefined, "Ask about the tab you have open. Turn on Share page and the agent reads it. With Computer use on, Claude and OpenAI-compatible API providers can look at and operate your apps, asking before each step. Codex tool support is in progress."),
+      el("h2", undefined, "What can we work on?"),
+      el("p", undefined, "Ask a question or share the current page for context. Phoenix asks before using tools."),
       ideas,
     );
     this.#log.append(this.#empty);
 
     this.#input.rows = 1;
     this.#input.maxLength = 20000;
-    this.#input.placeholder = "Message the agent · / for commands";
+    this.#input.placeholder = "Message Phoenix · / for commands";
     this.#input.setAttribute("aria-label", "Message");
     this.#input.setAttribute("aria-description", "Enter sends. Shift and Enter add a new line. Type / to browse commands.");
     this.#commandMenu.id = "slash-commands";
@@ -150,9 +180,15 @@ export class PhChat extends HTMLElement {
 
     this.#newChat.type = "button";
     this.#newChat.hidden = true;
+    this.#chatHistory.append(
+      el("summary", "chat-history-trigger", "Chats"),
+      this.#chatHistoryList,
+    );
+    this.#chatHistory.querySelector("summary")?.append(this.#chatHistoryCount);
     const head = el("div", "chat-head");
-    head.append(this.#newChat);
+    head.append(this.#chatHistory, this.#newChat);
     this.append(head, this.#log, wrap);
+    this.#inputObserver.observe(this.#input);
 
     this.#input.addEventListener("keydown", (e) => {
       if (e.key === "Enter" && !e.shiftKey && !e.isComposing) {
@@ -170,7 +206,7 @@ export class PhChat extends HTMLElement {
       }
     });
     this.#input.addEventListener("input", () => {
-      this.#input.rows = Math.min(6, this.#input.value.split("\n").length); // grows without reading layout
+      this.#resizeInput();
       this.#renderCommandMenu();
       this.#syncSend();
     }, { passive: true });
@@ -184,16 +220,57 @@ export class PhChat extends HTMLElement {
     this.#newChat.addEventListener("click", () => send("g", "new"), { passive: true });
   }
 
+  disconnectedCallback(): void {
+    this.#inputObserver.disconnect();
+    this.#inputWidth = 0;
+  }
+
   set events(list: ChatEvent[]) {
-    const stick = this.#nearBottom();
+    const stick = this.#nearBottom() || list.some((ev) => ev.k === "user" || ev.k === "done" || ev.k === "stopped" || ev.k === "error" || ev.k === "restore");
     for (const ev of list) this.#apply(ev);
-    if (stick) this.#log.scrollTop = this.#log.scrollHeight;
+    if (stick && !this.#scrollFrame) {
+      this.#scrollFrame = requestAnimationFrame(() => {
+        this.#scrollFrame = 0;
+        this.#current?.flush();
+        this.#log.scrollTop = this.#log.scrollHeight;
+      });
+    }
+  }
+
+  set chats(list: SavedChatSummary[]) {
+    this.#chatHistoryCount.textContent = String(list.length);
+    this.#chatHistoryList.replaceChildren();
+    if (!list.length) {
+      this.#chatHistoryList.append(el("p", "chat-history-empty", "Saved conversations will appear here."));
+      return;
+    }
+    for (const chat of list) {
+      const button = el("button", "chat-history-item");
+      button.type = "button";
+      button.append(el("span", "chat-history-title", chat.title));
+      const date = new Date(chat.updatedAt);
+      if (!Number.isNaN(date.valueOf())) {
+        button.append(el("span", "chat-history-date", new Intl.DateTimeFormat(undefined, { dateStyle: "medium" }).format(date)));
+      }
+      button.disabled = this.#running;
+      button.addEventListener("click", () => {
+        if (this.#running) return;
+        send("g", "restore", chat.id);
+        this.#chatHistory.open = false;
+      }, { passive: true });
+      this.#chatHistoryList.append(button);
+    }
   }
 
   #setShare(on: boolean): void {
     this.#shareOn = on;
     this.#share.setAttribute("aria-pressed", String(on));
     try { localStorage.setItem("phoenix.sharePage", on ? "1" : "0"); } catch { /* ignore */ }
+  }
+
+  #resizeInput(): void {
+    this.#input.style.height = "auto";
+    this.#input.style.height = `${this.#input.scrollHeight}px`;
   }
 
   /** Send is Stop while a reply is on its way, and disabled while there is nothing to send. */
@@ -210,7 +287,7 @@ export class PhChat extends HTMLElement {
     this.#setRunning(true);
     send("g", "send", text, this.#shareOn ? "1" : "0");
     this.#input.value = "";
-    this.#input.rows = 1;
+    this.#resizeInput();
     this.#syncSend();
   }
 
@@ -283,13 +360,14 @@ export class PhChat extends HTMLElement {
     this.#hideCommandMenu();
     if (command.action.type === "help") {
       this.#input.value = "/";
+      this.#resizeInput();
       this.#renderCommandMenu();
       this.#input.focus();
       return;
     }
 
     this.#input.value = "";
-    this.#input.rows = 1;
+    this.#resizeInput();
     this.#syncSend();
     switch (command.action.type) {
       case "clear": send("g", "new"); break;
@@ -321,6 +399,7 @@ export class PhChat extends HTMLElement {
   #setRunning(on: boolean): void {
     this.#running = on;
     this.#log.setAttribute("aria-busy", String(on));
+    this.#chatHistoryList.querySelectorAll<HTMLButtonElement>(".chat-history-item").forEach((button) => { button.disabled = on; });
     this.#syncSend();
     if (!this.#commandMenu.hidden) this.#renderCommandMenu();
   }
@@ -337,6 +416,7 @@ export class PhChat extends HTMLElement {
   #approval(ev: ChatEvent): void {
     this.#empty.hidden = true;
     if (this.#current?.empty) this.#current.box.remove();
+    else this.#current?.flush();
     this.#current = null; // the reply continues in a new message below the card
     const card = el("div", "chat-approval");
     card.dataset["id"] = ev.id ?? "";
@@ -381,8 +461,33 @@ export class PhChat extends HTMLElement {
         this.#empty.hidden = false;
         this.#newChat.hidden = true;
         this.#current = null;
+        this.#lastUser = null;
         this.#setRunning(false);
         break;
+      case "restore": {
+        this.#log.replaceChildren(this.#empty);
+        this.#empty.hidden = false;
+        this.#newChat.hidden = true;
+        this.#current = null;
+        this.#lastUser = null;
+        this.#who = "Agent";
+        for (const message of ev.messages ?? []) {
+          if (message.role === "user") {
+            const m = this.#message("You", "chat-user");
+            m.set(message.content);
+            this.#lastUser = m.meta;
+          } else if (message.role === "assistant") {
+            const who = [message.provider, message.model].filter(Boolean).join(" · ") || "Agent";
+            const m = this.#message(who, "chat-ai", true);
+            m.append(message.content);
+            m.flush();
+            m.meta.textContent = who;
+          }
+        }
+        this.#setRunning(false);
+        this.#log.scrollTop = this.#log.scrollHeight;
+        break;
+      }
       case "user": {
         const m = this.#message("You", "chat-user");
         m.set(ev.text ?? "");
@@ -400,6 +505,7 @@ export class PhChat extends HTMLElement {
         // A reply box that is still empty (the agent went straight to a tool) is dropped; the
         // text that follows gets a fresh one below the tool line.
         if (this.#current?.empty) this.#current.box.remove();
+        else this.#current?.flush();
         this.#log.append(t);
         this.#current = null;
         break;

@@ -58,7 +58,7 @@
     </div>
   </div>
 
-  <div class="grid min-h-0 grid-cols-[52px_minmax(0,1fr)_380px]">
+  <div class="workspace" id="workspace">
     <nav class="rail" aria-label="Sections">
       <button class="rail-btn" aria-pressed="true" aria-label="Browser" title="Browser">
         <svg viewBox="0 0 20 20" width="20" height="20" aria-hidden="true"><circle cx="10" cy="10" r="7.2" fill="none" stroke="currentColor" stroke-width="1.5"/><path d="M2.8 10h14.4M10 2.8c2 2 3 4.4 3 7.2s-1 5.2-3 7.2c-2-2-3-4.4-3-7.2s1-5.2 3-7.2Z" fill="none" stroke="currentColor" stroke-width="1.5"/></svg>
@@ -78,7 +78,7 @@
     <div class="stage">
     <main class="slot" id="page-slot">
 
-      <div class="home mx-auto min-h-full w-full max-w-xl flex-col justify-center gap-8 px-8 pt-12 pb-24">
+      <div class="home mx-auto min-h-full w-full max-w-xl flex-col gap-6 px-6 pt-8 pb-12">
         <div class="flex flex-col gap-3">
           <h1 class="flex items-center gap-3">
             <svg class="text-accent" viewBox="0 0 16 16" width="26" height="26" aria-hidden="true"><path d="M8 1.5c.4 2.2 2.8 3.3 2.8 6a2.8 2.8 0 0 1-5.6 0c0-1 .4-1.7.9-2.3.1.8.5 1.3 1 1.5C7 4.5 7.2 3 8 1.5Zm0 13a4.6 4.6 0 0 1-4.6-4.6c0-.5.1-1 .3-1.4.4 1.9 2 3 3.5 3.1h1.6c1.5-.1 3.1-1.2 3.5-3.1.2.4.3.9.3 1.4A4.6 4.6 0 0 1 8 14.5Z" fill="currentColor"/></svg>
@@ -124,8 +124,8 @@
       </div>
 
       <section class="settings" data-section="providers" aria-label="Settings">
-        <div class="mx-auto grid max-w-4xl grid-cols-[11rem_minmax(0,1fr)] gap-10 px-8 pt-10 pb-16">
-          <nav class="sticky top-10 flex flex-col gap-0.5 self-start" data-settings-nav aria-label="Settings sections">
+        <div class="settings-layout">
+          <nav class="settings-nav" data-settings-nav aria-label="Settings sections">
             <h1 class="mb-4 px-3">Settings</h1>
             <button class="nav-item" data-section-btn="providers" aria-current="true">AI providers</button>
             <button class="nav-item" data-section-btn="mcp" aria-current="false">Tools (MCP)</button>
@@ -172,7 +172,7 @@
             <div class="flex-col gap-6" data-for="mcp">
               <div class="flex flex-col gap-2">
                 <h2>Tools (MCP)</h2>
-                <p class="max-w-[62ch] text-base text-fg-muted">Connect MCP servers to give the agent access to tools. Test a server before turning on agent access. OpenAI-compatible API providers ask before each call; Codex support is in progress.</p>
+                <p class="max-w-[62ch] text-base text-fg-muted">Connect MCP servers to give the agent access to tools. Test a server before turning on agent access. Phoenix asks before connected server calls across supported providers.</p>
               </div>
               <ph-mcp id="mcp-servers"></ph-mcp>
             </div>
@@ -255,7 +255,9 @@
     <ph-quick-actions id="quick-actions" class="qa"></ph-quick-actions>
     </div>
 
-    <aside class="agent" data-pane="chat" aria-label="Agent panel">
+    <div class="panel-resize" id="agent-resize" role="separator" tabindex="0" aria-label="Resize agent panel" aria-description="Use left and right arrows to resize. Home sets minimum width; End sets maximum width." aria-controls="agent-panel" aria-orientation="vertical" title="Drag to resize · Double-click to reset"></div>
+    <aside class="agent" id="agent-panel" data-pane="chat" aria-label="Agent panel">
+      <div class="agent-heading"><div><h2>Assistant</h2><p>Your workspace companion</p></div></div>
       <div class="agent-tabs" role="tablist" aria-label="Agent panel sections">
         <button class="agent-tab" role="tab" data-pane-btn="chat" aria-selected="true">Chat</button>
         <button class="agent-tab" role="tab" data-pane-btn="activity" aria-selected="false">Activity</button>
@@ -264,10 +266,7 @@
 
       <div class="agent-body">
         <ph-chat id="chat" role="tabpanel"></ph-chat>
-        <div class="empty" data-pane="activity" role="tabpanel">
-          <h2>No agent activity</h2>
-          <p>When the agent can act in the browser, each step it takes shows up here, and Stop stays one click away in the title bar.</p>
-        </div>
+        <ph-activity id="agent-activity" data-pane="activity" role="tabpanel"></ph-activity>
         <div class="empty" data-pane="approvals" role="tabpanel">
           <h2>Nothing to approve</h2>
           <p>The agent asks here before it submits, sends, deletes or pays.</p>

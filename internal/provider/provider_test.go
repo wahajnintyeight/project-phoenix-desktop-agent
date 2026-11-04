@@ -316,3 +316,10 @@ func TestCodexAPIErrorBodyIsUnwrapped(t *testing.T) {
 		t.Error("non-JSON text must pass through")
 	}
 }
+func TestCodexToolProxyConfigKeepsTokenOutOfArguments(t *testing.T) {
+	req := Request{CodexMCPURL: "http://127.0.0.1:4321/mcp", CodexMCPToken: "secret-token"}
+	args := strings.Join(codexArgs(Settings{}, req, `C:\tmp`), " ")
+	if !strings.Contains(args, "mcp_servers.phoenix=") || !strings.Contains(args, "PHOENIX_CODEX_MCP_TOKEN") || !strings.Contains(args, `default_tools_approval_mode="approve"`) || strings.Contains(args, req.CodexMCPToken) {
+		t.Fatalf("invalid Codex tool configuration: %s", args)
+	}
+}

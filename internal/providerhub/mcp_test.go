@@ -68,33 +68,22 @@ func TestMCPLifecycle(t *testing.T) {
 	}
 }
 
-func TestRunAttachesEnabledServersForClaudeOnly(t *testing.T) {
-	h, _, _, _ := newHub(t)
-	cl := &captureRun{fake: fake{id: provider.Claude}}
-	cx := &captureRun{fake: fake{id: provider.Codex}}
-	h.providers[provider.Claude], h.providers[provider.Codex] = cl, cx
-
-	_ = h.MCPAdd(mcp.Server{Name: "files", Transport: mcp.Stdio, Command: "npx"}, map[string]string{"TOKEN": "s3cret-value"}, nil)
-	_ = h.MCPAdd(mcp.Server{Name: "off", Transport: mcp.Stdio, Command: "x"}, nil, nil)
-	_ = h.MCPSetEnabled("files", true)
-
-	// Without UseMCP nothing is attached (the Test button, quick checks).
-	if _, err := h.Run(context.Background(), provider.Claude, provider.Request{Prompt: "hi"}, func(provider.Event) {}); err != nil || cl.req.MCPConfig != "" {
-		t.Fatalf("attached without UseMCP: %v %+v", err, cl.req)
-	}
-	if _, err := h.Run(context.Background(), provider.Claude, provider.Request{Prompt: "hi", UseMCP: true}, func(provider.Event) {}); err != nil {
+func TestClaudeProxyConfigIsPrivateAndRemoved(t *testing.T) {
+	proxy := &codexToolProxy{url: "http://127.0.0.1:1234/mcp", token: "test-token"}
+	req := provider.Request{}
+	cleanup, err := attachClaudeProxy(&req, proxy)
+	if err != nil {
 		t.Fatal(err)
 	}
-	if cl.req.MCPConfig == "" || len(cl.req.AllowedTools) != 1 || cl.req.AllowedTools[0] != "mcp__files" {
-		t.Fatalf("%+v", cl.req)
+	raw, err := os.ReadFile(req.MCPConfig)
+	if err != nil || !strings.Contains(string(raw), "test-token") || !strings.Contains(string(raw), "phoenix-tools") {
+		t.Fatalf("invalid config: %s (%v)", raw, err)
 	}
-	if !strings.Contains(cl.cfg, "s3cret-value") || strings.Contains(cl.cfg, `"off"`) {
-		t.Fatalf("config handed to the CLI: %s", cl.cfg)
+	if len(req.AllowedTools) != 1 || req.AllowedTools[0] != "mcp__phoenix-tools" {
+		t.Fatalf("allowed tools: %v", req.AllowedTools)
 	}
-	if _, err := os.Stat(cl.req.MCPConfig); !os.IsNotExist(err) {
-		t.Fatal("the private config file must be removed after the run")
-	}
-	if _, err := h.Run(context.Background(), provider.Codex, provider.Request{Prompt: "hi", UseMCP: true}, func(provider.Event) {}); err != nil || cx.req.MCPConfig != "" {
-		t.Fatalf("codex must not get a Claude config: %v %+v", err, cx.req)
+	cleanup()
+	if _, err := os.Stat(req.MCPConfig); !os.IsNotExist(err) {
+		t.Fatal("temporary config was not removed")
 	}
 }

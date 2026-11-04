@@ -1,4 +1,4 @@
-// <ph-desktop>: computer use. Shows whether the desktop tool (agent-desktop) is installed,
+// <ph-desktop>: computer use. Shows native capabilities and the optional desktop adapter,
 // lets the user turn it on, and lists what the agent can do with it and what it asks first.
 // Go owns the state and the approvals; this element only draws and sends the toggle.
 import { el } from "./dom";
@@ -42,7 +42,7 @@ export class PhDesktop extends HTMLElement {
     const row = el("div", "row");
     row.append(code, recheck);
     this.#install.append(
-      el("p", "text-fg-muted", "Computer use needs agent-desktop, a small free tool that reads and operates Windows apps. Install it once, then check again."),
+      el("p", "text-fg-muted", "Native tools can list windows, capture a window, and read or write the clipboard. Install the optional agent-desktop integration to also interact with app controls while native interaction tools are being developed."),
       row,
     );
 
@@ -66,17 +66,17 @@ export class PhDesktop extends HTMLElement {
   #render(): void {
     const d = this.#data;
     this.#toggle.checked = d.enabled;
-    this.#toggle.disabled = !d.found;
+    this.#toggle.disabled = false;
     this.#install.hidden = d.found;
     if (!d.found) {
-      this.#status.className = "msg is-warn";
-      this.#status.textContent = d.problem ?? "agent-desktop is not installed.";
+      this.#status.className = "msg is-ok";
+      this.#status.textContent = d.enabled ? "Native computer-use tools are on." : "Native computer-use tools are off.";
     } else if (d.problem) {
       this.#status.className = "msg is-error";
       this.#status.textContent = d.problem;
     } else {
       this.#status.className = "msg is-ok";
-      this.#status.textContent = `agent-desktop ${d.version ?? ""} is installed${d.enabled ? " and on. The agent can use it with Claude or an OpenAI-compatible API provider." : ". Turn it on to let the agent use it."}`;
+      this.#status.textContent = `Native tools and the optional agent-desktop integration are ${d.enabled ? "on" : "off"}.`;
     }
     this.#skills.replaceChildren(...d.skills.map((s) => {
       const li = el("li", "skill");

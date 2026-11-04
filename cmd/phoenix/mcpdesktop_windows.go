@@ -16,19 +16,12 @@ import (
 // turn's secret token, and refuses everything when it has no way to ask.
 func runDesktopMCP() int {
 	path := os.Getenv("PHOENIX_DESKTOP_CLI")
-	if path == "" {
-		p, ok := desktop.Find("")
-		if !ok {
-			fmt.Fprintln(os.Stderr, "agent-desktop is not installed")
-			return 1
-		}
-		path = p
-	}
+
 	var approver desktop.Approver = desktop.DenyAll{}
 	if url, token := os.Getenv("PHOENIX_APPROVAL_URL"), os.Getenv("PHOENIX_APPROVAL_TOKEN"); url != "" && token != "" {
 		approver = desktop.HTTPApprover{URL: url, Token: token}
 	}
-	srv := desktop.NewServer(desktop.CLI{Path: path}, approver)
+	srv := desktop.NewServer(desktop.CLI{Path: path, Native: true}, approver)
 	if err := srv.Run(context.Background(), &sdk.StdioTransport{}); err != nil {
 		fmt.Fprintln(os.Stderr, "desktop server:", err)
 		return 1

@@ -11,7 +11,7 @@
 
 Phoenix brings a multi-tab browser and AI provider controls into one native desktop app. It is being built around a simple idea: keep the person in control, make the agent's work visible, and ask before sensitive actions.
 
-> **Project status:** Early development. The browser, provider setup, and model chat are implemented. Claude and OpenAI-compatible API providers can inspect and operate Phoenix browser tabs through built-in, approved browser tools. Computer use for other Windows apps is available through the optional `agent-desktop` integration. Codex tool support and browser file transfers are still in progress. There is no published release at this time.
+> **Project status:** Early development. The browser, provider setup, and model chat are implemented. Claude, Codex, and OpenAI-compatible API providers can inspect and operate Phoenix browser tabs through built-in, approved browser tools. Native computer use can list and capture Windows apps and access the clipboard; the optional `agent-desktop` integration adds app-control actions. Browser file transfers are still in progress. There is no published release at this time.
 
 ## What works today
 
@@ -20,10 +20,12 @@ Phoenix brings a multi-tab browser and AI provider controls into one native desk
 - A quick-action bar under the page: one-click requests that change with the page you are on (a job posting, an article, a form, search results, or text you have selected), so you send a request without typing it.
 - Provider setup, model selection, connection checks, and a quick model picker.
 - Streaming chat with the selected model, with an optional **Share page** control to include the active page's readable text in your message.
-- **Built-in browser tools:** Claude and OpenAI-compatible API providers can list tabs, read a bounded accessibility snapshot, capture a reduced-size screenshot, navigate, click, type into ordinary text fields, press supported keys, scroll, wait for page elements and use native select controls. Phoenix uses the same WebView2 profile as the visible browser, so user sign-ins carry over. Page reads and actions use Phoenix's approval flow; no browser extension, separate desktop-agent install or remote-debugging port is required.
-- **Computer use** (off until you turn it on, needs the free `agent-desktop` tool): Claude and OpenAI-compatible API providers can read app controls, click, scroll, drag, type, copy and paste. Vision-capable models can also inspect screenshots. You approve each step in the chat (looking once per app, acting every time), and the agent never gets a shell or a whole-screen capture. Codex support is still in progress.
+- Resize the assistant panel by dragging its left edge; the width is remembered. The divider also supports arrow keys, Shift for larger steps, and double-click to reset.
+- Saved chats and an activity timeline survive restarts. Phoenix restores the latest chat on launch; older conversations are available from the Chats menu. Activity records contain only tool labels, permission decisions and run outcomes.
+- **Built-in browser tools:** Claude, Codex, and OpenAI-compatible API providers can list tabs, read a bounded accessibility snapshot, capture a reduced-size screenshot, navigate, click, drag between elements, copy or paste, type into ordinary text fields, press supported keys, scroll, wait for page elements and use native select controls. Phoenix uses the same WebView2 profile as the visible browser, so user sign-ins carry over. Page reads and actions use Phoenix's approval flow; no browser extension, separate desktop-agent install or remote-debugging port is required.
+- **Computer use** (enabled by default in new installations): native tools list and capture windows and read or write clipboard text. The optional `agent-desktop` integration adds app-control discovery, click, scroll, drag, type, copy and paste for Claude, Codex, and OpenAI-compatible API providers. Vision-capable models can also inspect screenshots. You approve each step in the chat (looking once per app, acting every time), and the agent never gets a shell or a whole-screen capture.
 - Replies are formatted: headings, lists, tables, code blocks with a Copy button.
-- **MCP servers:** install as many as you like (paste the JSON from a server's install instructions, or enter a program or web address), review the exact command before it is saved, test the connection and list its tools, then choose which servers the agent may use. OAuth-protected web servers open sign-in in the browser and keep refreshable tokens in the encrypted vault. Claude and OpenAI-compatible API providers can use enabled servers; API-provider calls ask for approval before each tool runs, and every call is shown in chat.
+- **MCP servers:** install as many as you like (paste the JSON from a server's install instructions, or enter a program or web address), review the exact command before it is saved, test the connection and list its tools, then choose which servers the agent may use. OAuth-protected web servers open sign-in in the browser and keep refreshable tokens in the encrypted vault. Claude, Codex, and OpenAI-compatible API providers can use enabled servers; Phoenix asks for approval before each connected-server call, and calls appear in chat.
 - Claude and OpenAI Codex through their command-line clients, plus API-key connections for Gemini, OpenRouter, Mistral, Z.ai, and Grok.
 - API keys stored in a Windows DPAPI-encrypted vault; Phoenix does not put vault-backed keys in `config.yaml` or show them again in the UI.
 
@@ -65,6 +67,12 @@ Open **Settings → AI providers** in Phoenix. Claude and Codex use their respec
 Provider API keys are encrypted with Windows DPAPI for the current Windows user. DPAPI protects the stored vault data from being read as plain text, but it is tied to that Windows account and machine; copying the vault to another PC will not make it portable.
 
 Phoenix stores its configuration at `%APPDATA%\Phoenix\config.yaml` and the encrypted key vault under `%LOCALAPPDATA%\Phoenix\vault`.
+
+### Chat and activity data
+
+Visited-site history, saved chat transcripts and agent activity summaries are stored locally under `%APPDATA%\Phoenix`. Phoenix keeps up to 100 visited sites, 40 chats (up to 64 messages and 120,000 bytes of transcript text per chat), and 500 activity entries; the Activity tab shows the latest 100. Chat and activity files are each capped at 32 MiB. The Activity tab has a **Clear saved chats & activity** control. Browser history can be cleared separately from the History view.
+
+Transcript storage includes the messages you send and the assistant's replies. Text shared from a page is sent for that turn but is not saved as a transcript message; page details repeated in an assistant reply remain part of that reply. Activity summaries never save tool arguments, tool results, page contents, or approval descriptions. These files are local JSON, not encrypted; the folder is protected by the current Windows account's normal file permissions.
 
 ## Development checks
 

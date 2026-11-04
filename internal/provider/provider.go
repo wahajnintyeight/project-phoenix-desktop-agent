@@ -199,8 +199,9 @@ type ToolImage struct {
 
 // ToolOutput is bounded text and optional image data returned from a function call.
 type ToolOutput struct {
-	Text   string
-	Images []ToolImage
+	IsError bool
+	Text    string
+	Images  []ToolImage
 }
 
 // ToolExecutor runs a previously advertised tool. ToolApprover must return ErrToolDenied
@@ -226,12 +227,14 @@ type Request struct {
 	UseMCP bool
 
 	// MCPConfig is the path of a JSON file of MCP servers (Phoenix's own tool server).
-	MCPConfig    string
-	AllowedTools []string // tool names the CLI may use without asking, e.g. "mcp__phoenix__*"
-	Tools        []Tool
-	ExecuteTool  ToolExecutor
-	ApproveTool  ToolApprover
-	MaxBudgetUSD float64 // 0 means no cap
+	MCPConfig     string
+	CodexMCPURL   string   // per-run local tool proxy, never persisted
+	CodexMCPToken string   // passed in the child environment, never on the command line
+	AllowedTools  []string // tool names the CLI may use without asking, e.g. "mcp__phoenix__*"
+	Tools         []Tool
+	ExecuteTool   ToolExecutor
+	ApproveTool   ToolApprover
+	MaxBudgetUSD  float64 // 0 means no cap
 }
 
 // Result is the outcome of a run.

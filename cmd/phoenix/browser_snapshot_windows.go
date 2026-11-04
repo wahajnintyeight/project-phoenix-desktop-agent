@@ -74,6 +74,25 @@ func performBrowserPageTool(ctx context.Context, call browser.Call, args any) (b
 			session.snapshot = browserSnapshot{}
 		}
 		return out, err
+	case "browser_drag":
+		a := args.(browser.DragArgs)
+		from, err := snapshotRefForOperation(session, a.FromRef, state.Epoch)
+		if err != nil {
+			return browser.Output{}, err
+		}
+		to, err := snapshotRefForOperation(session, a.ToRef, state.Epoch)
+		if err != nil {
+			return browser.Output{}, err
+		}
+		out, err := browserDrag(ctx, state, from, to)
+		session.snapshot = browserSnapshot{}
+		return out, err
+	case "browser_copy", "browser_paste":
+		out, err := browserClipboardKey(ctx, state, call.Tool)
+		if err == nil {
+			session.snapshot = browserSnapshot{}
+		}
+		return out, err
 	case "browser_press":
 		out, err := browserPress(ctx, state, args.(browser.PressArgs))
 		if err == nil {
@@ -100,6 +119,8 @@ func browserArgsTabID(args any) int {
 	case browser.TabArgs:
 		return a.TabID
 	case browser.RefArgs:
+		return a.TabID
+	case browser.DragArgs:
 		return a.TabID
 	case browser.TextArgs:
 		return a.TabID
@@ -226,7 +247,7 @@ func axText(v any) string {
 
 func browserActionableRole(role string) bool {
 	switch role {
-	case "button", "link", "checkbox", "radio", "textbox", "searchbox", "combobox", "menuitem", "tab", "switch", "slider", "spinbutton":
+	case "button", "link", "checkbox", "radio", "textbox", "searchbox", "combobox", "menuitem", "tab", "switch", "slider", "spinbutton", "list", "listitem", "grid", "gridcell", "row", "treeitem", "option":
 		return true
 	}
 	return false

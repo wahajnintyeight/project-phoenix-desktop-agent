@@ -7,6 +7,7 @@
 // ones, because a model can be newer than the CLI's list.
 import { icon } from "./icons";
 import { send } from "./protocol";
+import { handleRadioKeys } from "./radio-navigation";
 
 export interface ModelInfo {
   id: string;
@@ -110,6 +111,13 @@ export class PhModelList extends HTMLElement {
     this.append(this.#filter, this.#list, this.#effort, more, this.#note);
     this.#syncCustom();
     this.addEventListener("click", this.#onClick, { passive: true });
+    this.addEventListener("keydown", handleRadioKeys);
+    this.#effort.addEventListener("change", (event) => {
+      const select = event.target;
+      if (select instanceof HTMLSelectElement && select.dataset["act"] === "effort-select" && this.#d) {
+        this.#choose(this.#d.model, select.value);
+      }
+    });
     this.#custom.addEventListener("keydown", (e) => {
       if (e.key === "Enter") this.#useCustomId();
     }, { passive: true });
@@ -126,6 +134,10 @@ export class PhModelList extends HTMLElement {
   }
 
   set data(value: ModelsData) {
+    if (this.#d && this.#d.id !== value.id) {
+      this.#q = "";
+      this.#filter.value = "";
+    }
     this.#d = value;
     if (this.isConnected) this.#render();
   }
@@ -148,6 +160,9 @@ export class PhModelList extends HTMLElement {
   #render(): void {
     const d = this.#d;
     if (!d) return;
+    const active = document.activeElement instanceof HTMLElement && this.contains(document.activeElement)
+      ? document.activeElement : null;
+    const focus = active?.dataset["act"] ? { act: active.dataset["act"], model: active.dataset["model"], effort: active.dataset["effort"] } : null;
     this.dataset["provider"] = d.id;
     this.#syncCustom();
 
@@ -167,6 +182,7 @@ export class PhModelList extends HTMLElement {
       const b = btn("", "ml-row");
       b.setAttribute("role", "radio");
       b.setAttribute("aria-checked", String(m.id === d.model));
+      b.tabIndex = m.id === d.model ? 0 : -1;
       b.dataset["act"] = "model";
       b.dataset["model"] = m.id;
       const top = el("span", "ml-top");
@@ -182,6 +198,7 @@ export class PhModelList extends HTMLElement {
       const b = btn("", "ml-row");
       b.setAttribute("role", "radio");
       b.setAttribute("aria-checked", "true");
+      b.tabIndex = 0;
       b.dataset["act"] = "model";
       b.dataset["model"] = d.model;
       const top = el("span", "ml-top");
@@ -199,6 +216,10 @@ export class PhModelList extends HTMLElement {
       rows.push(skel);
     }
     this.#list.replaceChildren(...rows);
+    if (!this.#list.querySelector('button[role="radio"][tabindex="0"]')) {
+      const first = this.#list.querySelector<HTMLButtonElement>('button[role="radio"]');
+      if (first) first.tabIndex = 0;
+    }
     this.#list.querySelectorAll(".ml-check").forEach((c) => c.replaceChildren(icon("check", 14)));
 
     const efforts = this.#efforts(d);
@@ -208,22 +229,40 @@ export class PhModelList extends HTMLElement {
       this.#effort.hidden = true;
     } else {
       this.#effort.hidden = false;
-      const seg = el("div", "seg");
-      seg.setAttribute("role", "radiogroup");
-      seg.setAttribute("aria-label", "Reasoning effort");
-      for (const e of ["", ...efforts]) {
-        const b = btn(e === "" ? (def ? `Default (${cap(def)})` : "Default") : cap(e), "seg-btn");
-        b.setAttribute("role", "radio");
-        b.setAttribute("aria-checked", String(e === d.effort));
-        b.dataset["act"] = "effort";
-        b.dataset["effort"] = e;
-        seg.append(b);
+      if (this.classList.contains("compact")) {
+        const select = el("select", "field ml-effort-select");
+        select.setAttribute("aria-label", "Reasoning effort");
+        select.dataset["act"] = "effort-select";
+        for (const e of ["", ...efforts]) {
+          const option = el("option", undefined, e === "" ? (def ? `Default (${cap(def)})` : "Default") : cap(e));
+          option.value = e;
+          option.selected = e === d.effort;
+          select.append(option);
+        }
+        this.#effort.replaceChildren(el("span", "text-xs text-fg-muted", "Reasoning effort"), select);
+      } else {
+        const seg = el("div", "seg");
+        seg.setAttribute("role", "radiogroup");
+        seg.setAttribute("aria-label", "Reasoning effort");
+        for (const e of ["", ...efforts]) {
+          const b = btn(e === "" ? (def ? `Default (${cap(def)})` : "Default") : cap(e), "seg-btn");
+          b.setAttribute("role", "radio");
+          b.setAttribute("aria-checked", String(e === d.effort));
+          b.tabIndex = e === d.effort ? 0 : -1;
+          b.dataset["act"] = "effort";
+          b.dataset["effort"] = e;
+          seg.append(b);
+        }
+        this.#effort.replaceChildren(el("span", "text-xs text-fg-muted", "Reasoning effort"), seg);
       }
-      this.#effort.replaceChildren(el("span", "text-xs text-fg-muted", "Reasoning effort"), seg);
     }
 
     this.#note.textContent = d.error ?? (d.models.length === 0 ? "No models found. Install the CLI, then re-check." : "");
     this.#note.classList.toggle("is-error", Boolean(d.error));
+    if (focus) {
+      Array.from(this.querySelectorAll<HTMLElement>("[data-act]"))
+        .find((item) => item.dataset["act"] === focus.act && item.dataset["model"] === focus.model && item.dataset["effort"] === focus.effort)?.focus();
+    }
   }
 
   #choose(model: string, effort: string): void {

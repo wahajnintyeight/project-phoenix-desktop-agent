@@ -1,12 +1,10 @@
 package main
 
 import (
-	"context"
 	"encoding/json"
 	"os"
 	"strings"
 	"sync"
-	"time"
 
 	"phoenix/internal/desktop"
 	"phoenix/internal/mcp"
@@ -18,7 +16,7 @@ import (
 // answer goes back. State is touched on the UI thread only.
 
 const chatDesktop = " You can also see and operate the user's Windows desktop with the desktop_* tools: " +
-	"use desktop_windows to find the application, take a fresh desktop_snapshot before acting on a control, then look again after every action to verify what changed. " +
+	"use desktop_windows to find an application and desktop_screenshot to see it. If desktop_snapshot is available, take a fresh snapshot before acting on a control, then look again to verify what changed. " +
 	"A ref belongs only to the snapshot that returned it; after STALE_REF or AMBIGUOUS_TARGET, take a new snapshot and choose a fresh ref. " +
 	"If an action reports an error, inspect the current state before trying again; never blindly repeat a change. " +
 	"Screenshots are for seeing a window; there is no whole-screen capture. " +
@@ -48,8 +46,8 @@ func desktopCLI() (path string, on bool) {
 	if !enabled {
 		return "", false
 	}
-	p, ok := desktop.Find(configured)
-	return p, ok
+	p, _ := desktop.Find(configured)
+	return p, true
 }
 
 // desktopServer describes the desktop MCP server for one chat turn: this program, started
@@ -72,6 +70,7 @@ func desktopServer(run *desktop.Run, cliPath string) (mcp.Resolved, error) {
 // onApprovalRequest shows a request in the chat and gets the user's attention if Phoenix is
 // in the background (the agent is usually working in some other window).
 func onApprovalRequest(p desktop.Pending) {
+	addAgentActivity("approval", "Agent requested permission", "pending", 0)
 	postChat(chatEvent{K: "approve", ID: p.ID, Cls: string(p.Request.Class), Text: p.Request.Summary})
 	if win != nil && !win.IsFocused() {
 		win.Flash(true)
@@ -85,6 +84,11 @@ func answerApproval(id, decision string) {
 		d = desktop.Deny
 	}
 	approvalBroker().Respond(id, d)
+	status := "declined"
+	if d == desktop.Allow || d == desktop.AllowAll {
+		status = "allowed"
+	}
+	addAgentActivity("approval", "Permission decision", status, 0)
 	postChat(chatEvent{K: "approved", ID: id, Decision: string(d)})
 	if win != nil {
 		win.Flash(false)
@@ -102,35 +106,15 @@ type desktopView struct {
 	Skills  []desktop.Skill `json:"skills"`
 }
 
-// pushDesktop sends computer-use status to Settings. Finding the program is quick; asking it
-// for its version runs it, so that part is off the UI thread.
+// pushDesktop reports native tools and whether the optional adapter adds more actions.
 func pushDesktop() {
 	if hub == nil {
 		return
 	}
 	enabled, configured := hub.Desktop()
-	v := desktopView{Enabled: enabled, Skills: desktop.Skills}
 	path, found := desktop.Find(configured)
-	v.Found, v.Path = found, path
-	send := func() { post("u" + fs + "desktop-settings" + fs + "data" + fs + jsonString(v)) }
-	if !found {
-		v.Problem = "agent-desktop is not installed. Install it with: npm install -g agent-desktop"
-		send()
-		return
-	}
-	send()
-	go func() {
-		ctx, cancel := context.WithTimeout(context.Background(), 20*time.Second)
-		defer cancel()
-		ver, err := desktop.CLI{Path: path}.Version(ctx)
-		runLater(func() {
-			v.Version = ver
-			if err != nil {
-				v.Problem = "agent-desktop was found but did not run: " + err.Error()
-			}
-			send()
-		})
-	}()
+	v := desktopView{Enabled: enabled, Found: found, Path: path, Skills: desktop.AvailableSkills(found)}
+	post("u" + fs + "desktop-settings" + fs + "data" + fs + jsonString(v))
 }
 
 // handleDesktopOp handles UI → Go "v desktop-*" messages.

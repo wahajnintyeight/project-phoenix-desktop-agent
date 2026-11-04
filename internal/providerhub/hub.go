@@ -294,14 +294,7 @@ func (h *Hub) Run(ctx context.Context, id provider.ID, req provider.Request, emi
 	if err != nil {
 		return provider.Result{}, err
 	}
-	if (req.UseMCP || len(req.MCPServers) > 0) && id == provider.Claude && req.MCPConfig == "" {
-		cleanup, err := h.attachMCP(&req)
-		if err != nil {
-			return provider.Result{}, err
-		}
-		defer cleanup()
-	}
-	if provider.IsHTTP(id) && (req.UseMCP || len(req.MCPServers) > 0) {
+	if (provider.IsHTTP(id) || id == provider.Codex || (id == provider.Claude && req.MCPConfig == "")) && (req.UseMCP || len(req.MCPServers) > 0) {
 		servers := make([]mcp.Resolved, 0, len(req.MCPServers)+len(h.MCPEnabled()))
 		for _, server := range h.MCPEnabled() {
 			resolved, err := h.resolveMCP(server)
@@ -330,11 +323,27 @@ func (h *Hub) Run(ctx context.Context, id provider.ID, req provider.Request, emi
 				if errors.Is(err, mcp.ErrUserDeclined) {
 					return provider.ToolOutput{}, provider.ErrToolDenied
 				}
-				out := provider.ToolOutput{Text: result.Text}
+				out := provider.ToolOutput{Text: result.Text, IsError: result.IsError}
 				for _, image := range result.Images {
 					out.Images = append(out.Images, provider.ToolImage{MIMEType: image.MIMEType, Data: image.Data})
 				}
 				return out, err
+			}
+			if (id == provider.Codex || id == provider.Claude) && len(req.Tools) > 0 {
+				proxy, err := startCodexToolProxy(req)
+				if err != nil {
+					return provider.Result{}, err
+				}
+				defer proxy.Close()
+				if id == provider.Codex {
+					req.CodexMCPURL, req.CodexMCPToken = proxy.url, proxy.token
+				} else {
+					cleanup, err := attachClaudeProxy(&req, proxy)
+					if err != nil {
+						return provider.Result{}, err
+					}
+					defer cleanup()
+				}
 			}
 		}
 	}

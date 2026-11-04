@@ -35,8 +35,9 @@ type Image struct {
 
 // ToolResult contains the bounded content to return to the provider loop.
 type ToolResult struct {
-	Text   string
-	Images []Image
+	IsError bool
+	Text    string
+	Images  []Image
 }
 
 // Function is an MCP tool presented as a provider function. Name is a stable safe alias;
@@ -241,6 +242,7 @@ func resultOutput(result *sdk.CallToolResult, server Resolved) ToolResult {
 	}
 	out.Text = redactValues(strings.Join(parts, "\n"), server)
 	if result.IsError {
+		out.IsError = true
 		out.Text = "Tool error: " + out.Text
 	}
 	out.Text = clip(out.Text, maxToolResult)

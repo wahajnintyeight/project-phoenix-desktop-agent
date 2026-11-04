@@ -57,7 +57,10 @@ func Find(explicit string) (string, bool) {
 }
 
 // CLI runs the agent-desktop program.
-type CLI struct{ Path string }
+type CLI struct {
+	Path   string
+	Native bool
+}
 
 // Envelope is the one JSON object every agent-desktop command prints.
 type Envelope struct {
@@ -92,6 +95,14 @@ const maxOutput = 8 << 20
 // interpreted by any shell. headed asks for real input (cursor, focus) instead of the
 // accessibility API.
 func (c CLI) Run(ctx context.Context, headed bool, args ...string) (Envelope, error) {
+	if c.Native {
+		if result, handled, err := runNative(ctx, c.Path == "", args); handled {
+			return result, err
+		}
+	}
+	if c.Path == "" {
+		return Envelope{}, errors.New("this desktop action requires the optional agent-desktop integration")
+	}
 	ctx, cancel := context.WithTimeout(ctx, 60*time.Second)
 	defer cancel()
 	full := args

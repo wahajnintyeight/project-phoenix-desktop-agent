@@ -144,7 +144,7 @@ func DefaultPath() (string, error) {
 
 // Load reads path. A missing file yields the defaults.
 func Load(path string) (*Config, error) {
-	c := &Config{}
+	c := &Config{Desktop: Desktop{Enabled: true}}
 	b, err := os.ReadFile(path)
 	switch {
 	case errors.Is(err, os.ErrNotExist):

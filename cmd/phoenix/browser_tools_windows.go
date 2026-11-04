@@ -199,8 +199,18 @@ func browserCallMeta(ctx context.Context, call browser.Call) (browserPermission,
 		meta.Summary = "Read an accessible outline of the page"
 	case browser.TabArgs:
 		tabID = a.TabID
-		meta.Class = desktop.Look
-		meta.Summary = "Take a screenshot of the browser tab"
+		switch call.Tool {
+		case "browser_copy":
+			meta.Summary = "Copy the page selection to the clipboard"
+		case "browser_paste":
+			meta.Summary = "Paste the clipboard into the focused page field"
+		default:
+			meta.Class = desktop.Look
+			meta.Summary = "Take a screenshot of the browser tab"
+		}
+	case browser.DragArgs:
+		tabID = a.TabID
+		meta.Summary = "Drag between page elements"
 	case browser.RefArgs:
 		tabID = a.TabID
 		meta.Summary = "Click"
@@ -228,6 +238,17 @@ func browserCallMeta(ctx context.Context, call browser.Call) (browserPermission,
 		return browserPermission{}, err
 	}
 	meta.App = browserApp(t.Host)
+	if drag, ok := args.(browser.DragArgs); ok {
+		from, err := browserCachedRef(tabID, drag.FromRef, t.Epoch)
+		if err != nil {
+			return browserPermission{}, err
+		}
+		to, err := browserCachedRef(tabID, drag.ToRef, t.Epoch)
+		if err != nil {
+			return browserPermission{}, err
+		}
+		meta.Summary = "Drag '" + approvalBrowserText(from.Name, 80) + "' to '" + approvalBrowserText(to.Name, 80) + "'"
+	}
 	if needsBrowserRef(call.Tool) || call.Tool == "browser_scroll" && refFromArgs(args) != "" {
 		ref := refFromArgs(args)
 		s, e := browserCachedRef(tabID, ref, t.Epoch)
@@ -368,7 +389,7 @@ func decodeBrowserCall(call browser.Call) (any, error) {
 			}
 		}
 		return v, e
-	case "browser_screenshot", "browser_back", "browser_forward", "browser_reload", "browser_close_tab", "browser_switch_tab":
+	case "browser_screenshot", "browser_copy", "browser_paste", "browser_back", "browser_forward", "browser_reload", "browser_close_tab", "browser_switch_tab":
 		v, e := decode(&browser.TabArgs{})
 		if e == nil && !validTabID(v.(browser.TabArgs).TabID) {
 			e = errors.New("invalid browser tab id")
@@ -387,6 +408,15 @@ func decodeBrowserCall(call browser.Call) (any, error) {
 		v, e := decode(&browser.RefArgs{})
 		if e == nil && (!validTabID(v.(browser.RefArgs).TabID) || !validBrowserRef(v.(browser.RefArgs).Ref)) {
 			e = errors.New("invalid tab id or page ref")
+		}
+		return v, e
+	case "browser_drag":
+		v, e := decode(&browser.DragArgs{})
+		if e == nil {
+			a := v.(browser.DragArgs)
+			if !validTabID(a.TabID) || !validBrowserRef(a.FromRef) || !validBrowserRef(a.ToRef) {
+				e = errors.New("invalid drag refs or browser tab")
+			}
 		}
 		return v, e
 	case "browser_type", "browser_fill":
@@ -498,6 +528,8 @@ func browserArgumentValue(v any) any {
 	case *browser.NavigateArgs:
 		return *a
 	case *browser.RefArgs:
+		return *a
+	case *browser.DragArgs:
 		return *a
 	case *browser.TextArgs:
 		return *a

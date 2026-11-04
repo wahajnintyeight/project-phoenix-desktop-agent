@@ -31,9 +31,9 @@ func codexPath(s Settings) (string, bool) {
 // ~/.codex/auth.json.
 func codexEnv(s Settings) []string {
 	if s.Mode == AuthAPIKey && s.APIKey != "" {
-		return cleanEnv(codexAuthEnv, "CODEX_API_KEY="+s.APIKey)
+		return cleanEnv(append(codexAuthEnv, "PHOENIX_CODEX_MCP_TOKEN"), "CODEX_API_KEY="+s.APIKey)
 	}
-	return cleanEnv(codexAuthEnv)
+	return cleanEnv(append(codexAuthEnv, "PHOENIX_CODEX_MCP_TOKEN"))
 }
 
 func (c CodexProvider) Detect(ctx context.Context, s Settings) Status {
@@ -173,7 +173,11 @@ func (c CodexProvider) Run(ctx context.Context, s Settings, req Request, emit fu
 		prompt = req.System + "\n\n" + prompt
 	}
 	parser := &codexParser{}
-	stderr, err := stream(ctx, codexEnv(s), dir, path, codexArgs(s, req, dir), prompt, func(line []byte) {
+	env := codexEnv(s)
+	if req.CodexMCPURL != "" {
+		env = append(env, "PHOENIX_CODEX_MCP_TOKEN="+req.CodexMCPToken)
+	}
+	stderr, err := stream(ctx, env, dir, path, codexArgs(s, req, dir), prompt, func(line []byte) {
 		for _, ev := range parser.Parse(line) {
 			emit(ev)
 		}
@@ -202,6 +206,10 @@ func codexArgs(s Settings, req Request, dir string) []string {
 		"--ignore-rules",
 		"-s", "read-only",
 		"-C", dir,
+	}
+	if req.CodexMCPURL != "" {
+		url, _ := json.Marshal(req.CodexMCPURL)
+		args = append(args, "-c", `mcp_servers.phoenix={url=`+string(url)+`,bearer_token_env_var="PHOENIX_CODEX_MCP_TOKEN",tool_timeout_sec=360,default_tools_approval_mode="approve"}`)
 	}
 	if m := firstNonEmpty(req.Model, s.Model); m != "" {
 		args = append(args, "-m", m)

@@ -8,12 +8,16 @@ import "./browser-settings";
 import "./mcp-settings";
 import "./desktop-settings";
 import "./chat";
+import "./activity";
 import "./quick-actions";
+import { initPanelResize } from "./panel-resize";
+
+initPanelResize();
 
 const $ = (id: string): HTMLElement | null => document.getElementById(id);
 
 // Go may only set these. Anything else is ignored.
-const SETTABLE_PROPS = new Set(["tabs", "history", "value", "disabled", "src", "hidden", "data", "result", "models", "events", "actions"]);
+const SETTABLE_PROPS = new Set(["tabs", "history", "chats", "activity", "value", "disabled", "src", "hidden", "data", "result", "models", "events", "actions"]);
 const SETTABLE_ATTRS = new Set(["data-view", "data-state"]);
 
 // ── Message handling (Go → UI) ──────────────────────────────────────────

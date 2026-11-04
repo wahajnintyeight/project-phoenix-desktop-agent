@@ -34,6 +34,12 @@ type RefArgs struct {
 	Ref   string `json:"ref" jsonschema:"element ref from the latest browser_snapshot, for example @s8f3a1:e12"`
 }
 
+type DragArgs struct {
+	TabID   int    `json:"tab_id" jsonschema:"id from browser_tabs"`
+	FromRef string `json:"from_ref" jsonschema:"source ref from the latest snapshot"`
+	ToRef   string `json:"to_ref" jsonschema:"destination ref from the same snapshot"`
+}
+
 type TextArgs struct {
 	TabID int    `json:"tab_id" jsonschema:"id from browser_tabs"`
 	Ref   string `json:"ref" jsonschema:"editable element ref from the latest snapshot"`
@@ -78,6 +84,9 @@ func NewMCPServer(client Invoker) *sdk.Server {
 	add(s, client, "browser_screenshot", "Take a screenshot of the visible area of one Phoenix browser tab.", TabArgs{})
 	add(s, client, "browser_navigate", "Navigate one tab to an http or https URL.", NavigateArgs{})
 	add(s, client, "browser_click", "Click an element by ref from the latest snapshot.", RefArgs{})
+	add(s, client, "browser_drag", "Drag from one page element to another using refs from the same snapshot.", DragArgs{})
+	add(s, client, "browser_copy", "Copy the current selection in the browser tab to the system clipboard.", TabArgs{})
+	add(s, client, "browser_paste", "Paste the system clipboard into the focused editable page field.", TabArgs{})
 	add(s, client, "browser_type", "Type text into an editable element by ref. Never use for passwords or authentication codes.", TextArgs{})
 	add(s, client, "browser_fill", "Replace the text in an editable element by ref. Never use for passwords or authentication codes.", TextArgs{})
 	add(s, client, "browser_press", "Press a supported key or shortcut in the selected browser tab.", PressArgs{})

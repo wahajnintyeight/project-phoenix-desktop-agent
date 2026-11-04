@@ -7,7 +7,7 @@
 //           p seq         ping
 //           m state       menu popover opened or closed
 //           r version     UI ready
-//           g send text [1|0] | act id | probe | stop | new   chat with the agent
+//           g send text [1|0] | act id | probe | stop | new | restore id | clear-history
 //           v sub id [a] [b]  provider settings: refresh, mode, key, clearkey, default,
 //                          login, test, model <id> <model> <effort>, search <url>
 // Go → UI:  u id prop json   set an allow-listed property on an element

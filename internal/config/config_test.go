@@ -210,3 +210,17 @@ func TestMCPServersRoundTripAndValidate(t *testing.T) {
 		t.Fatalf("saved file:\n%s", out)
 	}
 }
+func TestDesktopDefaultRespectsExplicitDisable(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "config.yaml")
+	cfg, err := Load(path)
+	if err != nil || !cfg.Desktop.Enabled {
+		t.Fatalf("new configuration must enable desktop tools: %+v %v", cfg, err)
+	}
+	if err := os.WriteFile(path, []byte("desktop:\n  enabled: false\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	cfg, err = Load(path)
+	if err != nil || cfg.Desktop.Enabled {
+		t.Fatalf("explicit opt-out must survive: %+v %v", cfg, err)
+	}
+}

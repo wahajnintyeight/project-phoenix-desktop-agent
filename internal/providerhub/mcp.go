@@ -366,24 +366,10 @@ func (h *Hub) MCPTest(ctx context.Context, name string) (mcp.Info, error) {
 	return mcp.Test(ctx, r)
 }
 
-// attachMCP points the request at a private config file for the enabled servers. The file
-// holds secret values, so it lives in its own directory, is owner-only, and is removed when
-// the run ends.
-func (h *Hub) attachMCP(req *provider.Request) (cleanup func(), err error) {
-	servers := h.MCPEnabled()
-	res := make([]mcp.Resolved, 0, len(servers)+len(req.MCPServers))
-	for _, s := range servers {
-		r, err := h.resolveMCP(s)
-		if err != nil {
-			return nil, fmt.Errorf("MCP server %s: %w", s.Name, err)
-		}
-		res = append(res, r)
-	}
-	res = append(res, req.MCPServers...)
-	if len(res) == 0 {
-		return func() {}, nil
-	}
-	raw, err := mcp.ClaudeConfig(res)
+// attachClaudeProxy gives the isolated Claude CLI a private, per-run proxy config.
+func attachClaudeProxy(req *provider.Request, proxy *codexToolProxy) (func(), error) {
+	server := mcp.Resolved{Server: mcp.Server{Name: "phoenix-tools", Transport: mcp.HTTP, URL: proxy.url, Enabled: true}, HeaderValues: map[string]string{"Authorization": "Bearer " + proxy.token}}
+	raw, err := mcp.ClaudeConfig([]mcp.Resolved{server})
 	if err != nil {
 		return nil, err
 	}
@@ -391,14 +377,14 @@ func (h *Hub) attachMCP(req *provider.Request) (cleanup func(), err error) {
 	if err != nil {
 		return nil, err
 	}
-	cleanup = func() { _ = os.RemoveAll(dir) }
+	cleanup := func() { _ = os.RemoveAll(dir) }
 	path := filepath.Join(dir, "mcp.json")
 	if err := os.WriteFile(path, raw, 0o600); err != nil {
 		cleanup()
 		return nil, err
 	}
 	req.MCPConfig = path
-	req.AllowedTools = append(req.AllowedTools, mcp.ClaudeAllowed(res)...)
+	req.AllowedTools = append(req.AllowedTools, "mcp__phoenix-tools")
 	return cleanup, nil
 }
 
