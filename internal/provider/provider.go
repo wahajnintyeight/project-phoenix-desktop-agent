@@ -173,6 +173,41 @@ func (r Request) Transcript() string {
 	return b.String()
 }
 
+// Tool is a function an HTTP provider may call during a run. Name is the safe API-facing
+// function name; Server and MCPName identify the MCP tool it maps to.
+type Tool struct {
+	Name             string
+	Server           string
+	MCPName          string
+	Description      string
+	Parameters       json.RawMessage
+	RequiresApproval bool
+}
+
+// ToolCall is one function request from the model.
+type ToolCall struct {
+	ID        string
+	Tool      Tool
+	Arguments json.RawMessage
+}
+
+// ToolImage is image content returned by a tool, for providers that accept image inputs.
+type ToolImage struct {
+	MIMEType string
+	Data     []byte
+}
+
+// ToolOutput is bounded text and optional image data returned from a function call.
+type ToolOutput struct {
+	Text   string
+	Images []ToolImage
+}
+
+// ToolExecutor runs a previously advertised tool. ToolApprover must return ErrToolDenied
+// when the user refuses; providers stop the run instead of asking the model to retry.
+type ToolExecutor func(context.Context, ToolCall) (ToolOutput, error)
+type ToolApprover func(context.Context, ToolCall) error
+
 // Request is one run.
 type Request struct {
 	History []Message // earlier turns, oldest first; empty for a single question
@@ -193,7 +228,10 @@ type Request struct {
 	// MCPConfig is the path of a JSON file of MCP servers (Phoenix's own tool server).
 	MCPConfig    string
 	AllowedTools []string // tool names the CLI may use without asking, e.g. "mcp__phoenix__*"
-	MaxBudgetUSD float64  // 0 means no cap
+	Tools        []Tool
+	ExecuteTool  ToolExecutor
+	ApproveTool  ToolApprover
+	MaxBudgetUSD float64 // 0 means no cap
 }
 
 // Result is the outcome of a run.
@@ -222,4 +260,5 @@ type Provider interface {
 var (
 	ErrNotInstalled = errors.New("the command-line client is not installed")
 	ErrNotReady     = errors.New("provider is not signed in or has no API key")
+	ErrToolDenied   = errors.New("the user declined the tool call")
 )

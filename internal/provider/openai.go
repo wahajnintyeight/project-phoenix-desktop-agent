@@ -1,7 +1,6 @@
 package provider
 
 import (
-	"bufio"
 	"bytes"
 	"context"
 	"encoding/json"
@@ -267,14 +266,40 @@ func (p OpenAICompat) efforts() []string {
 }
 
 type chatMessage struct {
-	Role    string `json:"role"`
-	Content string `json:"content"`
+	Role       string              `json:"role"`
+	Content    any                 `json:"content"`
+	Name       string              `json:"name,omitempty"`
+	ToolCallID string              `json:"tool_call_id,omitempty"`
+	ToolCalls  []assistantToolCall `json:"tool_calls,omitempty"`
+}
+
+type assistantToolCall struct {
+	ID       string       `json:"id"`
+	Type     string       `json:"type"`
+	Function functionCall `json:"function"`
+}
+
+type functionCall struct {
+	Name      string `json:"name"`
+	Arguments string `json:"arguments"`
+}
+
+type apiFunction struct {
+	Name        string          `json:"name"`
+	Description string          `json:"description,omitempty"`
+	Parameters  json.RawMessage `json:"parameters"`
+}
+
+type apiTool struct {
+	Type     string      `json:"type"`
+	Function apiFunction `json:"function"`
 }
 
 type chatRequest struct {
 	Model           string        `json:"model"`
 	Messages        []chatMessage `json:"messages"`
 	Stream          bool          `json:"stream"`
+	Tools           []apiTool     `json:"tools,omitempty"`
 	ReasoningEffort string        `json:"reasoning_effort,omitempty"`
 	Reasoning       *struct {
 		Effort string `json:"effort"`
@@ -292,6 +317,11 @@ func (p OpenAICompat) buildRequest(s Settings, req Request) chatRequest {
 		}
 	}
 	cr.Messages = append(cr.Messages, chatMessage{Role: "user", Content: req.Prompt})
+	for _, tool := range req.Tools {
+		cr.Tools = append(cr.Tools, apiTool{Type: "function", Function: apiFunction{
+			Name: tool.Name, Description: tool.Description, Parameters: tool.Parameters,
+		}})
+	}
 	if e := firstNonEmpty(req.Effort, s.Effort); e != "" {
 		switch p.Spec.effort {
 		case effortTopLevel:
@@ -303,74 +333,6 @@ func (p OpenAICompat) buildRequest(s Settings, req Request) chatRequest {
 		}
 	}
 	return cr
-}
-
-func (p OpenAICompat) Run(ctx context.Context, s Settings, req Request, emit func(Event)) (Result, error) {
-	if s.APIKey == "" {
-		return Result{}, ErrNotReady
-	}
-	if err := checkModelArgs(s, req); err != nil {
-		return Result{}, err
-	}
-	if firstNonEmpty(req.Model, s.Model) == "" {
-		return Result{}, errors.New("choose a model first")
-	}
-	payload, err := json.Marshal(p.buildRequest(s, req))
-	if err != nil {
-		return Result{}, err
-	}
-	hreq, err := http.NewRequestWithContext(ctx, http.MethodPost, p.base(s)+"/chat/completions", bytes.NewReader(payload))
-	if err != nil {
-		return Result{}, err
-	}
-	hreq.Header.Set("Authorization", "Bearer "+s.APIKey)
-	hreq.Header.Set("Content-Type", "application/json")
-	hreq.Header.Set("Accept", "text/event-stream")
-
-	start := time.Now()
-	resp, err := p.client().Do(hreq)
-	if err != nil {
-		if ctx.Err() != nil {
-			return Result{}, ctx.Err()
-		}
-		msg := scrub(err.Error(), s.APIKey)
-		emit(Event{Kind: EvError, Text: msg, IsError: true})
-		return Result{}, errors.New(msg)
-	}
-	defer resp.Body.Close()
-	if resp.StatusCode != http.StatusOK {
-		body, _ := io.ReadAll(io.LimitReader(resp.Body, 8<<10))
-		herr := p.httpError(resp.StatusCode, body, s.APIKey)
-		emit(Event{Kind: EvError, Text: herr.Error(), IsError: true})
-		return Result{}, herr
-	}
-
-	parser := &openaiParser{}
-	sc := bufio.NewScanner(resp.Body)
-	sc.Buffer(make([]byte, 0, 64<<10), 8<<20)
-	for sc.Scan() {
-		for _, ev := range parser.Parse(sc.Bytes()) {
-			emit(ev)
-		}
-		if parser.done {
-			break
-		}
-	}
-	if err := sc.Err(); err != nil && !parser.done {
-		if ctx.Err() != nil {
-			return parser.result, ctx.Err()
-		}
-		msg := scrub(err.Error(), s.APIKey)
-		emit(Event{Kind: EvError, Text: msg, IsError: true})
-		return parser.result, errors.New(msg)
-	}
-	if !parser.done { // the stream ended without [DONE]; what arrived is still the answer
-		for _, ev := range parser.finish() {
-			emit(ev)
-		}
-	}
-	parser.result.DurationMS = time.Since(start).Milliseconds()
-	return parser.result, nil
 }
 
 // httpError turns an error response into one readable sentence. Providers return
@@ -407,6 +369,14 @@ type openaiParser struct {
 	text    strings.Builder
 	usage   *Usage
 	result  Result
+	calls   map[int]*partialToolCall
+}
+
+type partialToolCall struct {
+	id        string
+	typeName  string
+	name      strings.Builder
+	arguments strings.Builder
 }
 
 func (p *openaiParser) Parse(line []byte) []Event {
@@ -425,6 +395,15 @@ func (p *openaiParser) Parse(line []byte) []Event {
 				Content          string `json:"content"`
 				Reasoning        string `json:"reasoning"`
 				ReasoningContent string `json:"reasoning_content"`
+				ToolCalls        []struct {
+					Index    int    `json:"index"`
+					ID       string `json:"id"`
+					Type     string `json:"type"`
+					Function struct {
+						Name      string `json:"name"`
+						Arguments string `json:"arguments"`
+					} `json:"function"`
+				} `json:"tool_calls"`
 			} `json:"delta"`
 		} `json:"choices"`
 		Usage *struct {
@@ -461,6 +440,39 @@ func (p *openaiParser) Parse(line []byte) []Event {
 			p.text.WriteString(ch.Delta.Content)
 			evs = append(evs, Event{Kind: EvTextDelta, Text: ch.Delta.Content})
 		}
+		for _, delta := range ch.Delta.ToolCalls {
+			if delta.Index < 0 || delta.Index >= maxToolCalls {
+				return p.failToolStream("The provider returned too many or invalid function calls.")
+			}
+			if p.calls == nil {
+				p.calls = map[int]*partialToolCall{}
+			}
+			call := p.calls[delta.Index]
+			if call == nil {
+				if len(p.calls) >= maxToolCalls {
+					return p.failToolStream("The provider returned too many function calls.")
+				}
+				call = &partialToolCall{}
+				p.calls[delta.Index] = call
+			}
+			if delta.ID != "" {
+				if len(delta.ID) > 128 {
+					return p.failToolStream("The provider returned an invalid function-call ID.")
+				}
+				call.id = delta.ID
+			}
+			if delta.Type != "" {
+				if len(delta.Type) > 32 {
+					return p.failToolStream("The provider returned an invalid function-call type.")
+				}
+				call.typeName = delta.Type
+			}
+			mergeStream(&call.name, delta.Function.Name)
+			mergeStream(&call.arguments, delta.Function.Arguments)
+			if call.name.Len() > 64 || call.arguments.Len() > maxToolArgs {
+				return p.failToolStream("A provider function call exceeded Phoenix's size limit.")
+			}
+		}
 	}
 	if c.Usage != nil {
 		u := &Usage{InputTokens: c.Usage.Prompt, OutputTokens: c.Usage.Output, CostUSD: c.Usage.Cost}
@@ -470,6 +482,48 @@ func (p *openaiParser) Parse(line []byte) []Event {
 		p.usage = u
 	}
 	return evs
+}
+
+func (p *openaiParser) failToolStream(message string) []Event {
+	p.done = true
+	p.result.IsError = true
+	p.result.Text = message
+	if p.usage != nil {
+		p.result.Usage = *p.usage
+	}
+	return []Event{{Kind: EvError, Text: message, IsError: true}, {Kind: EvDone, Text: message, IsError: true}}
+}
+
+func mergeStream(dst *strings.Builder, part string) {
+	current := dst.String()
+	if part == "" || part == current || strings.HasPrefix(current, part) {
+		return
+	}
+	if strings.HasPrefix(part, current) {
+		dst.Reset()
+	}
+	dst.WriteString(part)
+}
+
+func (p *openaiParser) toolCalls() []assistantToolCall {
+	indices := make([]int, 0, len(p.calls))
+	for i := range p.calls {
+		indices = append(indices, i)
+	}
+	sort.Ints(indices)
+	calls := make([]assistantToolCall, 0, len(indices))
+	for _, i := range indices {
+		c := p.calls[i]
+		typeName := c.typeName
+		if typeName == "" {
+			typeName = "function"
+		}
+		calls = append(calls, assistantToolCall{
+			ID: c.id, Type: typeName,
+			Function: functionCall{Name: c.name.String(), Arguments: c.arguments.String()},
+		})
+	}
+	return calls
 }
 
 func (p *openaiParser) finish() []Event {

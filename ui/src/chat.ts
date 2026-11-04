@@ -103,7 +103,7 @@ export class PhChat extends HTMLElement {
     }
     this.#empty.append(
       el("h2", undefined, "Ask Phoenix"),
-      el("p", undefined, "Ask about the tab you have open. Turn on Share page and the agent reads it. With Computer use on in Settings it can also look at and operate your apps, and it asks first."),
+      el("p", undefined, "Ask about the tab you have open. Turn on Share page and the agent reads it. With Computer use on, Claude and OpenAI-compatible API providers can look at and operate your apps, asking before each step. Codex tool support is in progress."),
       ideas,
     );
     this.#log.append(this.#empty);

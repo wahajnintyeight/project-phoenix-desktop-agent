@@ -76,7 +76,7 @@ export class PhDesktop extends HTMLElement {
       this.#status.textContent = d.problem;
     } else {
       this.#status.className = "msg is-ok";
-      this.#status.textContent = `agent-desktop ${d.version ?? ""} is installed${d.enabled ? " and on. The agent can use it when Claude is the default provider." : ". Turn it on to let the agent use it."}`;
+      this.#status.textContent = `agent-desktop ${d.version ?? ""} is installed${d.enabled ? " and on. The agent can use it with Claude or an OpenAI-compatible API provider." : ". Turn it on to let the agent use it."}`;
     }
     this.#skills.replaceChildren(...d.skills.map((s) => {
       const li = el("li", "skill");

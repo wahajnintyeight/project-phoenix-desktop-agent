@@ -6,13 +6,9 @@ import (
 	"errors"
 	"fmt"
 	"net/http"
-	"os"
-	"os/exec"
 	"sort"
 	"strings"
 	"time"
-
-	sdk "github.com/modelcontextprotocol/go-sdk/mcp"
 )
 
 // Resolver turns a stored reference ("vault:<name>", "env:<NAME>") into its value.
@@ -22,8 +18,9 @@ type Resolver func(ref string) (string, error)
 // the moment a server is started or described to a CLI, and is never logged or saved.
 type Resolved struct {
 	Server
-	EnvValues    map[string]string
-	HeaderValues map[string]string
+	EnvValues       map[string]string
+	HeaderValues    map[string]string
+	RequireApproval bool // HTTP-provider function calls ask the user before invoking this server.
 }
 
 // Resolve fills in a server's secrets.
@@ -75,23 +72,7 @@ func Test(ctx context.Context, s Resolved) (Info, error) {
 	ctx, cancel := context.WithTimeout(ctx, testTimeout)
 	defer cancel()
 
-	var tr sdk.Transport
-	switch s.Transport {
-	case Stdio:
-		cmd := exec.Command(s.Command, s.Args...)
-		cmd.Env = append(os.Environ(), envPairs(s.EnvValues)...)
-		hideWindow(cmd)
-		tr = &sdk.CommandTransport{Command: cmd, TerminateDuration: 3 * time.Second}
-	case HTTP:
-		tr = &sdk.StreamableClientTransport{
-			Endpoint:   s.URL,
-			HTTPClient: &http.Client{Transport: headerTransport{h: s.HeaderValues, next: http.DefaultTransport}},
-			MaxRetries: -1,
-		}
-	}
-
-	client := sdk.NewClient(&sdk.Implementation{Name: "phoenix", Version: "0.1"}, nil)
-	session, err := client.Connect(ctx, tr, nil)
+	session, err := connect(ctx, s)
 	if err != nil {
 		return Info{}, fmt.Errorf("could not connect: %w", scrub(err, s))
 	}
@@ -146,15 +127,18 @@ func envPairs(m map[string]string) []string {
 
 // scrub removes secret values from an error before it reaches the screen or the log.
 func scrub(err error, s Resolved) error {
-	msg := err.Error()
+	return errors.New(clip(redactValues(err.Error(), s), 400))
+}
+
+func redactValues(msg string, s Resolved) string {
 	for _, m := range []map[string]string{s.EnvValues, s.HeaderValues} {
 		for _, v := range m {
-			if len(v) >= 4 {
-				msg = strings.ReplaceAll(msg, v, "•••")
+			if v != "" {
+				msg = strings.ReplaceAll(msg, v, "[secret]")
 			}
 		}
 	}
-	return errors.New(clip(msg, 400))
+	return msg
 }
 
 func clip(s string, n int) string {

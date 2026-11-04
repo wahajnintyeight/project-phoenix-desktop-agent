@@ -11,7 +11,7 @@
 
 Phoenix brings a multi-tab browser and AI provider controls into one native desktop app. It is being built around a simple idea: keep the person in control, make the agent's work visible, and ask before sensitive actions.
 
-> **Project status:** Early development. The browser, provider setup, and model chat are implemented. Phoenix can answer questions about the active page when you choose to share it. With Computer use turned on it can look at and operate your Windows apps (asking first); it cannot yet click or type inside browser pages itself or work with files, and approvals for other providers are still in progress. There is no installer or published release at this time.
+> **Project status:** Early development. The browser, provider setup, and model chat are implemented. Phoenix can answer questions about the active page when you choose to share it. With Computer use turned on, Claude and OpenAI-compatible API providers can operate Windows apps through approved tool calls. The agent cannot yet click or type inside Phoenix browser pages itself or work with files; Codex tool support is still in progress. There is no published release at this time.
 
 ## What works today
 
@@ -20,9 +20,9 @@ Phoenix brings a multi-tab browser and AI provider controls into one native desk
 - A quick-action bar under the page: one-click requests that change with the page you are on (a job posting, an article, a form, search results, or text you have selected), so you send a request without typing it.
 - Provider setup, model selection, connection checks, and a quick model picker.
 - Streaming chat with the selected model, with an optional **Share page** control to include the active page's readable text in your message.
-- **Computer use** (off until you turn it on, needs the free `agent-desktop` tool): the agent can screenshot and analyze an app window, read its controls, click, scroll, drag, type, copy and paste. You approve each step in the chat (looking once per app, acting every time), and it never gets a shell or a whole-screen capture. Claude only for now.
+- **Computer use** (off until you turn it on, needs the free `agent-desktop` tool): Claude and OpenAI-compatible API providers can read app controls, click, scroll, drag, type, copy and paste. Vision-capable models can also inspect screenshots. You approve each step in the chat (looking once per app, acting every time), and the agent never gets a shell or a whole-screen capture. Codex support is still in progress.
 - Replies are formatted: headings, lists, tables, code blocks with a Copy button.
-- **MCP servers:** install as many as you like (paste the JSON from a server's install instructions, or enter a program or web address), review the exact command before it is saved, test the connection and list its tools, then choose which servers the agent may use. Secrets go to the encrypted vault. Used when the default provider is Claude for now; every tool call is shown in the chat.
+- **MCP servers:** install as many as you like (paste the JSON from a server's install instructions, or enter a program or web address), review the exact command before it is saved, test the connection and list its tools, then choose which servers the agent may use. Secrets go to the encrypted vault. Claude and OpenAI-compatible API providers can use enabled servers; API-provider calls ask for approval before each tool runs, and every call is shown in chat.
 - Claude and OpenAI Codex through their command-line clients, plus API-key connections for Gemini, OpenRouter, Mistral, Z.ai, and Grok.
 - API keys stored in a Windows DPAPI-encrypted vault; Phoenix does not put vault-backed keys in `config.yaml` or show them again in the UI.
 

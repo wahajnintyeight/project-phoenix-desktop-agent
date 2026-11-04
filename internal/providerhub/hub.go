@@ -10,6 +10,7 @@ import (
 	"sync"
 
 	"phoenix/internal/config"
+	"phoenix/internal/mcp"
 	"phoenix/internal/provider"
 	"phoenix/internal/secrets"
 )
@@ -299,6 +300,43 @@ func (h *Hub) Run(ctx context.Context, id provider.ID, req provider.Request, emi
 			return provider.Result{}, err
 		}
 		defer cleanup()
+	}
+	if provider.IsHTTP(id) && (req.UseMCP || len(req.MCPServers) > 0) {
+		servers := make([]mcp.Resolved, 0, len(req.MCPServers)+len(h.MCPEnabled()))
+		for _, server := range h.MCPEnabled() {
+			resolved, err := h.resolveMCP(server)
+			if err != nil {
+				return provider.Result{}, fmt.Errorf("MCP server %s: %w", server.Name, err)
+			}
+			resolved.RequireApproval = true
+			servers = append(servers, resolved)
+		}
+		servers = append(servers, req.MCPServers...)
+		if len(servers) > 0 {
+			runtime, err := mcp.Open(ctx, servers)
+			if err != nil {
+				return provider.Result{}, err
+			}
+			defer runtime.Close()
+			for _, function := range runtime.Functions() {
+				req.Tools = append(req.Tools, provider.Tool{
+					Name: function.Name, Server: function.Server, MCPName: function.MCPName,
+					Description: function.Description, Parameters: function.Parameters,
+					RequiresApproval: function.RequireApproval,
+				})
+			}
+			req.ExecuteTool = func(callCtx context.Context, call provider.ToolCall) (provider.ToolOutput, error) {
+				result, err := runtime.Call(callCtx, call.Tool.Name, call.Arguments)
+				if errors.Is(err, mcp.ErrUserDeclined) {
+					return provider.ToolOutput{}, provider.ErrToolDenied
+				}
+				out := provider.ToolOutput{Text: result.Text}
+				for _, image := range result.Images {
+					out.Images = append(out.Images, provider.ToolImage{MIMEType: image.MIMEType, Data: image.Data})
+				}
+				return out, err
+			}
+		}
 	}
 	return p.Run(ctx, r.Settings, req, emit)
 }
