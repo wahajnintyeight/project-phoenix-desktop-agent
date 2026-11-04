@@ -158,6 +158,7 @@ const (
 	wvGetDocumentTitle          = 48
 	ctrlClose                   = 24 // ICoreWebView2Controller::Close
 	navStartingGetURI           = 3  // ICoreWebView2NavigationStartingEventArgs::get_Uri
+	navCompletedGetIsSuccess    = 3  // ICoreWebView2NavigationCompletedEventArgs::get_IsSuccess
 	newWindowGetURI             = 3  // ICoreWebView2NewWindowRequestedEventArgs::get_Uri
 	newWindowPutHandled         = 6
 	newWindowGetIsUserInitiated = 8

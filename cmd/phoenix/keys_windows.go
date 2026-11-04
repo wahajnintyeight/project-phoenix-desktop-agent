@@ -127,7 +127,10 @@ func focusOmnibox() {
 }
 
 func newTab() {
-	createWebTab("about:blank")
+	t := &tab{id: nextID, kind: kindHome, title: "Home"}
+	nextID++
+	tabs = append(tabs, t)
+	activate(t.id)
 	focusOmnibox()
 }
 

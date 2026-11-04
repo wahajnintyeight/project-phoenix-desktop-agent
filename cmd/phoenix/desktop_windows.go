@@ -175,5 +175,8 @@ func mcpToolLine(name string, input json.RawMessage) string {
 			}
 		}
 	}
+	if server == "phoenix-browser" {
+		return "Browser › " + strings.TrimPrefix(tool, "browser_")
+	}
 	return server + " › " + tool
 }

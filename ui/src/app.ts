@@ -1,5 +1,6 @@
 import { listen, send } from "./protocol";
 import "./tab-strip";
+import "./history-list";
 import "./provider-card";
 import "./model-list";
 import "./quick-model";
@@ -12,7 +13,7 @@ import "./quick-actions";
 const $ = (id: string): HTMLElement | null => document.getElementById(id);
 
 // Go may only set these. Anything else is ignored.
-const SETTABLE_PROPS = new Set(["tabs", "value", "disabled", "src", "hidden", "data", "result", "models", "events", "actions"]);
+const SETTABLE_PROPS = new Set(["tabs", "history", "value", "disabled", "src", "hidden", "data", "result", "models", "events", "actions"]);
 const SETTABLE_ATTRS = new Set(["data-view", "data-state"]);
 
 // ── Message handling (Go → UI) ──────────────────────────────────────────
@@ -101,6 +102,45 @@ document.querySelector("[data-settings-nav]")?.addEventListener("click", (e) => 
   document.querySelectorAll<HTMLElement>("[data-section-btn]").forEach((other) => {
     other.setAttribute("aria-current", String(other === b));
   });
+}, { passive: true });
+
+// Display preferences only scale Phoenix chrome; the separately hosted page keeps its zoom.
+const displayScale = document.querySelector<HTMLInputElement>("#display-scale");
+const displayScaleValue = document.querySelector<HTMLOutputElement>("#display-scale-value");
+const compactSpacing = document.querySelector<HTMLInputElement>("#compact-spacing");
+function applyDisplaySettings(scale: number, compact: boolean): void {
+  const value = Math.min(120, Math.max(80, scale));
+  document.documentElement.style.setProperty("--ui-scale", String(value / 100));
+  document.documentElement.dataset["density"] = compact ? "compact" : "comfortable";
+  if (displayScale) displayScale.value = String(value);
+  if (displayScaleValue) displayScaleValue.value = `${value}%`;
+  if (compactSpacing) compactSpacing.checked = compact;
+}
+
+let savedScale = 100;
+let savedCompact = false;
+try {
+  const storedScale = Number(localStorage.getItem("phoenix.displayScale"));
+  if (Number.isFinite(storedScale) && storedScale > 0) savedScale = storedScale;
+  savedCompact = localStorage.getItem("phoenix.compactSpacing") === "1";
+} catch { /* WebView storage can be disabled; the defaults still work. */ }
+applyDisplaySettings(savedScale, savedCompact);
+displayScale?.addEventListener("input", () => {
+  const value = Number(displayScale.value);
+  applyDisplaySettings(value, compactSpacing?.checked ?? false);
+  try { localStorage.setItem("phoenix.displayScale", String(value)); } catch { /* session-only preference */ }
+}, { passive: true });
+compactSpacing?.addEventListener("change", () => {
+  const compact = compactSpacing.checked;
+  applyDisplaySettings(Number(displayScale?.value ?? 100), compact);
+  try { localStorage.setItem("phoenix.compactSpacing", compact ? "1" : "0"); } catch { /* session-only preference */ }
+}, { passive: true });
+$("display-reset")?.addEventListener("click", () => {
+  applyDisplaySettings(100, false);
+  try {
+    localStorage.removeItem("phoenix.displayScale");
+    localStorage.removeItem("phoenix.compactSpacing");
+  } catch { /* defaults still apply for this session */ }
 }, { passive: true });
 
 $("menu")?.addEventListener("toggle", (e) => send("m", (e as ToggleEvent).newState === "open" ? "open" : "close"), { passive: true });

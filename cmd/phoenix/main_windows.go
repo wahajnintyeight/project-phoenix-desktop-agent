@@ -51,6 +51,9 @@ func main() {
 	if len(os.Args) > 1 && os.Args[1] == "mcp-desktop" {
 		os.Exit(runDesktopMCP())
 	}
+	if len(os.Args) > 1 && os.Args[1] == "mcp-browser" {
+		os.Exit(runBrowserMCP())
+	}
 	if os.Getenv("PHOENIX_LOG") == "1" {
 		logFile, _ = os.Create(filepath.Join(os.TempDir(), "phoenix.log"))
 	}
@@ -232,6 +235,7 @@ func uiReady() {
 		uiViews = childWindows()
 		lowerUI()
 		initTabs()
+		initHistory()
 		initProviders()
 	}
 	ready = true
@@ -247,10 +251,12 @@ func uiReady() {
 		windowState(),
 	)
 	pushTabs()
+	pushHistory()
 	quickState.key = "" // the UI is new: draw the bar even if it looks unchanged
 	refreshActions(true)
 	if hub != nil {
 		refreshProviders() // the agent panel and start page need to know what is ready
+		pushMCP("", false) // slash commands need the installed server list before Settings opens
 	}
 	pushToolbar()
 }
@@ -266,6 +272,10 @@ func handleAction(action, id string) {
 		stopChat()
 	case "config.open":
 		openConfigFolder()
+	case "history.open":
+		openHistoryEntry(id)
+	case "history.clear":
+		clearHistory()
 	case "menu.settings":
 		runLater(openSettings)
 	case "tab.select", "tab.close":

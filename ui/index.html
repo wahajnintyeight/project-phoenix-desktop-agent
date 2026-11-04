@@ -92,6 +92,8 @@
           <input id="home-search" class="home-search" type="text" placeholder="Search the web or enter an address" autocomplete="off" spellcheck="false" aria-label="Search the web or enter an address">
         </div>
 
+        <ph-history-list id="recent-sites"></ph-history-list>
+
         <section class="flex flex-col gap-1">
           <h2 class="text-lg">Get started</h2>
           <ol>
@@ -193,6 +195,28 @@
 
             <div class="flex-col gap-8" data-for="general">
               <h2>General</h2>
+
+              <section class="flex flex-col gap-3">
+                <div>
+                  <h3>Display</h3>
+                  <p class="text-fg-muted">Adjust Phoenix’s text size and spacing. The web page stays at its own zoom level.</p>
+                </div>
+                <div class="display-control">
+                  <label for="display-scale" class="font-medium">Interface size <output id="display-scale-value" for="display-scale">100%</output></label>
+                  <div class="display-scale-row">
+                    <input id="display-scale" type="range" min="80" max="120" step="5" value="100" aria-describedby="display-scale-help">
+                    <button id="display-reset" class="btn btn-sm" type="button">Reset</button>
+                  </div>
+                  <p id="display-scale-help" class="text-xs text-fg-muted">Use a smaller size to fit more of Phoenix on screen.</p>
+                </div>
+                <label class="display-density">
+                  <input id="compact-spacing" type="checkbox">
+                  <span class="flex flex-col">
+                    <span class="font-medium">Compact spacing</span>
+                    <span class="text-xs text-fg-muted">Tighten gaps and use more of the window for Settings.</span>
+                  </span>
+                </label>
+              </section>
 
               <section class="flex flex-col gap-3">
                 <div>

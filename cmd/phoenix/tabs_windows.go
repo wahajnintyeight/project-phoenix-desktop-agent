@@ -9,6 +9,7 @@ import (
 	"strconv"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"time"
 	"unsafe"
 
@@ -41,6 +42,8 @@ type tab struct {
 
 	cv *edge.Chromium // nil for the home tab
 	wv unsafe.Pointer // ICoreWebView2*
+
+	browserEpoch atomic.Uint64 // bumped for each top-level navigation; invalidates page refs
 }
 
 var (
@@ -216,20 +219,38 @@ func activate(id int) {
 
 func createWebTab(rawURL string) {
 	logf("createWebTab %q", rawURL)
+	t := &tab{id: nextID, kind: kindWeb, url: rawURL, loading: true}
+	nextID++
+	if !prepareWebTab(t) {
+		return
+	}
+	tabs = append(tabs, t)
+	activate(t.id)
+	t.cv.Navigate(rawURL)
+}
+
+// prepareWebTab attaches a page WebView and its host-side handlers to an existing tab.
+// It lets a home tab become a browsing tab without leaving an extra blank tab behind.
+func prepareWebTab(t *tab) bool {
+	t.browserEpoch.Store(1)
 	cv := edge.NewChromium()
 	cv.DataPath = browserDataPath
 	cv.AdditionalBrowserArgs = browserArgs
 	cv.SetErrorCallback(func(err error) { logf("tab webview2: %v\n%s", err, debug.Stack()) })
-
-	t := &tab{id: nextID, kind: kindWeb, url: rawURL, loading: true, cv: cv}
-	nextID++
+	t.cv = cv
 
 	// Must never fire: web messaging is disabled for pages. Logged so a regression is visible.
 	cv.MessageCallback = func(m string, _ *edge.ICoreWebView2, _ *edge.ICoreWebView2WebMessageReceivedEventArgs) {
 		logf("SECURITY: tab %d delivered a web message (%d bytes)", t.id, len(m))
 	}
-	cv.NavigationCompletedCallback = func(_ *edge.ICoreWebView2, _ *edge.ICoreWebView2NavigationCompletedEventArgs) {
+	cv.NavigationCompletedCallback = func(_ *edge.ICoreWebView2, args *edge.ICoreWebView2NavigationCompletedEventArgs) {
 		t.loading = false
+		if comGetBool(unsafe.Pointer(args), navCompletedGetIsSuccess) {
+			if current := comGetString(t.wv, wvGetSource); current != "" {
+				t.url = current
+			}
+			recordVisited(t.url, t.title)
+		}
 		pushTabs()
 		if t.id == activeID {
 			runLater(func() { refreshActions(false) })
@@ -239,13 +260,16 @@ func createWebTab(rawURL string) {
 
 	if !cv.Embed(hwnd) {
 		logf("tab %d: embed failed", t.id)
-		return
+		t.cv = nil
+		return false
 	}
 	ctrl := cv.GetController()
 	core, err := ctrl.GetCoreWebView2()
 	if err != nil {
 		logf("tab %d: GetCoreWebView2: %v", t.id, err)
-		return
+		comCall(unsafe.Pointer(cv.GetController()), ctrlClose)
+		t.cv = nil
+		return false
 	}
 	t.wv = unsafe.Pointer(core)
 
@@ -268,7 +292,9 @@ func createWebTab(rawURL string) {
 		}
 	}
 	must(wvAddNavigationStarting, "NavigationStarting", func(_, args unsafe.Pointer) {
+		t.browserEpoch.Add(1)
 		t.loading = true
+		t.title = ""
 		if u := comGetString(args, navStartingGetURI); u != "" {
 			t.url = u
 		}
@@ -295,6 +321,7 @@ func createWebTab(rawURL string) {
 	})
 	must(wvAddDocumentTitleChanged, "DocumentTitleChanged", func(_, _ unsafe.Pointer) {
 		t.title = comGetString(t.wv, wvGetDocumentTitle)
+		updateVisitedTitle(t.url, t.title)
 		pushTabs()
 	})
 	must(wvAddNewWindowRequested, "NewWindowRequested", func(_, args unsafe.Pointer) {
@@ -305,9 +332,7 @@ func createWebTab(rawURL string) {
 		}
 	})
 
-	tabs = append(tabs, t)
-	activate(t.id)
-	cv.Navigate(rawURL)
+	return true
 }
 
 func closeTab(id int) {
@@ -315,6 +340,7 @@ func closeTab(id int) {
 	if t == nil {
 		return
 	}
+	forgetBrowserTab(id)
 	if t.cv != nil {
 		comCall(unsafe.Pointer(t.cv.GetController()), ctrlClose)
 	}
@@ -340,8 +366,23 @@ func navigateActive(input string) {
 		return
 	}
 	t := activeTab()
-	if t == nil || t.kind != kindWeb {
+	if t == nil || t.kind == kindSettings {
 		runLater(func() { createWebTab(target) })
+		return
+	}
+	if t.kind == kindHome {
+		t.kind, t.title, t.url, t.loading = kindWeb, "", target, true
+		if !prepareWebTab(t) {
+			t.kind, t.title, t.url, t.loading = kindHome, "Home", "", false
+			pushTabs()
+			pushToolbar()
+			return
+		}
+		layoutAll()
+		pushTabs()
+		pushToolbar()
+		refreshActions(true)
+		t.cv.Navigate(target)
 		return
 	}
 	t.cv.Navigate(target)

@@ -115,6 +115,15 @@ export class PhMcp extends HTMLElement {
   #removing = "";
   #data: McpData = { servers: [] };
 
+  get workingServers(): { name: string; toolCount: number }[] {
+    const working: { name: string; toolCount: number }[] = [];
+    for (const server of this.#data.servers) {
+      const result = this.#tests.get(server.name);
+      if (server.enabled && result?.ok) working.push({ name: server.name, toolCount: result.tools?.length ?? 0 });
+    }
+    return working;
+  }
+
   connectedCallback(): void {
     if (this.childElementCount > 0) return;
     this.#notice.setAttribute("role", "status");

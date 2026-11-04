@@ -45,7 +45,7 @@ All WebView2 instances share one environment and one user-data folder (the persi
 | Language (host) | Go 1.24+ | `os.Root` for confined file access |
 | WebView2 binding | `github.com/wailsapp/go-webview2` v1.0.23 (used by the prototype), plus raw COM calls where its generated code is wrong | Its `pkg/webview2` package has generated interfaces for `CallDevToolsProtocolMethod`, `NewWindowRequested`, `NavigationStarting`, `DownloadStarting`, profiles and `TrySuspend` (present, **not yet exercised**). The generated `Settings9` binding was found broken (see 14a), so each interface must be tested before use |
 | Win32 / COM | `golang.org/x/sys/windows`, `go-ole` | Recycle Bin, ShellExecute, Credential Manager |
-| Automation | CDP via `CallDevToolsProtocolMethod`, typed with `chromedp/cdproto` | Behind a `cdp.Session` interface |
+| Browser automation | WebView2 `CallDevToolsProtocolMethod` with Phoenix-owned protocol structs | Per-tab calls are serialized; the model receives named tools, never arbitrary CDP |
 | UI language | Strict TypeScript, vanilla, no runtime dependencies | Custom Elements for components |
 | UI build | `esbuild` (written in Go, has a Go API) bundles TS; Tailwind CSS v4 CLI compiles the stylesheet at build time | Output embedded with `go:embed` (see 9e for how the CSS joins the bundle). esbuild strips types without checking them, so type-checking needs `tsc` (Node) or the native TypeScript compiler port **[unverified]**. Keep Node as a dev/CI-only dependency |
 | Protocol types | One schema in Go, generated TypeScript types (e.g. `tygo`) **[unverified]** | Prevents the two sides drifting apart |
@@ -366,34 +366,33 @@ This is the largest technical risk in the UI design. Test it first.
 
 Modeled on [vercel-labs/agent-desktop](https://github.com/vercel-labs/agent-desktop) (Apache-2.0; a Rust CLI and C library that lets agents operate desktop apps through OS accessibility trees, with a Windows adapter). Phoenix adopts its **contract**, not its code, for browser tabs.
 
-### Contract
+### Implemented browser tools
 
-- **Observe, act on a ref, observe again to verify.** No pixel matching by default.
-- **Snapshots** return a JSON tree with a `snapshot_id`, a `ref_count`, and elements that carry a `ref` and `available_actions`.
-- **Refs are scoped to their snapshot** (for example `@s8f3k2p9:e8`). A bare ref is rejected as `INVALID_ARGS`. If the page changed, the tool returns `STALE_REF` or `AMBIGUOUS_TARGET` and the agent must re-snapshot.
-- **Snapshot options:** skeleton (outline only), compact, root (drill into one region by ref), interactive-only. These keep token cost low for local models.
-- **Structured errors:** `code`, `disposition.retry` (safe / unsafe / never) and a `suggestion`. The agent retries only when retry is safe.
-- **Headless first.** Actions on refs go through CDP into the tab and do not move the user's mouse or steal focus.
-- **Privacy:** snapshots, screenshots and clipboard contents can hold private data. Redact them in logs.
+- **Observe, act on a ref, observe again to verify.** `browser_snapshot` returns a bounded outline from the CDP accessibility tree, with per-snapshot element refs. Refs expire on navigation or after a page action; a stale or unknown ref is rejected.
+- **Observe:** `browser_tabs`, `browser_snapshot`, `browser_screenshot`, `browser_wait`.
+- **Act:** `browser_click`, `browser_type`, `browser_fill`, `browser_press`, `browser_scroll`, `browser_select`.
+- **Tabs and navigation:** `browser_open_tab`, `browser_close_tab`, `browser_switch_tab`, `browser_navigate`, `browser_back`, `browser_forward`, `browser_reload`.
+- Page reads ask for approval once per site for the turn; page actions ask each time, using the existing Phoenix approval UI. Calls are tied to the chat run with a random token and travel only over a loopback listener. Phoenix starts a small stdio MCP child from its own executable; there is no browser extension, third-party desktop agent, remote-debugging port, or background page poller.
+- **Bounded work:** snapshots default to depth 8 (hard cap 10), emit at most 250 nodes and 24 KiB of text; waits poll only while requested and stop within 15 seconds; screenshots are JPEG and reduced to 1280 × 900 or less; CDP replies and MCP payloads have explicit size limits. Operations on one tab are serialized, and asynchronous COM callbacks keep the UI thread free while WebView2 responds.
+- **Privacy:** tab URLs sent to the model omit query strings and fragments; snapshots do not include input values; password, file, hidden, payment and authentication-code fields are refused by text entry. Existing WebView2 profile sign-ins are reused, so the user can authorize a site in the browser and the agent can then work with the signed-in page.
+- **Current limits:** no file upload/download, arbitrary page JavaScript, coordinate-only canvas actions, or multi-action batching. Errors are plain bounded text rather than the proposed retry-disposition schema. Screenshot use depends on the selected provider accepting image tool results.
 
-### Proposed tool groups (names are provisional)
+### Possible future browser tools
 
 | Group | Tools |
 |---|---|
-| Observe | `snapshot`, `find`, `get`, `is`, `screenshot`, `list_tabs` |
-| Act on a ref | `click`, `double_click`, `right_click`, `type`, `set_value`, `clear`, `focus`, `select`, `toggle`, `check`, `uncheck`, `expand`, `collapse`, `scroll`, `scroll_to`, `hover`, `drag`, `press` |
-| Tabs and navigation | `tab_open`, `tab_close`, `tab_switch`, `navigate`, `back`, `forward`, `reload` |
-| Files | `upload` (workspace file into a file input), `await_download` |
+| Observe | `find`, `get`, `is`, richer snapshots |
+| Act on a ref | `double_click`, `right_click`, `clear`, `focus`, `toggle`, `check`, `uncheck`, `expand`, `collapse`, `hover`, `drag` |
+| Files | `upload` (workspace-scoped file into a file input), `await_download` |
 | Control | `wait` (element, state or navigation), `batch`, `trace` / session log |
 | Phoenix-only | `ask_user`, `fill_credential` (Phoenix fills; the model sees a placeholder), `request_approval`, file tools, Drive tools, MCP tools |
 
-### Implementation
+### Implementation details
 
-- Snapshot built from the CDP accessibility tree plus DOM snapshot, using a Phoenix-defined format (role, name, state, bounds) so Chromium's raw AX structure never leaks into prompts.
-- Actions via CDP trusted input (`Input.dispatchMouseEvent` / `dispatchKeyEvent`). File uploads via `DOM.setFileInputFiles`.
-- Screenshots only for vision-capable models (JPEG, reduced quality by default).
-- Prefer in-process CDP over a remote-debugging port, which would expose the logged-in browser to every local process.
-- All behind `cdp.Session` and the browser interface so another engine can be substituted.
+- Snapshot output is Phoenix-formatted role, name and selected state labels; raw Chromium AX payloads and current form values are not sent to the provider.
+- Click and scroll use CDP trusted input (`Input.dispatchMouseEvent`); key presses use `Input.dispatchKeyEvent`; text uses `Input.insertText` only after checking the target node.
+- The WebView2 profile remains the user's existing browser profile. Each tool call identifies its tab, and all page operations happen on demand.
+- The browser implementation is Windows/WebView2-specific today; a cross-engine `cdp.Session` abstraction can be added if another embedded browser is introduced.
 
 ### Native desktop apps (secondary feature)
 

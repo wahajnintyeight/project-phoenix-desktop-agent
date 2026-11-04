@@ -197,7 +197,9 @@ func (r *Runtime) Call(ctx context.Context, name string, arguments json.RawMessa
 	if json.Unmarshal(arguments, &args) != nil || args == nil {
 		return ToolResult{}, errors.New("tool arguments must be a JSON object")
 	}
-	ctx, cancel := context.WithTimeout(ctx, 90*time.Second)
+	// Tool calls may wait on an explicit Phoenix approval. Keep the deadline aligned with
+	// the approval broker's five-minute window; ordinary local calls still return promptly.
+	ctx, cancel := context.WithTimeout(ctx, 6*time.Minute)
 	defer cancel()
 	result, err := t.session.CallTool(ctx, &sdk.CallToolParams{Name: t.tool, Arguments: args})
 	if err != nil {

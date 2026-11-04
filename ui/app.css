@@ -53,6 +53,7 @@
   --text-xl: 1.1875rem;
   --text-xl--line-height: 1.3;
   --text-2xl: 1.375rem;
+  --spacing: 0.25rem;
   --text-2xl--line-height: 1.2;
 
   --radius-sm: 4px;
@@ -74,7 +75,8 @@
 @utility scroll { scrollbar-width: thin; scrollbar-color: var(--color-line-strong) transparent; }
 
 @layer base {
-  html { color-scheme: dark; }
+  html { color-scheme: dark; font-size: calc(16px * var(--ui-scale, 1)); }
+  html[data-density="compact"] { --spacing: 0.2125rem; }
   html, body { height: 100%; }
   body {
     @apply bg-canvas font-sans text-sm text-fg antialiased;
@@ -113,6 +115,8 @@
   .btn:hover:not(:disabled) { @apply bg-overlay; }
   .btn:active:not(:disabled) { @apply bg-line; }
   .btn:disabled { @apply opacity-45; }
+  .btn, .icon-btn { min-height: 24px; }
+  .icon-btn { min-width: 24px; }
   .btn-primary { @apply border-transparent bg-accent font-semibold text-accent-ink; }
   .btn-primary:hover:not(:disabled) { @apply bg-accent-hover; }
   .btn-primary:active:not(:disabled) { @apply bg-accent-active; }
@@ -127,6 +131,7 @@
 
   .field {
     @apply h-8 w-full min-w-0 rounded-md border border-line-strong bg-sunken px-3 text-sm text-fg transition-colors;
+    min-height: 28px;
   }
   .field:focus { @apply border-accent outline-none; }
   .row > .field { flex: 1 1 12rem; width: auto; }
@@ -244,6 +249,19 @@
   /* ── start page ──────────────────────────────────────────────────── */
   .home-search { @apply h-11 w-full rounded-xl border border-line-strong bg-sunken pr-4 pl-11 text-base text-fg transition-colors; }
   .home-search:focus { @apply border-accent outline-none; }
+  ph-history-list { @apply block; }
+  .history-section { @apply flex flex-col gap-3; }
+  .history-heading { @apply flex items-center justify-between gap-3; }
+  .history-clear { @apply rounded-md px-2 py-1 text-xs text-fg-subtle transition-colors; }
+  .history-clear:hover { @apply bg-raised text-fg; }
+  .history-grid { @apply grid grid-cols-2 gap-2; }
+  .history-item { @apply flex min-w-0 items-center gap-3 rounded-xl border border-line bg-panel p-3 text-left transition-colors; }
+  .history-item:hover { @apply border-line-strong bg-raised; }
+  .history-mark { @apply grid size-9 shrink-0 place-items-center rounded-lg bg-raised text-xs font-semibold text-accent; }
+  .history-copy { @apply flex min-w-0 flex-1 flex-col gap-0.5; }
+  .history-title { @apply truncate text-sm font-medium text-fg; }
+  .history-host { @apply truncate text-xs text-fg-subtle; }
+  .history-empty { @apply rounded-lg border border-dashed border-line px-4 py-3 text-sm text-fg-subtle; }
   .step { @apply flex items-start gap-3 pt-3 pb-3; }
   .step + .step { box-shadow: inset 0 1px 0 var(--color-line); } /* a hairline, not a border: it is a divider, not a container edge */
   .step-mark { @apply mt-0.5 grid size-5 shrink-0 place-items-center rounded-full border-[1.5px] border-line-strong text-transparent; }
@@ -259,6 +277,15 @@
   .settings[data-section="desktop"] [data-for="desktop"],
   .settings[data-section="browser"] [data-for="browser"],
   .settings[data-section="general"] [data-for="general"] { display: flex; }
+  .display-control { @apply flex max-w-xl flex-col gap-2; }
+  .display-control label { @apply flex items-center justify-between gap-4; }
+  .display-control output { @apply tabular text-fg-muted; }
+  .display-scale-row { @apply flex items-center gap-3; }
+  .display-scale-row input[type="range"] { @apply min-w-0 flex-1 accent-[var(--color-accent)]; }
+  .display-density { @apply flex min-h-11 items-center gap-3; }
+  .display-density input { width: 16px; height: 16px; accent-color: var(--color-accent); }
+  html[data-density="compact"] .settings > div { max-width: 72rem; gap: 2rem; padding: 2rem 1.5rem 3rem; }
+  html[data-density="compact"] .settings [data-for] { gap: 1.25rem; }
   .path { @apply block rounded-md border border-line bg-sunken px-3 py-2 font-mono text-xs text-fg-muted; overflow-wrap: anywhere; user-select: text; }
   .diag > summary svg { @apply transition-transform; }
   .diag[open] > summary svg { @apply rotate-90; }
@@ -507,8 +534,19 @@
   .chat-meta { @apply tabular text-xs text-fg-subtle; }
   .chat-meta:empty { display: none; }
   .chat-error .chat-who, .chat-error .chat-text { @apply text-danger; }
+  .chat-local .chat-text { @apply text-sm whitespace-pre-wrap text-fg-muted; }
 
-  .chat-composer { @apply px-3 pt-1 pb-3; }
+  .chat-composer { @apply relative px-3 pt-1 pb-3; }
+  .slash-menu {
+    @apply scroll absolute z-20 max-h-[min(18rem,55vh)] overflow-y-auto rounded-lg border border-line-strong bg-overlay p-1 shadow-pop;
+    inset-inline: calc(var(--spacing) * 3);
+    bottom: calc(100% + 8px);
+  }
+  .slash-option { @apply flex w-full items-center gap-3 rounded-md px-3 py-2 text-left transition-colors; }
+  .slash-option:hover, .slash-option[aria-selected="true"] { @apply bg-raised; }
+  .slash-name { @apply shrink-0 font-mono text-xs text-accent; }
+  .slash-description { @apply min-w-0 text-xs text-fg-muted; }
+  .slash-empty { @apply px-3 py-2 text-xs text-fg-muted; }
   .composer { @apply rounded-xl border border-line-strong bg-sunken transition-colors; }
   .composer:has(.chat-input:focus) { @apply border-accent; }
   .chat-input { @apply block max-h-40 w-full resize-none bg-transparent px-3 pt-2.5 pb-1 text-base text-fg; font: inherit; line-height: 1.5; }

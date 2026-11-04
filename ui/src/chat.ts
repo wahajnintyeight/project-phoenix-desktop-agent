@@ -4,7 +4,9 @@
 import { el } from "./dom";
 import { icon } from "./icons";
 import { MarkdownView } from "./markdown";
+import type { PhMcp } from "./mcp-settings";
 import { send } from "./protocol";
+import { resolveSlashCommand, searchSlashCommands, type SlashCommandDefinition } from "./slash-commands";
 
 export interface ChatEvent {
   k: "user" | "note" | "tool" | "approve" | "approved" | "start" | "delta" | "done" | "error" | "stopped" | "reset";
@@ -70,11 +72,14 @@ export class PhChat extends HTMLElement {
   readonly #log = el("div", "chat-log");
   readonly #empty = el("div", "chat-empty");
   readonly #input = el("textarea", "chat-input");
+  readonly #commandMenu = el("div", "slash-menu");
   readonly #send = el("button", "send-btn");
   readonly #share = el("button", "share-chip");
   readonly #newChat = el("button", "btn btn-quiet btn-sm", "New chat");
   #shareOn = false;
   #running = false;
+  #commands: SlashCommandDefinition[] = [];
+  #activeCommand = 0;
   #current: Msg | null = null;
   #lastUser: HTMLElement | null = null; // where a "page shared" note goes
   #who = "Agent"; // the label for the agent's messages this turn: provider and model
@@ -110,9 +115,17 @@ export class PhChat extends HTMLElement {
 
     this.#input.rows = 1;
     this.#input.maxLength = 20000;
-    this.#input.placeholder = "Message the agent";
+    this.#input.placeholder = "Message the agent · / for commands";
     this.#input.setAttribute("aria-label", "Message");
-    this.#input.setAttribute("aria-description", "Enter sends. Shift and Enter add a new line.");
+    this.#input.setAttribute("aria-description", "Enter sends. Shift and Enter add a new line. Type / to browse commands.");
+    this.#commandMenu.id = "slash-commands";
+    this.#commandMenu.setAttribute("role", "listbox");
+    this.#commandMenu.setAttribute("aria-label", "Slash commands");
+    this.#commandMenu.hidden = true;
+    this.#input.setAttribute("aria-autocomplete", "list");
+    this.#input.setAttribute("aria-controls", this.#commandMenu.id);
+    this.#input.setAttribute("aria-haspopup", "listbox");
+    this.#input.setAttribute("aria-expanded", "false");
     this.#input.spellcheck = true;
 
     // Sharing is the user's choice, kept between sessions: the page's text goes to the model.
@@ -133,7 +146,7 @@ export class PhChat extends HTMLElement {
     const composer = el("div", "composer");
     composer.append(this.#input, bar);
     const wrap = el("div", "chat-composer");
-    wrap.append(composer);
+    wrap.append(this.#commandMenu, composer);
 
     this.#newChat.type = "button";
     this.#newChat.hidden = true;
@@ -144,14 +157,29 @@ export class PhChat extends HTMLElement {
     this.#input.addEventListener("keydown", (e) => {
       if (e.key === "Enter" && !e.shiftKey && !e.isComposing) {
         e.preventDefault();
-        this.#submit();
+        this.#submitInput();
+      } else if (e.key === "ArrowDown" && !this.#commandMenu.hidden && this.#commands.length) {
+        e.preventDefault();
+        this.#setActiveCommand(this.#activeCommand + 1);
+      } else if (e.key === "ArrowUp" && !this.#commandMenu.hidden && this.#commands.length) {
+        e.preventDefault();
+        this.#setActiveCommand(this.#activeCommand - 1);
+      } else if (e.key === "Escape" && !this.#commandMenu.hidden) {
+        e.preventDefault();
+        this.#hideCommandMenu();
       }
     });
     this.#input.addEventListener("input", () => {
       this.#input.rows = Math.min(6, this.#input.value.split("\n").length); // grows without reading layout
+      this.#renderCommandMenu();
       this.#syncSend();
     }, { passive: true });
-    this.#send.addEventListener("click", () => (this.#running ? send("g", "stop") : this.#submit()), { passive: true });
+    this.#commandMenu.addEventListener("click", (e) => {
+      const option = (e.target as Element | null)?.closest<HTMLButtonElement>("button[data-command-index]");
+      const command = this.#commands[Number(option?.dataset["commandIndex"])];
+      if (command) this.#runCommand(command);
+    }, { passive: true });
+    this.#send.addEventListener("click", () => (this.#running ? send("g", "stop") : this.#submitInput()), { passive: true });
     this.#share.addEventListener("click", () => this.#setShare(!this.#shareOn), { passive: true });
     this.#newChat.addEventListener("click", () => send("g", "new"), { passive: true });
   }
@@ -186,6 +214,105 @@ export class PhChat extends HTMLElement {
     this.#syncSend();
   }
 
+  #submitInput(): void {
+    if (!this.#input.value.startsWith("/")) {
+      this.#submit();
+      return;
+    }
+    const command = resolveSlashCommand(this.#input.value) ?? (!this.#commandMenu.hidden ? this.#commands[this.#activeCommand] : undefined);
+    if (command) this.#runCommand(command);
+    else this.#renderCommandMenu();
+  }
+
+  #renderCommandMenu(): void {
+    if (!this.#input.value.startsWith("/")) {
+      this.#hideCommandMenu();
+      return;
+    }
+    const matches = searchSlashCommands(this.#input.value);
+    this.#commands = this.#running ? matches.filter((command) => command.action.type !== "quick-action") : matches;
+    this.#activeCommand = 0;
+    this.#commandMenu.replaceChildren(...this.#commands.map((command, index) => {
+      const option = el("button", "slash-option");
+      option.type = "button";
+      option.tabIndex = -1;
+      option.id = `slash-option-${command.id}`;
+      option.dataset["commandIndex"] = String(index);
+      option.setAttribute("role", "option");
+      option.setAttribute("aria-selected", String(index === 0));
+      option.append(el("span", "slash-name", `/${command.id}`), el("span", "slash-description", command.description));
+      return option;
+    }));
+    if (!this.#commands.length) {
+      const text = matches.length && this.#running
+        ? "Prompt commands are available when the current reply finishes."
+        : "No matching command. Type / to browse commands.";
+      const empty = el("p", "slash-empty", text);
+      empty.setAttribute("role", "status");
+      this.#commandMenu.append(empty);
+    }
+    this.#commandMenu.hidden = false;
+    this.#input.setAttribute("aria-expanded", "true");
+    if (this.#commands.length) this.#input.setAttribute("aria-activedescendant", `slash-option-${this.#commands[0]?.id}`);
+    else this.#input.removeAttribute("aria-activedescendant");
+    this.#commandMenu.scrollTop = 0;
+  }
+
+  #setActiveCommand(index: number): void {
+    const length = this.#commands.length;
+    this.#activeCommand = (index + length) % length;
+    this.#commandMenu.querySelectorAll<HTMLButtonElement>("[data-command-index]").forEach((option, i) => {
+      const active = i === this.#activeCommand;
+      option.setAttribute("aria-selected", String(active));
+      if (active) {
+        this.#input.setAttribute("aria-activedescendant", option.id);
+        option.scrollIntoView({ block: "nearest" });
+      }
+    });
+  }
+
+  #hideCommandMenu(): void {
+    this.#commands = [];
+    this.#commandMenu.hidden = true;
+    this.#input.setAttribute("aria-expanded", "false");
+    this.#input.removeAttribute("aria-activedescendant");
+  }
+
+  #runCommand(command: SlashCommandDefinition): void {
+    if (this.#running && command.action.type === "quick-action") return;
+    this.#hideCommandMenu();
+    if (command.action.type === "help") {
+      this.#input.value = "/";
+      this.#renderCommandMenu();
+      this.#input.focus();
+      return;
+    }
+
+    this.#input.value = "";
+    this.#input.rows = 1;
+    this.#syncSend();
+    switch (command.action.type) {
+      case "clear": send("g", "new"); break;
+      case "stop": send("g", "stop"); break;
+      case "share": this.#setShare(!this.#shareOn); break;
+      case "settings": send("c", "menu.settings"); break;
+      case "model": document.querySelector<HTMLButtonElement>("#quick-model button")?.click(); break;
+      case "list-mcps": this.#listWorkingMCPs(); break;
+      case "quick-action": send("g", "act", command.action.id); break;
+    }
+    if (command.action.type !== "settings" && command.action.type !== "model") this.#input.focus();
+  }
+
+  #listWorkingMCPs(): void {
+    const servers = document.querySelector<PhMcp>("#mcp-servers")?.workingServers ?? [];
+    const text = servers.length
+      ? `Enabled MCP servers that passed their latest test this session:\n${servers.map((server) => `• ${server.name} — ${server.toolCount} ${server.toolCount === 1 ? "tool" : "tools"}`).join("\n")}`
+      : "No enabled MCP servers have passed a connection test this session. Open Settings → Tools (MCP) and test a server first.";
+    const message = this.#message("Phoenix", "chat-local");
+    message.set(text);
+    this.#log.scrollTop = this.#log.scrollHeight;
+  }
+
   #nearBottom(): boolean {
     const l = this.#log;
     return l.scrollHeight - l.scrollTop - l.clientHeight < 48;
@@ -195,6 +322,7 @@ export class PhChat extends HTMLElement {
     this.#running = on;
     this.#log.setAttribute("aria-busy", String(on));
     this.#syncSend();
+    if (!this.#commandMenu.hidden) this.#renderCommandMenu();
   }
 
   #message(who: string, cls: string, markdown = false): Msg {
