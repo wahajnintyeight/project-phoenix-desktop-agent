@@ -230,6 +230,7 @@ type Request struct {
 	MCPConfig     string
 	CodexMCPURL   string   // per-run local tool proxy, never persisted
 	CodexMCPToken string   // passed in the child environment, never on the command line
+	CodexDisable  []string // Codex built-in features to turn off (set by the provider itself)
 	AllowedTools  []string // tool names the CLI may use without asking, e.g. "mcp__phoenix__*"
 	Tools         []Tool
 	ExecuteTool   ToolExecutor

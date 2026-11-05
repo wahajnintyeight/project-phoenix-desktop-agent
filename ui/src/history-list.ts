@@ -51,17 +51,36 @@ export class PhHistoryList extends HTMLElement {
     const grid = document.createElement("div");
     grid.className = "history-grid";
     for (const item of this.#history) {
-      const button = document.createElement("button");
+      const button = document.createElement("div");
       button.className = "history-item";
       button.dataset["action"] = "history.open";
       button.dataset["id"] = item.id;
       button.title = `${item.title}\n${item.host}`;
+      button.setAttribute("role", "button");
+      button.tabIndex = 0;
       button.setAttribute("aria-label", `Open ${item.title} on ${item.host}`);
 
       const mark = document.createElement("span");
       mark.className = "history-mark";
       mark.setAttribute("aria-hidden", "true");
       mark.textContent = [...item.host][0]?.toLocaleUpperCase() ?? "W";
+
+      const favicon = document.createElement("img");
+      favicon.className = "history-favicon";
+      favicon.alt = "";
+      favicon.loading = "lazy";
+      favicon.src = `https://${item.host}/favicon.ico`;
+      favicon.addEventListener("load", () => { mark.hidden = true; });
+      favicon.addEventListener("error", () => favicon.remove());
+
+      const remove = document.createElement("button");
+      remove.className = "history-remove";
+      remove.dataset["action"] = "history.delete";
+      remove.dataset["id"] = item.id;
+      remove.type = "button";
+      remove.textContent = "×";
+      remove.title = `Remove ${item.host} from history`;
+      remove.setAttribute("aria-label", `Remove ${item.title} from history`);
 
       const copy = document.createElement("span");
       copy.className = "history-copy";
@@ -72,9 +91,15 @@ export class PhHistoryList extends HTMLElement {
       host.className = "history-host";
       host.textContent = item.host;
       copy.append(siteTitle, host);
-      button.append(mark, copy);
+      button.append(mark, favicon, copy, remove);
       grid.append(button);
     }
+    grid.addEventListener("keydown", (event) => {
+      const target = event.target;
+      if (!(target instanceof HTMLElement) || !target.matches(".history-item") || (event.key !== "Enter" && event.key !== " ")) return;
+      event.preventDefault();
+      target.click();
+    });
     section.append(grid);
     this.append(section);
   }

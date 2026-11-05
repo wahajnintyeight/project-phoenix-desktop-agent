@@ -93,6 +93,19 @@ export const PALETTES: readonly Palette[] = [
       light: ["#212529", "#2f353b", "#343a40", "#495057", "#6c757d", "#868e96", "#adb5bd", "#ced4da", "#dee2e6"],
     },
   },
+  {
+    id: "basic",
+    name: "Basic",
+    note: "Black, charcoal and white",
+    n: {
+      dark: ["#000000", "#0f0f0f", "#1e1e1e", "#3b3b3b", "#6e6e6e", "#929292", "#b7b7b7", "#dbdbdb", "#ffffff"],
+      light: ["#0f0f0f", "#333333", "#494949", "#929292", "#b7b7b7", "#dbdbdb", "#ececec", "#f5f5f5", "#ffffff"],
+    },
+    a: {
+      dark: ["#000000", "#333333", "#b7b7b7", "#dbdbdb", "#ebebeb", "#f2f2f2", "#f8f8f8", "#fcfcfc", "#ffffff"],
+      light: ["#000000", "#0f0f0f", "#1e1e1e", "#494949", "#6e6e6e", "#929292", "#b7b7b7", "#dbdbdb", "#ffffff"],
+    },
+  },
 ];
 
 // ── colour maths ──────────────────────────────────────────────────────────

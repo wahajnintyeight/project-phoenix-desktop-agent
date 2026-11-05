@@ -64,7 +64,7 @@ type Providers struct {
 	Default string         `yaml:"default,omitempty"`
 	Claude  ProviderConfig `yaml:"claude"`
 	Codex   ProviderConfig `yaml:"codex"`
-	// Others holds the HTTP providers (gemini, openrouter, mistral, zai, grok) by id.
+	// Others holds the HTTP providers (gemini, openrouter, mistral, zai, grok, deepseek) by id.
 	Others map[string]ProviderConfig `yaml:",inline"`
 }
 

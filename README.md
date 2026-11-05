@@ -6,6 +6,7 @@
 [![Last commit](https://img.shields.io/github/last-commit/wahajnintyeight/project-phoenix-desktop-agent?style=flat)](https://github.com/wahajnintyeight/project-phoenix-desktop-agent/commits/main)
 ![Windows](https://img.shields.io/badge/platform-Windows-0078D4?logo=windows&logoColor=white)
 ![Go 1.27.3](https://img.shields.io/badge/Go-1.27.3-00ADD8?logo=go&logoColor=white)
+![Wails v3](https://img.shields.io/badge/Wails-v3-DF5C4C?logo=wails&logoColor=white)
 
 **A Windows desktop workspace for browsing and getting help from AI models, with an agent designed to work alongside you.**
 
@@ -16,6 +17,7 @@ Phoenix brings a multi-tab browser and AI provider controls into one native desk
 ## What works today
 
 - Wails v3 desktop app (system tray, single instance, installer) with a redesigned dark interface (warm mauve-shadow neutrals, one mauve accent) and a multi-tab browser powered by WebView2.
+- Recently visited sites show their website favicons and can be removed individually or cleared from history. Settings → General includes an application restart control.
 - Address bar for URLs and web searches, with a configurable HTTPS search provider.
 - A quick-action bar under the page: one-click requests that change with the page you are on (a job posting, an article, a form, search results, or text you have selected), so you send a request without typing it.
 - Provider setup, model selection, connection checks, and a quick model picker.
@@ -26,7 +28,7 @@ Phoenix brings a multi-tab browser and AI provider controls into one native desk
 - **Computer use** (enabled by default in new installations): native tools list and capture windows, discover controls, click, scroll, drag, type, copy, and paste. Supported providers can use them automatically while working on your request. Vision-capable models can also inspect screenshots. Actions are visible in Activity and can be stopped.
 - Replies are formatted: headings, lists, tables, code blocks with a Copy button.
 - **MCP servers:** install as many as you like (paste the JSON from a server's install instructions, or enter a program or web address), review the exact command before it is saved, test the connection and list its tools, then choose which servers the agent may use. OAuth-protected web servers open sign-in in the browser and keep refreshable tokens in the encrypted vault. Claude, Codex, and OpenAI-compatible API providers can use enabled servers; Enabled-server calls run automatically and appear in chat.
-- Claude and OpenAI Codex through their command-line clients, plus API-key connections for Gemini, OpenRouter, Mistral, Z.ai, and Grok.
+- Claude and OpenAI Codex through their command-line clients, plus API-key connections for Gemini, OpenRouter, Mistral, Z.ai, Grok, and DeepSeek. DeepSeek models are discovered from its API; add a key in Settings → AI providers.
 - API keys stored in a Windows DPAPI-encrypted vault; Phoenix does not put vault-backed keys in `config.yaml` or show them again in the UI.
 
 Page sharing remains opt-in. It includes the active page's readable text directly with your message; browser tools let supported providers inspect and operate tabs automatically. Passwords, payment details, and authentication codes are not entered by the browser agent. Browser upload and download tools are not available yet.
@@ -63,6 +65,8 @@ wails3 package    # build the Windows installer (needs NSIS)
 ## Provider setup
 
 Open **Settings → AI providers** in Phoenix. Claude and Codex use their respective CLI sign-ins by default. The other providers use API keys. Select a provider and model in Settings or use the quick picker beneath the agent panel.
+
+For provider development, see [the AI provider skill](.agents/skills/phoenix-ai-providers/SKILL.md). It is stored in the repository so contributors can use it after cloning.
 
 Provider API keys are encrypted with Windows DPAPI for the current Windows user. DPAPI protects the stored vault data from being read as plain text, but it is tied to that Windows account and machine; copying the vault to another PC will not make it portable.
 

@@ -184,6 +184,7 @@ func handleMCPOp(f []string) {
 				logf("mcp installed %s", c.Name)
 			}
 		}
+		go hub.WarmMCP()
 		pushMCP("", len(staged) > 0)
 	case "mcp-remove":
 		if cancel, ok := mcpTestCancel[arg]; ok {
@@ -194,6 +195,7 @@ func handleMCPOp(f []string) {
 			pushMCP("Could not remove "+arg+": "+err.Error(), false)
 			return
 		}
+		go hub.WarmMCP()
 		pushMCP("", false)
 	case "mcp-enable":
 		on := len(f) > 3 && f[3] == "1"
@@ -201,6 +203,7 @@ func handleMCPOp(f []string) {
 			pushMCP(err.Error(), false)
 			return
 		}
+		go hub.WarmMCP()
 		pushMCP("", false)
 	case "mcp-test":
 		startMCPTest(arg)

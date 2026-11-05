@@ -14,6 +14,8 @@ import (
 	"sync"
 	"time"
 
+	sdk "github.com/modelcontextprotocol/go-sdk/mcp"
+
 	"phoenix/internal/browser"
 	"phoenix/internal/desktop"
 	"phoenix/internal/mcp"
@@ -105,40 +107,67 @@ func (b *browserBridge) serve(w http.ResponseWriter, r *http.Request) {
 	defer cancel()
 	stopCancel := context.AfterFunc(run.ctx, cancel)
 	defer stopCancel()
-	meta, err := browserCallMeta(ctx, call)
-	if err != nil {
-		http.Error(w, err.Error(), http.StatusBadRequest)
+	result, status, err := runBrowserCall(ctx, run, call)
+	if status != 0 {
+		http.Error(w, err.Error(), status)
 		return
 	}
+	w.Header().Set("Content-Type", "application/json")
+	_ = json.NewEncoder(w).Encode(result)
+}
+
+// runBrowserCall asks for approval, then performs one browser operation. A refusal or a failed
+// operation is a normal result (IsError) the model can read; a non-zero status is a problem
+// with the request itself.
+func runBrowserCall(ctx context.Context, run *browserRun, call browser.Call) (browser.Output, int, error) {
+	meta, err := browserCallMeta(ctx, call)
+	if err != nil {
+		return browser.Output{}, http.StatusBadRequest, err
+	}
 	if run.approval == nil {
-		http.Error(w, "Phoenix could not start its approval service", http.StatusServiceUnavailable)
-		return
+		return browser.Output{}, http.StatusServiceUnavailable, errors.New("Phoenix could not start its approval service")
 	}
 	approver := desktop.HTTPApprover{URL: run.approval.URL, Token: run.approval.Token}
 	allowed, err := approver.Approve(ctx, desktop.Request{
 		Class: meta.Class, Tool: call.Tool, App: meta.App, Summary: meta.Summary,
 	})
 	if err != nil || !allowed {
-		w.Header().Set("Content-Type", "application/json")
-		w.WriteHeader(http.StatusOK)
-		_ = json.NewEncoder(w).Encode(browser.Output{Text: "The user did not allow this. Do not try it again; tell them what you wanted to do.", IsError: true})
-		return
+		return browser.Output{Text: "The user did not allow this. Do not try it again; tell them what you wanted to do.", IsError: true}, 0, nil
 	}
 	if ctx.Err() != nil {
-		http.Error(w, "browser operation was canceled", http.StatusRequestTimeout)
-		return
+		return browser.Output{}, http.StatusRequestTimeout, errors.New("browser operation was canceled")
 	}
 	operationCtx, operationCancel := context.WithTimeout(ctx, 45*time.Second)
 	defer operationCancel()
 	result, err := performBrowserTool(operationCtx, call)
 	if err != nil {
-		w.Header().Set("Content-Type", "application/json")
-		w.WriteHeader(http.StatusOK)
-		_ = json.NewEncoder(w).Encode(browser.Output{Text: "Browser operation failed: " + err.Error(), IsError: true})
-		return
+		return browser.Output{Text: "Browser operation failed: " + err.Error(), IsError: true}, 0, nil
 	}
-	w.Header().Set("Content-Type", "application/json")
-	_ = json.NewEncoder(w).Encode(result)
+	return result, 0, nil
+}
+
+// browserInvoker lets the browser MCP server run inside Phoenix: no child process and no HTTP
+// hop, but the same approval and the same limits as the bridge.
+type browserInvoker struct {
+	run *browserRun
+}
+
+func (b browserInvoker) Invoke(ctx context.Context, call browser.Call) (browser.Output, error) {
+	if !knownBrowserTool(call.Tool) {
+		return browser.Output{}, errors.New("invalid browser operation")
+	}
+	ctx, cancel := context.WithTimeout(ctx, 6*time.Minute)
+	defer cancel()
+	stop := context.AfterFunc(b.run.ctx, cancel)
+	defer stop()
+	out, status, err := runBrowserCall(ctx, b.run, call)
+	if status != 0 {
+		return browser.Output{}, err
+	}
+	if err := out.Check(); err != nil {
+		return browser.Output{}, err
+	}
+	return out, nil
 }
 
 func knownBrowserTool(name string) bool {
@@ -151,8 +180,14 @@ func knownBrowserTool(name string) bool {
 	return false
 }
 
+// browserServer is this run's browser tools, served inside Phoenix (see browserInvoker). The
+// stdio child (`phoenix.exe mcp-browser`) and its HTTP bridge remain for external use.
 func browserServer(ctx context.Context, approval *desktop.Run) (mcp.Resolved, error) {
-	return browserBroker().NewRun(ctx, approval)
+	run := &browserRun{ctx: ctx, approval: approval}
+	return mcp.Resolved{
+		Server:    mcp.Server{Name: browser.ServerName, Transport: mcp.Stdio, Enabled: true},
+		InProcess: func() *sdk.Server { return browser.NewMCPServer(browserInvoker{run: run}) },
+	}, nil
 }
 
 func osExecutable() (string, error) {

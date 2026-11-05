@@ -20,11 +20,13 @@ Phoenix.exe
 │  └─ Windows integrations: WebView2/CDP, UI Automation, input and clipboard
 ├─ Page WebView2 controllers (one per web tab)
 │  └─ untrusted sites, isolated from the trusted UI message channel
-└─ Per-turn MCP child processes (same executable for Phoenix tools;
-   configured command for user-installed stdio servers)
-   ├─ phoenix-browser ── authenticated loopback bridge ── WebView2/CDP
-   ├─ phoenix-desktop ── Windows UI Automation and native input
-   └─ user-configured stdio or Streamable HTTP MCP servers
+├─ MCP pool (app lifetime): user-installed stdio / Streamable HTTP servers,
+│  connected at launch, tool lists cached, reconnected when they drop
+├─ In-process MCP servers (per run, in-memory pipe, no child process)
+│  ├─ phoenix-browser ── approval ── WebView2/CDP
+│  └─ phoenix-files ── SQLite library
+└─ Per-turn child process (only when computer use is on)
+   └─ phoenix-desktop ── Windows UI Automation and native input
 ```
 
 The Wails UI webview and page webviews are separate browser environments. The UI uses its own Wails user-data folder. Page tabs share Phoenix's persistent browser profile so site sessions survive restarts. The Go host owns tabs, provider state, settings, chat persistence, and all tool execution; the UI holds transient presentation state and sends user actions back to Go.
@@ -127,6 +129,14 @@ This is an intentional product behavior: Phoenix should act on the user's reques
 MCP servers are user-configured in Settings and stored under `mcp_servers` in `config.yaml`. Phoenix accepts stdio commands and Streamable HTTP URLs. The install flow can import published `mcpServers` JSON or add a server manually; additions are reviewed before saving and start disabled. A server's enabled state and connection test are shown in the management UI.
 
 Environment variables and HTTP headers can refer to values in the DPAPI-backed vault or to environment variables. Credentials are resolved in memory when a server is tested or used in a run. OAuth-capable HTTP servers use the MCP client's authorization flow; access tokens and refresh material are kept in the DPAPI-backed vault, not in clear text in `config.yaml`. The UI's tested-MCP list and `/mcps` command report enabled servers that passed their latest connection test.
+
+**First run and sign-in.** Phoenix uses the user's own account and never reads `.claude` or `.codex` credential files: a sign-in that already exists is found by asking the CLI (`claude auth status`, `codex login status`). After each provider check, `pickReadyDefault` replaces a default that cannot run with the first ready provider (Claude, Codex, then API providers). If nothing is ready, the empty chat shows `<ph-setup-card>` instead of the example tasks: "Sign in with Claude/ChatGPT" when the CLI is installed (the CLI's own web sign-in), "Get Claude Code/Codex" when it is not (opens the vendor's page in a Phoenix tab; the UI sends only a provider id), and "Use an API key" (Settings; Gemini, OpenRouter, Mistral, Z.ai, Grok need nothing installed). It re-checks when the window regains focus (at most every 5 seconds) and hides itself as soon as any provider is ready.
+
+**Connection lifecycle.** Starting an MCP server (an `npx` download, a Python environment, a TLS handshake) and listing its tools is slow, so Phoenix does it once, not per message. `mcp.Pool` (`internal/mcp/pool.go`) is owned by the provider hub: at launch it connects every enabled server in the background (`Hub.WarmMCP`), keeps the session and the cached tool list, and a run just takes them (about 10 ms measured with a stdio server). A server that exits is dropped from the pool when its session ends and reconnected on next use (measured 47 ms); one that failed is not retried for 20 seconds so a broken entry cannot stall every message; any change to a server's command, URL, secrets or enabled state reconnects or closes it (`Pool.Sync`, called after install, update, remove and enable); `Hub.Close` stops everything at quit. Connections are made with their own timeout, not the chat run's, so cancelling a message never aborts a start-up later messages want.
+
+**Application initializer.** `cmd/phoenix/init_windows.go` runs once from `uiReady`, after the providers exist, and does in parallel everything a first message would otherwise wait for: open the file library, create the approval service, connect every saved MCP server (`WarmMCPAndWait`), read the Codex CLI's tool list, start the desktop-automation thread. Each step logs its duration (`init: mcp servers 840ms (3 of 3 connected)`). A message waits only for the library and approvals (milliseconds, at most 10 s) and never for MCP servers: one still starting is skipped for that message and noted to the model, then used from the next.
+
+Phoenix's own tools are different: they depend on one run's approvals and cancellation, so they are created per run, but in-process (`Resolved.InProcess`, connected over an in-memory pipe) rather than as child processes. Browser and file tools no longer spawn `phoenix.exe` per message; only the desktop tools still do, and only when computer use is on. The model sees tools named for what they do (`browser_click`, `files_list`; a user server's tools as `<server>_<tool>`, within the 64-character limit), not opaque numbered aliases. Codex's own built-in tools (shell, browser, computer use, image generation, plugins) are switched off with `--disable`, checked against `codex features list` so an unknown name cannot stop a run: Phoenix's agent has only the tools Phoenix gives it, and each built-in tool costs prompt tokens on every message.
 
 At run time, Phoenix lists server tools, converts schemas to provider-compatible functions where needed, calls the selected server, bounds returned text/images and scrubs configured secrets from results. MCP output is untrusted. Server processes are launched without a shell, but a configured executable still runs as the current Windows user.
 

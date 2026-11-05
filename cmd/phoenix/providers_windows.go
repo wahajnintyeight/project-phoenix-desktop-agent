@@ -52,6 +52,7 @@ func initProviders() {
 		return
 	}
 	hub = providerhub.NewWithStore(cfgStore, vault)
+	hub.Trace = logf
 }
 
 func openSettings() {
@@ -101,6 +102,7 @@ func refreshProvidersForce(forceModels bool) {
 		defer cancel()
 		sts := hub.Statuses(ctx)
 		setReady(sts)
+		pickReadyDefault(sts)
 		def := hub.Default()
 		quickViews := make([]modelsView, len(sts))
 		for i, st := range sts {
@@ -114,7 +116,7 @@ func refreshProvidersForce(forceModels bool) {
 			}
 			quickViews[i] = modelsView{
 				ID: string(st.ID), Name: providerName(st.ID), Models: models,
-				Model: choice.Model, Effort: choice.Effort, Ready: st.Ready, Kind: kind, Loading: st.Ready,
+				Model: choice.Model, Effort: choice.Effort, Ready: st.Ready, Installed: st.Installed, Kind: kind, Loading: st.Ready,
 			}
 		}
 		runLater(func() {
@@ -134,15 +136,18 @@ func refreshProvidersForce(forceModels bool) {
 // quick picker. Everything in it comes from the CLI or from config.yaml, so the UI shows it
 // with textContent only.
 type modelsView struct {
-	ID      string           `json:"id"`
-	Name    string           `json:"name"`
-	Models  []provider.Model `json:"models"`
-	Model   string           `json:"model"`
-	Effort  string           `json:"effort"`
-	Error   string           `json:"error,omitempty"`
-	Ready   bool             `json:"ready"` // can run now (installed and signed in, or has a key)
-	Kind    string           `json:"kind"`  // "cli" or "api"
-	Loading bool             `json:"loading,omitempty"`
+	ID     string           `json:"id"`
+	Name   string           `json:"name"`
+	Models []provider.Model `json:"models"`
+	Model  string           `json:"model"`
+	Effort string           `json:"effort"`
+	Error  string           `json:"error,omitempty"`
+	Ready  bool             `json:"ready"` // can run now (installed and signed in, or has a key)
+	// Installed is whether the provider's command-line client was found (always false for API
+	// providers). The setup card uses it to offer "Sign in" or "Get it".
+	Installed bool   `json:"installed"`
+	Kind      string `json:"kind"` // "cli" or "api"
+	Loading   bool   `json:"loading,omitempty"`
 }
 
 func pushQuickModelData(def provider.ID, views []modelsView) {
@@ -165,8 +170,9 @@ func providerName(id provider.ID) string {
 // readyMu guards lastReady: which providers could run at the last check. The quick picker
 // lists only those, so it does not offer a provider that has no key or sign-in.
 var (
-	readyMu   sync.Mutex
-	lastReady = map[provider.ID]bool{}
+	readyMu       sync.Mutex
+	lastReady     = map[provider.ID]bool{}
+	lastInstalled = map[provider.ID]bool{}
 )
 
 func setReady(sts []provider.Status) {
@@ -174,6 +180,53 @@ func setReady(sts []provider.Status) {
 	defer readyMu.Unlock()
 	for _, st := range sts {
 		lastReady[st.ID] = st.Ready
+		lastInstalled[st.ID] = st.Installed
+	}
+}
+
+func isInstalled(id provider.ID) bool {
+	readyMu.Lock()
+	defer readyMu.Unlock()
+	return lastInstalled[id]
+}
+
+// pickReadyDefault makes sure the default provider is one that can run. A user who already has
+// Codex signed in but never opened Settings should not hit "Claude is not ready" on the first
+// message. The current default is kept whenever it works; otherwise the first ready provider in
+// display order (Claude, Codex, then API providers) is chosen.
+func pickReadyDefault(sts []provider.Status) {
+	if hub == nil {
+		return
+	}
+	def := hub.Default()
+	for _, st := range sts {
+		if st.ID == def && st.Ready {
+			return
+		}
+	}
+	for _, st := range sts {
+		if st.Ready {
+			if err := hub.SetDefault(st.ID); err != nil {
+				logf("default provider: %v", err)
+			} else {
+				logf("default provider %s was not ready; using %s", def, st.ID)
+			}
+			return
+		}
+	}
+}
+
+// setupPages are where a missing command-line client is obtained. The UI sends only the
+// provider id, never an address.
+var setupPages = map[provider.ID]string{
+	provider.Claude: "https://claude.com/claude-code",
+	provider.Codex:  "https://github.com/openai/codex",
+}
+
+// openSetupPage opens a provider's install page in a Phoenix tab.
+func openSetupPage(id string) {
+	if u, ok := setupPages[provider.ID(id)]; ok {
+		createWebTab(u)
 	}
 }
 
@@ -211,7 +264,7 @@ func pushModelsNow(ctx context.Context, force bool) {
 			if provider.IsHTTP(id) {
 				kind = "api"
 			}
-			v := modelsView{ID: string(id), Name: providerName(id), Models: ms, Model: ch.Model, Effort: ch.Effort, Ready: isReady(id), Kind: kind}
+			v := modelsView{ID: string(id), Name: providerName(id), Models: ms, Model: ch.Model, Effort: ch.Effort, Ready: isReady(id), Installed: isInstalled(id), Kind: kind}
 			if err != nil {
 				v.Models = []provider.Model{}
 				switch {

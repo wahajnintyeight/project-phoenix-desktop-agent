@@ -2,9 +2,10 @@ package main
 
 import (
 	"encoding/json"
-	"os"
 	"strings"
 	"sync"
+
+	sdk "github.com/modelcontextprotocol/go-sdk/mcp"
 
 	"phoenix/internal/desktop"
 	"phoenix/internal/mcp"
@@ -42,18 +43,14 @@ func desktopEnabled() bool {
 	return enabled
 }
 
-// desktopServer starts the native MCP tools with the current run's authorization token.
+// desktopServer is this run's desktop tools, served inside Phoenix over an in-memory pipe
+// with the run's approval service. The UI Automation driver is shared by every run (one OS
+// thread, started at launch), so nothing is spawned per message.
 func desktopServer(run *desktop.Run) (mcp.Resolved, error) {
-	exe, err := os.Executable()
-	if err != nil {
-		return mcp.Resolved{}, err
-	}
+	approver := desktop.HTTPApprover{URL: run.URL, Token: run.Token}
 	return mcp.Resolved{
-		Server: mcp.Server{Name: desktop.ServerName, Transport: mcp.Stdio, Command: exe, Args: []string{"mcp-desktop"}, Enabled: true},
-		EnvValues: map[string]string{
-			"PHOENIX_APPROVAL_URL":   run.URL,
-			"PHOENIX_APPROVAL_TOKEN": run.Token,
-		},
+		Server:    mcp.Server{Name: desktop.ServerName, Transport: mcp.Stdio, Enabled: true},
+		InProcess: func() *sdk.Server { return desktop.NewServer(desktop.NativeCLI(), approver) },
 	}, nil
 }
 

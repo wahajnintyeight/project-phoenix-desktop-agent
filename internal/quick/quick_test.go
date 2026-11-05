@@ -1,6 +1,9 @@
 package quick
 
-import "testing"
+import (
+	"strings"
+	"testing"
+)
 
 func TestClassify(t *testing.T) {
 	cases := []struct {
@@ -115,6 +118,38 @@ func TestPromptsNeverPromiseActions(t *testing.T) {
 	for id, a := range catalog {
 		if a.Prompt == "" {
 			t.Errorf("%s has no prompt", id)
+		}
+	}
+}
+
+// Phoenix automates more than job hunting: the job buttons belong on job pages only, and every
+// button that acts must carry the "ask before anything irreversible" rule.
+func TestActionsAreGeneralAndSafe(t *testing.T) {
+	for k, ids := range byKind {
+		if k == KindJob || k == KindJobSearch {
+			continue
+		}
+		for _, id := range ids {
+			p := strings.ToLower(catalog[id].Prompt)
+			if strings.Contains(p, "resume") || strings.Contains(p, "job search") || strings.Contains(p, "interview") {
+				t.Errorf("%s button %q mentions jobs", k, id)
+			}
+		}
+	}
+	for _, id := range []string{"autoflow", "extract", "savenote", "findcheaper", "formfill", "opentop", "travelfind", "listextract", "dataexport", "automate", "research"} {
+		if !strings.Contains(catalog[id].Prompt, "Never submit, send") {
+			t.Errorf("%s lacks the irreversible-action rule", id)
+		}
+	}
+	for _, k := range []Kind{KindGeneric, KindProduct, KindForm, KindSearch, KindListing, KindData} {
+		acts := false
+		for _, a := range For(k, false) {
+			if strings.Contains(a.Prompt, "Never submit, send") {
+				acts = true
+			}
+		}
+		if !acts {
+			t.Errorf("%s has no button that acts", k)
 		}
 	}
 }

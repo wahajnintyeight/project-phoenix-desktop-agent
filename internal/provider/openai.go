@@ -16,7 +16,7 @@ import (
 )
 
 // Providers that have no command-line client are reached over HTTP. Gemini, OpenRouter,
-// Mistral, Z.ai and Grok all publish an OpenAI-compatible chat API (POST /chat/completions
+// Mistral, Z.ai, Grok and DeepSeek all publish an OpenAI-compatible chat API (POST /chat/completions
 // with server-sent events, GET /models), so one small driver covers them. It uses only the
 // standard library, so no third-party code ever handles an API key.
 const (
@@ -25,6 +25,7 @@ const (
 	Mistral    ID = "mistral"
 	Zai        ID = "zai"
 	Grok       ID = "grok"
+	DeepSeek   ID = "deepseek"
 )
 
 type effortStyle int
@@ -59,6 +60,8 @@ var HTTPSpecs = []HTTPSpec{
 		BaseHint: "GLM Coding Plan keys use https://api.z.ai/api/coding/paas/v4. Keys for the China endpoint use https://open.bigmodel.cn/api/paas/v4."},
 	{ID: Grok, Name: "Grok (xAI)", BaseURL: "https://api.x.ai/v1",
 		KeyHelp: "Create a key in the xAI console (console.x.ai)."},
+	{ID: DeepSeek, Name: "DeepSeek", BaseURL: "https://api.deepseek.com",
+		KeyHelp: "Create an API key at platform.deepseek.com."},
 }
 
 var httpEfforts = []string{"low", "medium", "high"}
@@ -274,9 +277,10 @@ type chatMessage struct {
 }
 
 type assistantToolCall struct {
-	ID       string       `json:"id"`
-	Type     string       `json:"type"`
-	Function functionCall `json:"function"`
+	ID           string          `json:"id"`
+	Type         string          `json:"type"`
+	Function     functionCall    `json:"function"`
+	ExtraContent json.RawMessage `json:"extra_content,omitempty"`
 }
 
 type functionCall struct {
@@ -373,10 +377,11 @@ type openaiParser struct {
 }
 
 type partialToolCall struct {
-	id        string
-	typeName  string
-	name      strings.Builder
-	arguments strings.Builder
+	id           string
+	typeName     string
+	name         strings.Builder
+	arguments    strings.Builder
+	extraContent json.RawMessage
 }
 
 func (p *openaiParser) Parse(line []byte) []Event {
@@ -396,10 +401,11 @@ func (p *openaiParser) Parse(line []byte) []Event {
 				Reasoning        string `json:"reasoning"`
 				ReasoningContent string `json:"reasoning_content"`
 				ToolCalls        []struct {
-					Index    int    `json:"index"`
-					ID       string `json:"id"`
-					Type     string `json:"type"`
-					Function struct {
+					Index        int             `json:"index"`
+					ID           string          `json:"id"`
+					Type         string          `json:"type"`
+					ExtraContent json.RawMessage `json:"extra_content"`
+					Function     struct {
 						Name      string `json:"name"`
 						Arguments string `json:"arguments"`
 					} `json:"function"`
@@ -467,6 +473,12 @@ func (p *openaiParser) Parse(line []byte) []Event {
 				}
 				call.typeName = delta.Type
 			}
+			if len(delta.ExtraContent) > 0 && string(delta.ExtraContent) != "null" {
+				if len(delta.ExtraContent) > 64<<10 {
+					return p.failToolStream("Provider function-call metadata exceeded Phoenix's size limit.")
+				}
+				call.extraContent = delta.ExtraContent
+			}
 			mergeStream(&call.name, delta.Function.Name)
 			mergeStream(&call.arguments, delta.Function.Arguments)
 			if call.name.Len() > 64 || call.arguments.Len() > maxToolArgs {
@@ -520,7 +532,7 @@ func (p *openaiParser) toolCalls() []assistantToolCall {
 		}
 		calls = append(calls, assistantToolCall{
 			ID: c.id, Type: typeName,
-			Function: functionCall{Name: c.name.String(), Arguments: c.arguments.String()},
+			Function: functionCall{Name: c.name.String(), Arguments: c.arguments.String()}, ExtraContent: c.extraContent,
 		})
 	}
 	return calls

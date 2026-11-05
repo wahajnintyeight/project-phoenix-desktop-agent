@@ -5,6 +5,7 @@ import { el } from "./dom";
 import { icon, type IconName } from "./icons";
 import { MarkdownView } from "./markdown";
 import type { PhMcp } from "./mcp-settings";
+import "./setup-card";
 import { send } from "./protocol";
 import { resolveSlashCommand, searchSlashCommands, type SlashCommandDefinition } from "./slash-commands";
 
@@ -308,6 +309,7 @@ export class PhChat extends HTMLElement {
     this.#empty.append(
       el("h2", undefined, "What can we work on?"),
       el("p", undefined, "Give Phoenix a task. It reads the page, clicks and types for you, and shows every step."),
+      document.createElement("ph-setup-card"), // replaces the rest until a model is connected
       ideas,
     );
     this.#log.append(this.#empty);

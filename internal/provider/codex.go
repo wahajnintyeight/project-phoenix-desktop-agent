@@ -7,6 +7,7 @@ import (
 	"path/filepath"
 	"sort"
 	"strings"
+	"sync"
 	"time"
 )
 
@@ -167,6 +168,7 @@ func (c CodexProvider) Run(ctx context.Context, s Settings, req Request, emit fu
 	}
 	defer cleanup()
 
+	req.CodexDisable = codexLean(ctx, path)
 	prompt := req.Transcript()
 	if req.System != "" {
 		// codex exec has no system-prompt flag; instructions travel with the prompt.
@@ -193,6 +195,50 @@ func (c CodexProvider) Run(ctx context.Context, s Settings, req Request, emit fu
 	return parser.result, nil
 }
 
+// codexLeanWanted are Codex's own built-in tools and integrations. Phoenix's agent works only
+// through the tools Phoenix hands it: Codex's shell would read anywhere on the disk, its browser
+// and computer-use tools would act outside Phoenix's approvals, and each one adds its
+// description to every prompt (tokens and latency on every message).
+var codexLeanWanted = []string{
+	"shell_tool", "unified_exec", "unified_exec_tty", "apps", "browser_use", "browser_use_external",
+	"browser_use_full_cdp_access", "in_app_browser", "computer_use", "goals", "image_generation",
+	"multi_agent", "plugins", "remote_plugin", "view_image", "skill_search", "sleep_tool", "tool_suggest",
+}
+
+var codexLeanCache sync.Map // codex path -> []string
+
+// codexLean returns the wanted features this Codex version knows. An unknown name makes Codex
+// refuse to start, so the list is checked against `codex features list` (once per path). If that
+// cannot be read, nothing is disabled and the run proceeds as before.
+func codexLean(ctx context.Context, path string) []string {
+	if v, ok := codexLeanCache.Load(path); ok {
+		return v.([]string)
+	}
+	var out []string
+	if text, err := capture(ctx, 10*time.Second, cleanEnv(codexAuthEnv), path, "features", "list"); err == nil {
+		known := map[string]bool{}
+		for _, line := range strings.Split(text, "\n") {
+			if f := strings.Fields(line); len(f) > 0 {
+				known[f[0]] = true
+			}
+		}
+		for _, name := range codexLeanWanted {
+			if known[name] {
+				out = append(out, name)
+			}
+		}
+		codexLeanCache.Store(path, out)
+	}
+	return out
+}
+
+// WarmCodex reads Codex's feature list ahead of the first message (it is cached per path).
+func WarmCodex(ctx context.Context, s Settings) {
+	if path, ok := codexPath(s); ok {
+		codexLean(ctx, path)
+	}
+}
+
 // codexArgs: read-only sandbox, no persisted session, and neither the user's config.toml
 // nor their execpolicy rules. Auth still comes from CODEX_HOME, so a ChatGPT login works.
 // The prompt is read from stdin (the trailing "-").
@@ -206,6 +252,9 @@ func codexArgs(s Settings, req Request, dir string) []string {
 		"--ignore-rules",
 		"-s", "read-only",
 		"-C", dir,
+	}
+	for _, f := range req.CodexDisable {
+		args = append(args, "--disable", f)
 	}
 	if req.CodexMCPURL != "" {
 		url, _ := json.Marshal(req.CodexMCPURL)

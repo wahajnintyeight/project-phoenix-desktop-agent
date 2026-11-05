@@ -323,3 +323,13 @@ func TestCodexToolProxyConfigKeepsTokenOutOfArguments(t *testing.T) {
 		t.Fatalf("invalid Codex tool configuration: %s", args)
 	}
 }
+
+func TestCodexArgsDisableBuiltInFeatures(t *testing.T) {
+	args := strings.Join(codexArgs(Settings{}, Request{CodexDisable: []string{"shell_tool", "plugins"}}, "."), " ")
+	if !strings.Contains(args, "--disable shell_tool") || !strings.Contains(args, "--disable plugins") {
+		t.Fatalf("args = %s", args)
+	}
+	if strings.Contains(strings.Join(codexArgs(Settings{}, Request{}, "."), " "), "--disable") {
+		t.Fatal("disable flags without a request for them")
+	}
+}

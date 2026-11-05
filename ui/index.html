@@ -2,7 +2,7 @@
 <html lang="en" data-theme="mauve">
 <head>
 <meta charset="utf-8">
-<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'self' {{SCRIPT_HASH}}; connect-src 'self'; style-src {{STYLE_HASH}}; img-src data:">
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'self' {{SCRIPT_HASH}}; connect-src 'self'; style-src {{STYLE_HASH}}; img-src data: https:">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Phoenix</title>
 <!-- The Wails runtime: it tells the host the page is ready, which lets the host send messages in. -->
@@ -170,6 +170,7 @@
                   <ph-provider id="prov-mistral" data-provider="mistral"></ph-provider>
                   <ph-provider id="prov-zai" data-provider="zai"></ph-provider>
                   <ph-provider id="prov-grok" data-provider="grok"></ph-provider>
+                  <ph-provider id="prov-deepseek" data-provider="deepseek"></ph-provider>
                 </div>
               </section>
             </div>
@@ -208,6 +209,14 @@
 
             <div class="flex-col gap-8" data-for="general">
               <h2>General</h2>
+
+              <section class="flex flex-col gap-3">
+                <div>
+                  <h3>Application</h3>
+                  <p class="text-fg-muted">Restart Phoenix to reload the application.</p>
+                </div>
+                <div><button class="btn btn-sm" data-action="app.restart">Restart Phoenix</button></div>
+              </section>
 
               <section class="flex flex-col gap-3">
                 <div>

@@ -209,6 +209,22 @@ func openHistoryEntry(id string) {
 	}
 }
 
+func deleteHistoryEntry(id string) {
+	decoded, err := base64.RawURLEncoding.DecodeString(id)
+	if err != nil {
+		return
+	}
+	for i, entry := range recentHistory {
+		if string(decoded) != entry.URL {
+			continue
+		}
+		recentHistory = append(recentHistory[:i], recentHistory[i+1:]...)
+		persistHistory()
+		pushHistory()
+		return
+	}
+}
+
 func clearHistory() {
 	recentHistory = nil
 	if historyPath != "" {

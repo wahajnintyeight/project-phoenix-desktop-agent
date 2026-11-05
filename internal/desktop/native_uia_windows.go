@@ -44,6 +44,13 @@ type automationState struct {
 }
 
 func newNativeDriver() nativeDriver { return &automationDriver{requests: make(chan nativeRequest)} }
+
+func warmDriver(d nativeDriver) {
+	if a, ok := d.(*automationDriver); ok {
+		a.once.Do(func() { go a.worker() })
+	}
+}
+
 func (d *automationDriver) run(ctx context.Context, args []string) (Envelope, bool, error) {
 	if len(args) == 0 {
 		return Envelope{}, false, nil

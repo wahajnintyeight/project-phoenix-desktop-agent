@@ -328,9 +328,35 @@ func prepareWebTab(t *tab) bool {
 	must(wvAddNewWindowRequested, "NewWindowRequested", func(_, args unsafe.Pointer) {
 		uri := comGetString(args, newWindowGetURI)
 		comCall(args, newWindowPutHandled, 1) // we open it ourselves, as a tab
-		if allowedURL(uri) {
-			runLater(func() { createWebTab(uri) })
+		if uri != "" && uri != "about:blank" && !allowedURL(uri) {
+			return
 		}
+		// A page-opened window (a "Sign in with Google" popup, a payment window) must stay
+		// connected to the page that opened it: the opener receives the result through
+		// window.opener / postMessage and the popup closes itself. Giving WebView2 the new
+		// tab's own webview as the target keeps that link; a plain new tab would lose it and
+		// the sign-in would end on a blank success page.
+		var deferral unsafe.Pointer
+		if hr := comCall(args, newWindowGetDeferral, uintptr(unsafe.Pointer(&deferral))); hr != 0 || deferral == nil {
+			if allowedURL(uri) {
+				runLater(func() { createWebTab(uri) })
+			}
+			return
+		}
+		runLater(func() {
+			defer comCall(deferral, deferralComplete)
+			child := &tab{id: nextID, kind: kindWeb, url: uri, loading: true}
+			nextID++
+			if !prepareWebTab(child) {
+				return
+			}
+			comCall(args, newWindowPutNewWindow, uintptr(child.wv))
+			tabs = append(tabs, child)
+			activate(child.id)
+		})
+	})
+	must(wvAddWindowCloseRequested, "WindowCloseRequested", func(_, _ unsafe.Pointer) {
+		runLater(func() { closeTab(t.id) }) // window.close() from the page
 	})
 
 	return true

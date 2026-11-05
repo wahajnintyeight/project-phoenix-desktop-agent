@@ -250,10 +250,15 @@ func sendTurn(display, text string, sharePage bool) {
 func startChatRun(ctx context.Context, cancel context.CancelFunc, id provider.ID, gen int, chatID string, userIndex int, text, prompt string, history []provider.Message) {
 	supportsMCP := id == provider.Claude || id == provider.Codex || provider.IsHTTP(id)
 	progress := "Preparing your response…"
-	if supportsMCP {
-		progress = "Connecting to the browser and MCP tools…"
+	if !essentialInitDone() {
+		progress = "Starting up…"
 	}
 	postChat(chatEvent{K: "processing", Text: progress})
+	// The initializer normally finished long ago; this only matters for a message sent within
+	// the first moments after launch.
+	if !awaitEssentialInit(ctx, 10*time.Second) {
+		return
+	}
 	system := chatSystem
 	// The run token authorizes browser, desktop, and enabled MCP calls without prompts.
 	var approvalRun *desktop.Run

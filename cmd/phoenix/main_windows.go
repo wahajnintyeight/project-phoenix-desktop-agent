@@ -7,6 +7,7 @@ import (
 	_ "embed"
 	"encoding/json"
 	"fmt"
+	"os/exec"
 	"os"
 	"path/filepath"
 	"strconv"
@@ -35,6 +36,7 @@ var (
 	ready    bool      // the UI has loaded and can receive messages
 	started  bool      // tabs and providers are initialised
 	quitting bool
+	restarting bool
 	logFile  *os.File
 )
 
@@ -138,6 +140,13 @@ func main() {
 		fmt.Fprintln(os.Stderr, "phoenix:", err)
 		os.Exit(1)
 	}
+	if restarting {
+		if exe, err := os.Executable(); err == nil {
+			if err := exec.Command(exe).Start(); err != nil {
+				fmt.Fprintln(os.Stderr, "phoenix restart:", err)
+			}
+		}
+	}
 }
 
 func setupTray() {
@@ -147,6 +156,9 @@ func setupTray() {
 	menu.Add("Quit Phoenix").OnClick(func(*application.Context) {
 		quitting = true
 		flushAgentDataWrites()
+		if hub != nil {
+			hub.Close() // stops the MCP servers Phoenix started
+		}
 		app.Quit()
 	})
 	tray := app.SystemTray.New()
@@ -251,6 +263,7 @@ func uiReady() {
 		initHistory()
 		initAgentPersistence()
 		initProviders()
+		startAppInit() // library, approvals, saved MCP servers, desktop thread: all in the background
 	}
 	ready = true
 	ver, verErr := webviewloader.GetAvailableCoreWebView2BrowserVersionString("")
@@ -293,8 +306,19 @@ func handleAction(action, id string) {
 		openConfigFolder()
 	case "history.open":
 		openHistoryEntry(id)
+	case "history.delete":
+		deleteHistoryEntry(id)
 	case "history.clear":
 		clearHistory()
+	case "app.restart":
+		quitting, restarting = true, true
+		flushAgentDataWrites()
+		if hub != nil {
+			hub.Close()
+		}
+		app.Quit()
+	case "setup.get": // the setup card's "Get Claude Code" / "Get Codex"
+		runLater(func() { openSetupPage(id) })
 	case "menu.settings":
 		runLater(openSettings)
 	case "menu.files":

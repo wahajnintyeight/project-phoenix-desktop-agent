@@ -20,6 +20,13 @@ import { initPanelResize } from "./panel-resize";
 
 initPanelResize();
 
+document.addEventListener("contextmenu", (event) => {
+  const target = event.target;
+  if (target instanceof Element && target.matches("body, #app, #page-slot, .home, .settings, .files")) {
+    event.preventDefault();
+  }
+});
+
 const $ = (id: string): HTMLElement | null => document.getElementById(id);
 
 // Go may only set these. Anything else is ignored.

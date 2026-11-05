@@ -9,8 +9,11 @@ import { handleRadioKeys } from "./radio-navigation";
 
 interface QuickData {
   default: string;
-  providers: (ModelsData & { ready?: boolean })[];
+  providers: (ModelsData & { ready?: boolean; installed?: boolean })[];
 }
+
+/** What the setup card needs to know about each provider. */
+export interface ProviderState { id: string; name: string; ready: boolean; installed: boolean }
 
 function el<K extends keyof HTMLElementTagNameMap>(tag: K, cls?: string, text?: string): HTMLElementTagNameMap[K] {
   const e = document.createElement(tag);
@@ -139,7 +142,11 @@ export class PhQuickModel extends HTMLElement {
 
     // The start page shows whether the agent has anything to run on.
     document.dispatchEvent(new CustomEvent("quickchange", {
-      detail: { ready: readyCount, current: cur ? `${cur.name} · ${describeChoice(cur)}` : "" },
+      detail: {
+        ready: readyCount,
+        current: cur ? `${cur.name} · ${describeChoice(cur)}` : "",
+        providers: d.providers.map((p): ProviderState => ({ id: p.id, name: p.name, ready: p.ready === true, installed: p.installed === true })),
+      },
     }));
   }
 }

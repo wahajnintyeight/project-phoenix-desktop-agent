@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"strings"
 	"sync"
+	"time"
 
 	"phoenix/internal/config"
 	"phoenix/internal/mcp"
@@ -21,6 +22,10 @@ type Hub struct {
 	store     *config.Store
 	vault     *secrets.Store
 	providers map[provider.ID]provider.Provider
+	pool      *mcp.Pool // the user's MCP servers, kept connected for the life of the app
+
+	// Trace, when set, receives timing lines (never prompts, paths or secrets).
+	Trace func(format string, args ...any)
 
 	modelsMu sync.Mutex
 	models   map[provider.ID]modelList
@@ -49,6 +54,12 @@ func NewWithStore(store *config.Store, vault *secrets.Store, providers ...provid
 		store: store, vault: vault,
 		providers: map[provider.ID]provider.Provider{},
 		models:    map[provider.ID]modelList{},
+		pool:      mcp.NewPool(),
+	}
+	h.pool.Trace = func(format string, args ...any) {
+		if h.Trace != nil {
+			h.Trace(format, args...)
+		}
 	}
 	for _, p := range providers {
 		h.providers[p.ID()] = p
@@ -284,8 +295,57 @@ func (h *Hub) Login(ctx context.Context, id provider.ID) error {
 	return p.Login(ctx, r.Settings)
 }
 
+// resolveEnabledMCP resolves the user's enabled servers (secrets filled in). Servers whose
+// secrets cannot be read are returned by name as unavailable.
+func (h *Hub) resolveEnabledMCP() (servers []mcp.Resolved, unavailable []string) {
+	for _, server := range h.MCPEnabled() {
+		resolved, err := h.resolveMCP(server)
+		if err != nil {
+			unavailable = append(unavailable, server.Name)
+			continue
+		}
+		resolved.RequireApproval = true
+		servers = append(servers, resolved)
+	}
+	return
+}
+
+// runMCPWait is how long one message waits for MCP servers that are still connecting. A cold
+// `npx` server can take longer than that; it keeps connecting in the background and the next
+// message has it, which is better than every message sitting behind it.
+const runMCPWait = 4 * time.Second
+
+// WarmMCPAndWait is WarmMCP for the start-up initializer: it connects every enabled server and
+// returns when each has connected or failed (or ctx ends), reporting how many are ready.
+func (h *Hub) WarmMCPAndWait(ctx context.Context) (ready, total int) {
+	servers, _ := h.resolveEnabledMCP()
+	h.pool.Sync(servers)
+	return h.pool.WarmAndWait(ctx, servers), len(servers)
+}
+
+// WarmProviders does the one-time work a first message would otherwise pay for: asking the Codex
+// CLI which built-in tools it has (so they can be switched off).
+func (h *Hub) WarmProviders(ctx context.Context) {
+	if r, err := h.resolve(provider.Codex); err == nil {
+		provider.WarmCodex(ctx, r.Settings)
+	}
+}
+
+// WarmMCP connects the enabled MCP servers in the background and drops connections to servers
+// that were removed, disabled or edited. Call it at start-up and after any change to the
+// server list, so the first chat message finds its tools already connected.
+func (h *Hub) WarmMCP() {
+	servers, _ := h.resolveEnabledMCP()
+	h.pool.Sync(servers)
+	h.pool.Warm(servers)
+}
+
+// Close disconnects every pooled MCP server (stdio servers are stopped). Call at app exit.
+func (h *Hub) Close() { h.pool.Close() }
+
 // Run streams a prompt through a provider.
 func (h *Hub) Run(ctx context.Context, id provider.ID, req provider.Request, emit func(provider.Event)) (provider.Result, error) {
+	began := time.Now()
 	p, err := h.get(id)
 	if err != nil {
 		return provider.Result{}, err
@@ -295,24 +355,24 @@ func (h *Hub) Run(ctx context.Context, id provider.ID, req provider.Request, emi
 		return provider.Result{}, err
 	}
 	if (provider.IsHTTP(id) || id == provider.Codex || (id == provider.Claude && req.MCPConfig == "")) && (req.UseMCP || len(req.MCPServers) > 0) {
-		servers := make([]mcp.Resolved, 0, len(req.MCPServers)+len(h.MCPEnabled()))
-		var unavailable []string
-		for _, server := range h.MCPEnabled() {
-			resolved, err := h.resolveMCP(server)
-			if err != nil {
-				unavailable = append(unavailable, server.Name)
-				continue
-			}
-			resolved.RequireApproval = true
-			servers = append(servers, resolved)
-		}
-		servers = append(servers, req.MCPServers...)
-		if len(servers) > 0 {
-			runtime, missing, err := mcp.OpenAvailable(ctx, servers)
+		var startingNames []string
+		pooled, unavailable := h.resolveEnabledMCP()
+		if len(pooled)+len(req.MCPServers) > 0 {
+			started := time.Now()
+			runtime, missing, starting, err := h.pool.OpenRun(ctx, pooled, req.MCPServers, runMCPWait)
 			if err != nil {
 				return provider.Result{}, err
 			}
+			if h.Trace != nil {
+				fns := runtime.Functions()
+				bytes := 0
+				for _, f := range fns {
+					bytes += len(f.Parameters) + len(f.Description) + len(f.Name)
+				}
+				h.Trace("mcp setup for run: %dms (%d pooled, %d per-run); offering %d tools, ~%d tokens of definitions", time.Since(started).Milliseconds(), len(pooled), len(req.MCPServers), len(fns), bytes/4)
+			}
 			unavailable = append(unavailable, missing...)
+			startingNames = starting
 			defer runtime.Close()
 			for _, function := range runtime.Functions() {
 				req.Tools = append(req.Tools, provider.Tool{
@@ -349,11 +409,30 @@ func (h *Hub) Run(ctx context.Context, id provider.ID, req provider.Request, emi
 				}
 			}
 		}
+		if len(startingNames) > 0 {
+			req.System += "\nStill starting up and not available yet in this run: " + strings.Join(startingNames, ", ") + ". They will be available in a later message; do not claim to use them now."
+			for _, name := range startingNames {
+				emit(provider.Event{Kind: provider.EvToolUse, ToolName: "Still starting: " + name})
+			}
+		}
 		if len(unavailable) > 0 {
 			req.System += "\nUnavailable tools for this run: " + strings.Join(unavailable, ", ") + ". Do not claim to use unavailable tools; continue with available tools when possible."
 			for _, name := range unavailable {
 				emit(provider.Event{Kind: provider.EvToolUse, ToolName: "Unavailable MCP: " + name})
 			}
+		}
+	}
+	prepared := time.Now()
+	if h.Trace != nil {
+		h.Trace("run prepared in %dms", prepared.Sub(began).Milliseconds())
+		first := true
+		inner := emit
+		emit = func(ev provider.Event) {
+			if first {
+				first = false
+				h.Trace("first event %dms after launch", time.Since(prepared).Milliseconds())
+			}
+			inner(ev)
 		}
 	}
 	return p.Run(ctx, r.Settings, req, emit)

@@ -82,10 +82,18 @@ func (c Client) Invoke(ctx context.Context, call Call) (Output, error) {
 	if err := json.NewDecoder(io.LimitReader(resp.Body, maxReply)).Decode(&out); err != nil {
 		return Output{}, errors.New("Phoenix returned an invalid browser result")
 	}
-	if len(out.Text) > maxText || len(out.Image) > maxImage || (len(out.Image) > 0 && out.MIMEType != "image/jpeg" && out.MIMEType != "image/png") {
-		return Output{}, errors.New("Phoenix browser result exceeded its limit")
+	if err := out.Check(); err != nil {
+		return Output{}, err
 	}
 	return out, nil
+}
+
+// Check enforces the size and type limits on a result before it reaches the model.
+func (o Output) Check() error {
+	if len(o.Text) > maxText || len(o.Image) > maxImage || (len(o.Image) > 0 && o.MIMEType != "image/jpeg" && o.MIMEType != "image/png") {
+		return errors.New("Phoenix browser result exceeded its limit")
+	}
+	return nil
 }
 
 func localBridgeURL(raw string) bool {

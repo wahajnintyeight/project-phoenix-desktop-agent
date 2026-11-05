@@ -89,6 +89,31 @@ func transport(s Resolved, oauthHandler auth.OAuthHandler) sdk.Transport {
 }
 
 func connect(ctx context.Context, s Resolved) (*sdk.ClientSession, func(), error) {
+	return connectSession(ctx, s, nil)
+}
+
+// connectSession opens a session. onListChanged, when set, is called if the server announces
+// that its tool list changed. A server Phoenix itself provides (InProcess) is connected over
+// an in-memory pipe: no child process, no pipes to start, no serialisation over stdio.
+func connectSession(ctx context.Context, s Resolved, onListChanged func()) (*sdk.ClientSession, func(), error) {
+	var opts *sdk.ClientOptions
+	if onListChanged != nil {
+		opts = &sdk.ClientOptions{ToolListChangedHandler: func(context.Context, *sdk.ToolListChangedRequest) { onListChanged() }}
+	}
+	if s.InProcess != nil {
+		ct, st := sdk.NewInMemoryTransports()
+		srvSession, err := s.InProcess().Connect(ctx, st, nil)
+		if err != nil {
+			return nil, nil, err
+		}
+		client := sdk.NewClient(&sdk.Implementation{Name: "phoenix", Version: "0.1"}, opts)
+		session, err := client.Connect(ctx, ct, nil)
+		if err != nil {
+			_ = srvSession.Close()
+			return nil, nil, err
+		}
+		return session, func() { _ = srvSession.Close() }, nil
+	}
 	if err := s.Validate(); err != nil {
 		return nil, nil, err
 	}
@@ -106,7 +131,7 @@ func connect(ctx context.Context, s Resolved) (*sdk.ClientSession, func(), error
 		cleanup()
 		return nil, nil, errors.New("unknown MCP transport")
 	}
-	client := sdk.NewClient(&sdk.Implementation{Name: "phoenix", Version: "0.1"}, nil)
+	client := sdk.NewClient(&sdk.Implementation{Name: "phoenix", Version: "0.1"}, opts)
 	session, err := client.Connect(ctx, tr, nil)
 	if err != nil {
 		cleanup()

@@ -116,6 +116,13 @@ func (p OpenAICompat) Run(ctx context.Context, s Settings, req Request, emit fun
 		if toolCount+len(calls) > maxToolCalls {
 			return p.finishRun(start, text.String(), usage, false, emit, "I stopped before running these tools because this turn reached Phoenix's tool-call limit. Review the activity, then ask me to continue if needed."), nil
 		}
+		// A tool with no parameters streams back empty arguments. Replayed as "" that is not valid
+		// JSON and Gemini rejects the next request with a bare 400 INVALID_ARGUMENT.
+		for i := range calls {
+			if strings.TrimSpace(calls[i].Function.Arguments) == "" {
+				calls[i].Function.Arguments = "{}"
+			}
+		}
 		var assistantContent any
 		if result.Text != "" {
 			assistantContent = result.Text

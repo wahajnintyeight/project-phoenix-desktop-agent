@@ -290,9 +290,12 @@
   .history-clear { @apply rounded-md px-2 py-1 text-xs text-fg-subtle transition-colors; }
   .history-clear:hover { @apply bg-raised text-fg; }
   .history-grid { @apply grid grid-cols-2 gap-2; }
-  .history-item { @apply flex min-w-0 items-center gap-3 rounded-lg border border-line bg-panel p-3 text-left transition-colors; }
+  .history-item { @apply flex min-w-0 cursor-pointer items-center gap-3 rounded-lg border border-line bg-panel p-3 text-left transition-colors; }
   .history-item:hover { @apply border-line-strong bg-raised; }
   .history-mark { @apply grid size-9 shrink-0 place-items-center rounded-lg bg-raised text-xs font-semibold text-accent; }
+  .history-favicon { @apply size-9 shrink-0 rounded-lg object-contain; }
+  .history-remove { @apply grid size-7 shrink-0 place-items-center rounded-md text-lg leading-none text-fg-subtle transition-colors; }
+  .history-remove:hover { @apply bg-raised text-fg; }
   .history-copy { @apply flex min-w-0 flex-1 flex-col gap-0.5; }
   .history-title { @apply truncate text-sm font-medium text-fg; }
   .history-host { @apply truncate text-xs text-fg-subtle; }
@@ -775,6 +778,17 @@
   .chat-empty h2 { @apply text-2xl font-bold; }
   .chat-empty p { @apply max-w-[36ch] text-fg-muted; }
   .chat-ideas { @apply mt-3 flex flex-col gap-2.5; }
+  /* No model yet: the setup card stands in for the greeting and the example tasks. */
+  .chat-empty:has(ph-setup-card:not([hidden])) > :is(h2, p, .chat-ideas) { @apply hidden; }
+  ph-setup-card { @apply flex flex-col gap-3; }
+  ph-setup-card[hidden] { @apply hidden; }
+  ph-setup-card h2 { @apply text-2xl font-bold; }
+  .setup-rows { @apply mt-1 flex flex-col gap-2.5; }
+  .setup-row { @apply flex w-full items-center gap-3 rounded-xl border p-3 text-left text-sm text-fg transition-colors; background: var(--card); border-color: var(--card-edge); }
+  .setup-row:hover { border-color: var(--color-mauve-shadow-600); }
+  .setup-text { @apply flex min-w-0 flex-1 flex-col gap-0.5; }
+  .setup-text strong { @apply font-semibold; }
+  .setup-text span { @apply text-xs text-fg-muted; }
   .chat-idea { @apply flex w-full items-center gap-3 rounded-xl border p-3 text-left text-sm font-medium text-fg transition-colors; background: var(--card); border-color: var(--card-edge); }
   .chat-idea:hover { border-color: var(--color-mauve-shadow-600); }
   .chat-idea-mark { @apply grid size-8 shrink-0 place-items-center rounded-lg text-accent; background: color-mix(in oklab, var(--color-mauve-shadow-500) 24%, transparent); }

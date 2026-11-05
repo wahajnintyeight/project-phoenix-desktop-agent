@@ -9,6 +9,8 @@ import (
 	"sort"
 	"strings"
 	"time"
+
+	sdk "github.com/modelcontextprotocol/go-sdk/mcp"
 )
 
 // Resolver turns a stored reference ("vault:<name>", "env:<NAME>") into its value.
@@ -23,6 +25,9 @@ type Resolved struct {
 	RequireApproval bool // HTTP-provider function calls ask the user before invoking this server.
 	OAuthRecord     *OAuthRecord
 	SaveOAuthRecord func(OAuthRecord) error
+	// InProcess, when set, serves this server inside Phoenix itself (Phoenix's own tools),
+	// connected over an in-memory pipe. Set only by Phoenix code, never from config.
+	InProcess func() *sdk.Server `json:"-" yaml:"-"`
 }
 
 // Resolve fills in a server's secrets.

@@ -54,13 +54,13 @@ func openLibrary() (*library.Store, error) {
 // filesServer is the per-run MCP child that serves the file tools. The database path is passed
 // by environment; the child opens the same database (WAL, so both sides can work at once).
 func filesServer() (mcp.Resolved, error) {
-	exe, err := os.Executable()
+	lib, err := openLibrary()
 	if err != nil {
 		return mcp.Resolved{}, err
 	}
 	return mcp.Resolved{
-		Server:    mcp.Server{Name: library.ServerName, Transport: mcp.Stdio, Command: exe, Args: []string{"mcp-files"}, Enabled: true},
-		EnvValues: map[string]string{"PHOENIX_LIBRARY_DB": libraryDBPath()},
+		Server:    mcp.Server{Name: library.ServerName, Transport: mcp.Stdio, Enabled: true},
+		InProcess: func() *sdk.Server { return library.NewServer(lib, "agent") },
 	}, nil
 }
 

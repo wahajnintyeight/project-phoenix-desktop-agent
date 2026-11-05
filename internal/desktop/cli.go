@@ -5,6 +5,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"sync"
 )
 
 // CLI dispatches native desktop commands.
@@ -12,6 +13,23 @@ type CLI struct {
 	Native bool
 	driver nativeDriver
 }
+
+var (
+	sharedOnce   sync.Once
+	sharedDriver nativeDriver
+)
+
+// NativeCLI is the native desktop driver for use inside the Phoenix process. There is one
+// driver for the whole app: it owns a single OS thread with Windows UI Automation initialised
+// on it, so a new server per chat message must share it instead of starting another thread.
+func NativeCLI() CLI {
+	sharedOnce.Do(func() { sharedDriver = newNativeDriver() })
+	return CLI{Native: true, driver: sharedDriver}
+}
+
+// WarmNative starts the driver's thread and initialises UI Automation now, so the first
+// desktop tool call of a session does not pay for it.
+func WarmNative() { warmDriver(NativeCLI().driver) }
 
 // Envelope is the common result format for a desktop command.
 type Envelope struct {

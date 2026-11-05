@@ -160,7 +160,11 @@ const (
 	navStartingGetURI           = 3  // ICoreWebView2NavigationStartingEventArgs::get_Uri
 	navCompletedGetIsSuccess    = 3  // ICoreWebView2NavigationCompletedEventArgs::get_IsSuccess
 	newWindowGetURI             = 3  // ICoreWebView2NewWindowRequestedEventArgs::get_Uri
+	newWindowPutNewWindow       = 4
 	newWindowPutHandled         = 6
+	newWindowGetDeferral        = 9
+	deferralComplete            = 3
+	wvAddWindowCloseRequested   = 59
 	newWindowGetIsUserInitiated = 8
 )
 
