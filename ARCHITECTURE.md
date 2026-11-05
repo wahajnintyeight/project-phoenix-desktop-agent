@@ -83,7 +83,7 @@ The UI accepts only a fixed property and attribute allowlist. There is no operat
 
 The agent reaches Phoenix's actual open tabs through a built-in MCP server named `phoenix-browser`. The exposed tools are:
 
-- Observe: `browser_tabs`, `browser_snapshot`, `browser_screenshot`, `browser_wait`.
+- Observe: `browser_tabs`, `browser_read`, `browser_snapshot`, `browser_screenshot`, `browser_wait`.
 - Page interaction: `browser_click`, `browser_drag`, `browser_type`, `browser_fill`, `browser_press`, `browser_scroll`, `browser_select`, `browser_copy`, `browser_paste`.
 - Tabs and navigation: `browser_open_tab`, `browser_close_tab`, `browser_switch_tab`, `browser_navigate`, `browser_back`, `browser_forward`, `browser_reload`.
 
@@ -183,7 +183,7 @@ There is no SQLite schema, migration system, workspace file index, résumé fact
 
 ## 12. Current gaps and open work
 
-- **Files and workspace:** a general workspace-confined file toolset, document indexing and Drive integration are not implemented.
+- **Files and workspace:** the workspace-confined file toolset exists (`internal/workspace`, MCP server `phoenix-files`, started as `phoenix.exe mcp-files`; folder from `workspace.dir`, default `Documents\Phoenix`). A Files view in the UI, document indexing and Drive integration are not implemented.
 - **Product data:** no résumé profile store, application tracker, SQLite database, backup/restore flow, setup wizard, native notification center, updater or signed release pipeline.
 - **Tool capabilities:** provider support is detected at the provider level, not consistently per model. Models without function-call support can fail when tools are offered.
 - **Browser:** no arbitrary script, file upload/download, batch, trace/replay or robust coordinate interaction for canvas-only applications. Iframes and canvas are not represented by the accessibility snapshot.
@@ -209,3 +209,7 @@ The next architecture changes should preserve the tool boundary: a provider may 
 - [Model Context Protocol Go SDK](https://github.com/modelcontextprotocol/go-sdk)
 - [vercel-labs/agent-desktop](https://github.com/vercel-labs/agent-desktop) — inspiration only; not a dependency
 - [pbakaus/impeccable](https://github.com/pbakaus/impeccable) — design workflow inspiration
+
+## Workspace files
+
+The agent has one storage folder (default `Documents\Phoenix`, setting `workspace.dir`). `internal/workspace` resolves every model-supplied path relative to it and rejects `..`, drive letters, ADS colons, reserved device names and symlinks/junctions, in the MCP child that touches the disk. Tools: `files_list`, `files_read` (text only, paged), `files_write` (create/overwrite/append, 1 MiB per call), `files_mkdir`, `files_move`, `files_copy`, `files_delete`, `files_search`. Deletes and overwrites move the old content to `.phoenix-trash/<timestamp>/` inside the workspace instead of destroying it; that folder is hidden from the agent. Moves and copies never replace an existing item. Each run adds the server and a system-prompt note naming the folder and its top-level contents, so the agent knows storage exists.

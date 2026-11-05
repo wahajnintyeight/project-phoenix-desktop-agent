@@ -204,6 +204,9 @@ func browserCallMeta(ctx context.Context, call browser.Call) (browserPermission,
 			meta.Summary = "Copy the page selection to the clipboard"
 		case "browser_paste":
 			meta.Summary = "Paste the clipboard into the focused page field"
+		case "browser_read":
+			meta.Class = desktop.Look
+			meta.Summary = "Read the page's text, forms and state"
 		default:
 			meta.Class = desktop.Look
 			meta.Summary = "Take a screenshot of the browser tab"
@@ -389,7 +392,7 @@ func decodeBrowserCall(call browser.Call) (any, error) {
 			}
 		}
 		return v, e
-	case "browser_screenshot", "browser_copy", "browser_paste", "browser_back", "browser_forward", "browser_reload", "browser_close_tab", "browser_switch_tab":
+	case "browser_screenshot", "browser_read", "browser_copy", "browser_paste", "browser_back", "browser_forward", "browser_reload", "browser_close_tab", "browser_switch_tab":
 		v, e := decode(&browser.TabArgs{})
 		if e == nil && !validTabID(v.(browser.TabArgs).TabID) {
 			e = errors.New("invalid browser tab id")

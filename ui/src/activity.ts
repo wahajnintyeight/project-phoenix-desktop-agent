@@ -42,7 +42,9 @@ class PhActivity extends HTMLElement {
 
   #row(entry: ActivityEntry): HTMLElement {
     const row = el("article", "activity-row");
+    if (entry.status) row.dataset["status"] = entry.status;
     const top = el("div", "activity-row-top");
+    top.append(el("span", "activity-dot"));
     const summary = el("p", "activity-summary", entry.summary);
     const at = new Date(entry.at);
     const time = el("time", "activity-time", Number.isNaN(at.valueOf())

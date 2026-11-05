@@ -394,6 +394,17 @@ func (h *Hub) Desktop() (enabled bool, cliPath string) {
 	return
 }
 
+// WorkspaceDir is the configured file workspace, or "" for the default.
+func (h *Hub) WorkspaceDir() (dir string) {
+	h.store.View(func(c *config.Config) { dir = c.Workspace.Dir })
+	return
+}
+
+// SetWorkspaceDir changes the file workspace; "" restores the default.
+func (h *Hub) SetWorkspaceDir(dir string) error {
+	return h.store.Update(func(c *config.Config) { c.Workspace.Dir = dir })
+}
+
 // SetDesktopEnabled turns computer use on or off.
 func (h *Hub) SetDesktopEnabled(on bool) error {
 	return h.store.Update(func(c *config.Config) { c.Desktop.Enabled = on })

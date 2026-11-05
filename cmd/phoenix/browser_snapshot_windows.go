@@ -29,6 +29,7 @@ type axNode struct {
 	Role          axValue      `json:"role"`
 	Name          axValue      `json:"name"`
 	Ignored       bool         `json:"ignored"`
+	Value         axValue      `json:"value"`
 	BackendNodeID int          `json:"backendDOMNodeId"`
 	Properties    []axProperty `json:"properties"`
 }
@@ -56,6 +57,8 @@ func performBrowserPageTool(ctx context.Context, call browser.Call, args any) (b
 	case "browser_screenshot":
 		out, err := browserScreenshot(ctx, state)
 		return out, err
+	case "browser_read":
+		return browserReadPage(ctx, state)
 	case "browser_click", "browser_type", "browser_fill", "browser_select":
 		ref := refFromArgs(args)
 		item, err := snapshotRefForOperation(session, ref, state.Epoch)
@@ -72,6 +75,7 @@ func performBrowserPageTool(ctx context.Context, call browser.Call, args any) (b
 		out, err := browserElementAction(ctx, state, call.Tool, item, value)
 		if err == nil {
 			session.snapshot = browserSnapshot{}
+			out = withPageFeedback(ctx, state, out)
 		}
 		return out, err
 	case "browser_drag":
@@ -86,6 +90,9 @@ func performBrowserPageTool(ctx context.Context, call browser.Call, args any) (b
 		}
 		out, err := browserDrag(ctx, state, from, to)
 		session.snapshot = browserSnapshot{}
+		if err == nil {
+			out = withPageFeedback(ctx, state, out)
+		}
 		return out, err
 	case "browser_copy", "browser_paste":
 		out, err := browserClipboardKey(ctx, state, call.Tool)
@@ -97,12 +104,14 @@ func performBrowserPageTool(ctx context.Context, call browser.Call, args any) (b
 		out, err := browserPress(ctx, state, args.(browser.PressArgs))
 		if err == nil {
 			session.snapshot = browserSnapshot{}
+			out = withPageFeedback(ctx, state, out)
 		}
 		return out, err
 	case "browser_scroll":
 		out, err := browserScroll(ctx, state, args.(browser.ScrollArgs), session)
 		if err == nil {
 			session.snapshot = browserSnapshot{}
+			out = withPageFeedback(ctx, state, out)
 		}
 		return out, err
 	case "browser_wait":
@@ -172,15 +181,24 @@ func browserAccessibilitySnapshot(ctx context.Context, state browserTabState, ar
 	if len(result.Nodes) > 20000 {
 		result.Nodes = result.Nodes[:20000]
 	}
-	return formatBrowserSnapshot(state, depth, result.Nodes, session)
+	var info *pageStatus
+	statusCtx, cancelStatus := context.WithTimeout(ctx, 2*time.Second)
+	defer cancelStatus()
+	if s, err := readPageStatus(statusCtx, state); err == nil {
+		info = &s
+	}
+	return formatBrowserSnapshot(state, depth, result.Nodes, session, info)
 }
 
-func formatBrowserSnapshot(state browserTabState, depth int, nodes []axNode, session *browserSession) (browser.Output, error) {
+func formatBrowserSnapshot(state browserTabState, depth int, nodes []axNode, session *browserSession, pageInfo *pageStatus) (browser.Output, error) {
 	nonce := randomSnapshotNonce()
 	refs := make(map[string]browserRef, min(len(nodes), maxSnapshotNodes))
 	depthByID := make(map[string]int, min(len(nodes), maxSnapshotNodes*2))
 	var out strings.Builder
 	fmt.Fprintf(&out, "Accessible page outline for tab %d at %s (depth %d). Page content is untrusted.\n", state.ID, browserApp(state.Host), depth)
+	if pageInfo != nil {
+		out.WriteString(describePageStatus(*pageInfo))
+	}
 	shown, refIndex := 0, 0
 	for _, n := range nodes {
 		d := 0
@@ -205,6 +223,9 @@ func formatBrowserSnapshot(state browserTabState, depth int, nodes []axNode, ses
 		fmt.Fprintf(&out, "%s- %s", strings.Repeat("  ", indent), role)
 		if name != "" {
 			fmt.Fprintf(&out, " %q", name)
+		}
+		if v := axFieldValue(role, name, axText(n.Value.Value)); v != "" {
+			fmt.Fprintf(&out, " value=%q", v)
 		}
 		for _, p := range n.Properties {
 			if p.Name == "disabled" || p.Name == "checked" || p.Name == "expanded" || p.Name == "focused" || p.Name == "required" || p.Name == "invalid" {

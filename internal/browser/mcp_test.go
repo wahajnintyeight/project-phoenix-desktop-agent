@@ -41,7 +41,7 @@ func TestMCPServerPublishesBrowserTools(t *testing.T) {
 	sort.Strings(got)
 	want := []string{
 		"browser_back", "browser_click", "browser_close_tab", "browser_copy", "browser_drag", "browser_paste", "browser_fill", "browser_forward",
-		"browser_navigate", "browser_open_tab", "browser_press", "browser_reload", "browser_scroll",
+		"browser_navigate", "browser_open_tab", "browser_press", "browser_read", "browser_reload", "browser_scroll",
 		"browser_screenshot", "browser_select", "browser_snapshot", "browser_switch_tab", "browser_tabs", "browser_type", "browser_wait",
 	}
 	sort.Strings(want)

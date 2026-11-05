@@ -143,7 +143,7 @@ func (b *browserBridge) serve(w http.ResponseWriter, r *http.Request) {
 
 func knownBrowserTool(name string) bool {
 	switch name {
-	case "browser_tabs", "browser_snapshot", "browser_screenshot", "browser_navigate", "browser_click",
+	case "browser_tabs", "browser_read", "browser_snapshot", "browser_screenshot", "browser_navigate", "browser_click",
 		"browser_type", "browser_fill", "browser_drag", "browser_copy", "browser_paste", "browser_press", "browser_scroll", "browser_wait", "browser_select",
 		"browser_back", "browser_forward", "browser_reload", "browser_open_tab", "browser_close_tab", "browser_switch_tab":
 		return true

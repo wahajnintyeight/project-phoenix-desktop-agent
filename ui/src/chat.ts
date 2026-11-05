@@ -2,7 +2,7 @@
 // draws what Go reports (`events`) and sends what the user types ("g send", "g stop",
 // "g new"). Every message is placed with textContent: model output is untrusted text.
 import { el } from "./dom";
-import { icon } from "./icons";
+import { icon, type IconName } from "./icons";
 import { MarkdownView } from "./markdown";
 import type { PhMcp } from "./mcp-settings";
 import { send } from "./protocol";
@@ -40,6 +40,21 @@ interface SavedChatSummary {
   id: string;
   title: string;
   updatedAt: string;
+  messages?: number;
+}
+
+interface SavedChatList {
+  current: string;
+  items: SavedChatSummary[];
+}
+
+function when(iso: string): string {
+  const date = new Date(iso);
+  if (Number.isNaN(date.valueOf())) return "";
+  const days = Math.round((new Date().setHours(0, 0, 0, 0) - new Date(date).setHours(0, 0, 0, 0)) / 86_400_000);
+  if (days <= 0) return "Today";
+  if (days === 1) return "Yesterday";
+  return new Intl.DateTimeFormat(undefined, { dateStyle: "medium" }).format(date);
 }
 
 /** One message in the log. The agent's replies are Markdown; everything else is plain text. */
@@ -62,7 +77,8 @@ class Msg {
     this.copy.type = "button";
     this.copy.hidden = !copyable || this.#raw === "";
     this.copy.setAttribute("aria-label", "Copy message");
-    this.copy.append(icon("copy", 12), el("span", undefined, "Copy"));
+    // Icon only; the label is for screen readers and tells them when the copy worked.
+    this.copy.append(icon("copy", 14), icon("check", 14), el("span", "sr-only", "Copy"));
     this.copy.addEventListener("click", () => this.#copyText(), { passive: true });
     footer.append(this.meta, this.copy);
     // The name is for screen readers; sighted users read it in the footer line.
@@ -99,30 +115,101 @@ class Msg {
 
   #copyText(): void {
     if (!this.#raw || !navigator.clipboard?.writeText) return;
-    void navigator.clipboard.writeText(this.#raw).then(() => {
-      this.copy.lastElementChild!.textContent = "Copied";
+    const show = (label: string, copied: boolean): void => {
+      this.copy.lastElementChild!.textContent = label;
+      if (copied) this.copy.dataset["copied"] = "";
+      else delete this.copy.dataset["copied"];
       window.clearTimeout(this.#copyTimer);
-      this.#copyTimer = window.setTimeout(() => { this.copy.lastElementChild!.textContent = "Copy"; }, 1500);
-    }, () => {
-      this.copy.lastElementChild!.textContent = "Copy failed";
-      window.clearTimeout(this.#copyTimer);
-      this.#copyTimer = window.setTimeout(() => { this.copy.lastElementChild!.textContent = "Copy"; }, 1500);
-    });
+      this.#copyTimer = window.setTimeout(() => show("Copy", false), 1500);
+    };
+    void navigator.clipboard.writeText(this.#raw).then(() => show("Copied", true), () => show("Copy failed", false));
   }
 }
 
 interface ToolCardState {
+  group: StepGroup;
   card: HTMLDetailsElement;
   status: HTMLElement;
   output: HTMLPreElement;
   outputSection: HTMLElement;
 }
 
+/**
+ * Consecutive tool calls fold into one collapsed row, so a long run reads as a single line of
+ * progress ("Clicking Apply · 7 steps") instead of a wall of cards. Opening it shows each step.
+ */
+class StepGroup {
+  readonly box = el("details", "chat-steps") as HTMLDetailsElement;
+  readonly #label = el("span", "chat-steps-label");
+  readonly #count = el("span", "chat-steps-count");
+  readonly body = el("div", "chat-steps-body");
+  #total = 0;
+  #failed = 0;
+  #latest = "";
+  /** Live until the run ends: between two tool calls the agent is still working, so the row
+   *  keeps naming the latest step instead of flipping to "Used N tools" and back. */
+  #live = true;
+
+  constructor() {
+    const summary = document.createElement("summary");
+    const chevron = icon("chevronRight", 14);
+    chevron.classList.add("chat-steps-chevron");
+    summary.append(el("span", "chat-spinner"), this.#label, this.#count, chevron);
+    this.box.append(summary, this.body);
+    this.#render();
+  }
+
+  start(title: string): void {
+    this.#total++;
+    this.#latest = title;
+    this.#render();
+  }
+
+  finish(failed: boolean): void {
+    if (failed) this.#failed++;
+    this.#render();
+  }
+
+  /** The run ended: nothing is running any more, whatever Go last reported. */
+  settle(): void {
+    this.#live = false;
+    this.#render();
+  }
+
+  #render(): void {
+    const running = this.#live;
+    this.box.dataset["state"] = running ? "running" : this.#failed ? "failed" : "done";
+    this.#label.textContent = running ? this.#latest || "Working…" : `Used ${this.#total === 1 ? "1 tool" : `${this.#total} tools`}`;
+    const bits = running ? [`${this.#total} ${this.#total === 1 ? "step" : "steps"}`] : [];
+    if (this.#failed) bits.push(`${this.#failed} failed`);
+    this.#count.textContent = bits.join(" · ");
+    this.#count.hidden = bits.length === 0;
+  }
+}
+
 function prettyToolText(value: string): string {
   try { return JSON.stringify(JSON.parse(value), null, 2) ?? value; } catch { return value; }
 }
 
-const IDEAS = ["Summarise this page", "What are the key points here?", "Draft a short reply to this"];
+/** Plain wording for Phoenix's own browser tools, so a step reads as an action, not a function name. */
+const BROWSER_STEPS: Record<string, string> = {
+  browser_tabs: "Checking open tabs", browser_read: "Reading the page", browser_snapshot: "Looking at the page's controls",
+  browser_screenshot: "Taking a screenshot", browser_click: "Clicking", browser_type: "Typing", browser_fill: "Filling in a field",
+  browser_select: "Choosing an option", browser_press: "Pressing a key", browser_scroll: "Scrolling", browser_drag: "Dragging",
+  browser_wait: "Waiting for the page", browser_navigate: "Opening a page", browser_open_tab: "Opening a tab",
+  browser_close_tab: "Closing a tab", browser_switch_tab: "Switching tab", browser_back: "Going back",
+  browser_forward: "Going forward", browser_reload: "Reloading the page", browser_copy: "Copying", browser_paste: "Pasting",
+};
+
+function stepTitle(ev: ChatEvent): string {
+  return (/browser/i.test(ev.server ?? "") && ev.toolName && BROWSER_STEPS[ev.toolName]) || ev.text || ev.toolName || "Working…";
+}
+
+const IDEAS: readonly [string, IconName][] = [
+  ["Summarise this page", "page"],
+  ["What are the key points here?", "list"],
+  ["Draft a short reply to this", "pen"],
+];
 
 export class PhChat extends HTMLElement {
   readonly #log = el("div", "chat-log");
@@ -133,14 +220,29 @@ export class PhChat extends HTMLElement {
   readonly #commandMenu = el("div", "slash-menu");
   readonly #send = el("button", "send-btn");
   readonly #share = el("button", "share-chip");
-  readonly #newChat = el("button", "btn btn-quiet btn-sm", "New chat");
+  readonly #newChat = el("button", "chat-new");
+  readonly #title = el("span", "chat-title", "New chat");
   readonly #chatHistory = el("details", "chat-history");
   readonly #chatHistoryCount = el("span", "chat-history-count", "0");
+  #chatItems: SavedChatSummary[] = [];
+  #currentChat = "";
+  readonly #closeHistory = (e: Event): void => {
+    if (!this.#chatHistory.open) return;
+    if (e instanceof KeyboardEvent) {
+      if (e.key !== "Escape") return;
+      this.#chatHistory.open = false;
+      this.#chatHistory.querySelector<HTMLElement>("summary")?.focus();
+    } else if (!this.#chatHistory.contains(e.target as Node | null)) {
+      this.#chatHistory.open = false;
+    }
+  };
   readonly #chatHistoryList = el("div", "chat-history-list");
   #shareOn = false;
   #running = false;
   #commands: SlashCommandDefinition[] = [];
   readonly #toolCalls = new Map<string, ToolCardState>();
+  #titled = false; // the bar's title has been taken from the first message
+  #steps: StepGroup | null = null; // the folded run of tool calls currently being added to
   #activeCommand = 0;
   #current: Msg | null = null;
   #scrollFrame = 0;
@@ -174,9 +276,12 @@ export class PhChat extends HTMLElement {
 
     // The empty state teaches the one non-obvious feature: sharing the open tab.
     const ideas = el("div", "chat-ideas");
-    for (const text of IDEAS) {
-      const b = el("button", "chat-idea", text);
+    for (const [text, glyph] of IDEAS) {
+      const b = el("button", "chat-idea");
       b.type = "button";
+      const mark = el("span", "chat-idea-mark");
+      mark.append(icon(glyph, 16));
+      b.append(mark, el("span", "chat-idea-text", text), icon("chevronRight", 14));
       b.addEventListener("click", () => {
         this.#setShare(true);
         this.#input.value = text;
@@ -188,7 +293,7 @@ export class PhChat extends HTMLElement {
     }
     this.#empty.append(
       el("h2", undefined, "What can we work on?"),
-      el("p", undefined, "Give Phoenix a task. It can inspect and use your browser to make progress."),
+      el("p", undefined, "Give Phoenix a task. It reads the page, clicks and types for you, and shows every step."),
       ideas,
     );
     this.#log.append(this.#empty);
@@ -229,12 +334,26 @@ export class PhChat extends HTMLElement {
     wrap.append(this.#commandMenu, composer);
 
     this.#newChat.type = "button";
-    this.#newChat.hidden = true;
-    this.#chatHistory.append(
-      el("summary", "chat-history-trigger", "Chats"),
+    this.#newChat.disabled = true; // nothing to leave until the first message
+    this.#newChat.title = "New chat";
+    this.#newChat.setAttribute("aria-label", "New chat");
+    this.#newChat.append(icon("compose", 18));
+    const trigger = el("summary", "chat-history-trigger");
+    trigger.title = "Switch session";
+    const mark = el("span", "chat-history-icon");
+    mark.append(icon("chat", 16));
+    const copy = el("span", "chat-history-copy");
+    copy.append(el("span", "chat-history-kicker", "Session"), this.#title);
+    const chevron = icon("chevronDown", 14);
+    chevron.classList.add("chat-history-chevron");
+    trigger.append(mark, copy, this.#chatHistoryCount, chevron);
+    const pop = el("div", "chat-history-pop");
+    pop.append(
+      el("p", "chat-history-head", "Switch session"),
+      el("p", "chat-history-note", "Stop the current reply to switch sessions."),
       this.#chatHistoryList,
     );
-    this.#chatHistory.querySelector("summary")?.append(this.#chatHistoryCount);
+    this.#chatHistory.append(trigger, pop);
     const head = el("div", "chat-head");
     head.append(this.#chatHistory, this.#newChat);
     this.append(head, this.#log, wrap);
@@ -268,9 +387,13 @@ export class PhChat extends HTMLElement {
     this.#send.addEventListener("click", () => (this.#running ? send("g", "stop") : this.#submitInput()), { passive: true });
     this.#share.addEventListener("click", () => this.#setShare(!this.#shareOn), { passive: true });
     this.#newChat.addEventListener("click", () => send("g", "new"), { passive: true });
+    document.addEventListener("pointerdown", this.#closeHistory, { passive: true });
+    document.addEventListener("keydown", this.#closeHistory);
   }
 
   disconnectedCallback(): void {
+    document.removeEventListener("pointerdown", this.#closeHistory);
+    document.removeEventListener("keydown", this.#closeHistory);
     this.#inputObserver.disconnect();
     this.#inputWidth = 0;
   }
@@ -304,26 +427,32 @@ export class PhChat extends HTMLElement {
     this.#scrollFrame = requestAnimationFrame(follow);
   }
 
-  set chats(list: SavedChatSummary[]) {
+  set chats(value: SavedChatList | SavedChatSummary[]) {
+    const list = Array.isArray(value) ? value : value.items;
+    this.#currentChat = Array.isArray(value) ? "" : value.current;
+    this.#chatItems = list;
     this.#chatHistoryCount.textContent = String(list.length);
+    this.#chatHistoryCount.title = `${list.length} saved ${list.length === 1 ? "session" : "sessions"}`;
     this.#chatHistoryList.replaceChildren();
     if (!list.length) {
-      this.#chatHistoryList.append(el("p", "chat-history-empty", "Saved conversations will appear here."));
+      this.#chatHistoryList.append(el("p", "chat-history-empty", "Sessions you start will be saved here, so you can come back to them."));
       return;
     }
     for (const chat of list) {
+      const current = chat.id === this.#currentChat;
       const button = el("button", "chat-history-item");
       button.type = "button";
-      button.append(el("span", "chat-history-title", chat.title));
-      const date = new Date(chat.updatedAt);
-      if (!Number.isNaN(date.valueOf())) {
-        button.append(el("span", "chat-history-date", new Intl.DateTimeFormat(undefined, { dateStyle: "medium" }).format(date)));
-      }
+      if (current) button.setAttribute("aria-current", "true");
+      const main = el("span", "chat-history-main");
+      const parts = [when(chat.updatedAt), chat.messages ? `${chat.messages} ${chat.messages === 1 ? "message" : "messages"}` : ""].filter(Boolean);
+      main.append(el("span", "chat-history-title", chat.title), el("span", "chat-history-meta", parts.join(" · ")));
+      button.append(main);
+      if (current) button.append(el("span", "chat-history-now", "Current"));
       button.disabled = this.#running;
       button.addEventListener("click", () => {
         if (this.#running) return;
-        send("g", "restore", chat.id);
         this.#chatHistory.open = false;
+        if (!current) send("g", "restore", chat.id);
       }, { passive: true });
       this.#chatHistoryList.append(button);
     }
@@ -461,14 +590,21 @@ export class PhChat extends HTMLElement {
   #setRunning(on: boolean): void {
     this.#running = on;
     this.#log.setAttribute("aria-busy", String(on));
+    this.#chatHistory.dataset["running"] = String(on);
     this.#chatHistoryList.querySelectorAll<HTMLButtonElement>(".chat-history-item").forEach((button) => { button.disabled = on; });
     this.#syncSend();
     if (!this.#commandMenu.hidden) this.#renderCommandMenu();
   }
 
+  /** The bar names the chat after what the user first asked. */
+  #setTitle(text: string): void {
+    const t = text.replace(/\s+/g, " ").trim();
+    this.#title.textContent = t ? (t.length > 60 ? `${t.slice(0, 59)}…` : t) : "New chat";
+  }
+
   #message(who: string, cls: string, markdown = false): Msg {
     this.#empty.hidden = true;
-    this.#newChat.hidden = false;
+    this.#newChat.disabled = false;
     const m = new Msg(who, cls, markdown);
     this.#log.append(m.box);
     return m;
@@ -480,6 +616,7 @@ export class PhChat extends HTMLElement {
     if (this.#current?.empty) this.#current.box.remove();
     else this.#current?.flush();
     this.#current = null; // the reply continues in a new message below the card
+    this.#endSteps();
     const card = el("div", "chat-approval");
     card.dataset["id"] = ev.id ?? "";
     card.setAttribute("role", "group");
@@ -522,23 +659,33 @@ export class PhChat extends HTMLElement {
         this.#log.replaceChildren(this.#empty);
         this.#processing.hidden = true;
         this.#toolCalls.clear();
+        this.#endSteps();
         this.#empty.hidden = false;
-        this.#newChat.hidden = true;
+        this.#newChat.disabled = true;
         this.#current = null;
         this.#lastUser = null;
+        this.#titled = false;
+        this.#setTitle("");
         this.#setRunning(false);
         break;
       case "restore": {
         this.#log.replaceChildren(this.#empty);
         this.#processing.hidden = true;
         this.#toolCalls.clear();
+        this.#endSteps();
         this.#empty.hidden = false;
-        this.#newChat.hidden = true;
+        this.#newChat.disabled = true;
         this.#current = null;
         this.#lastUser = null;
         this.#who = "Agent";
+        this.#titled = false;
+        this.#setTitle("");
         for (const message of ev.messages ?? []) {
           if (message.role === "user") {
+            if (!this.#titled) {
+              this.#titled = true;
+              this.#setTitle(message.content);
+            }
             const m = this.#message("You", "chat-user");
             m.set(message.content);
             this.#lastUser = m.meta;
@@ -547,7 +694,7 @@ export class PhChat extends HTMLElement {
             const m = this.#message(who, "chat-ai", true);
             m.append(message.content);
             m.flush();
-            m.meta.textContent = who;
+            m.meta.title = who;
           }
         }
         this.#setRunning(false);
@@ -556,6 +703,11 @@ export class PhChat extends HTMLElement {
       case "user": {
         this.#processing.hidden = true;
         this.#toolCalls.clear();
+        this.#endSteps();
+        if (!this.#titled) {
+          this.#titled = true;
+          this.#setTitle(ev.text ?? "");
+        }
         const m = this.#message("You", "chat-user");
         m.set(ev.text ?? "");
         this.#lastUser = m.meta;
@@ -584,7 +736,10 @@ export class PhChat extends HTMLElement {
         if (!ev.toolId) {
           const t = el("p", "chat-tool");
           t.append(icon("bolt", 12), document.createTextNode(ev.text ?? ""));
-          this.#log.append(t);
+          const group = this.#stepGroup();
+          group.start(ev.text ?? "Working…");
+          group.finish(false);
+          group.body.append(t);
           break;
         }
         const card = el("details", "chat-tool-card") as HTMLDetailsElement;
@@ -592,7 +747,7 @@ export class PhChat extends HTMLElement {
         const status = el("span", "chat-tool-status", "Running");
         const chevron = icon("chevronRight", 14);
         chevron.classList.add("chat-tool-chevron");
-        summary.append(icon("bolt", 13), el("span", "chat-tool-title", ev.text ?? ev.toolName ?? "Tool call"), status, chevron);
+        summary.append(icon("bolt", 13), el("span", "chat-tool-title", stepTitle(ev)), status, chevron);
         card.append(summary);
         const body = el("div", "chat-tool-body");
         if (ev.server || ev.toolName) {
@@ -612,13 +767,16 @@ export class PhChat extends HTMLElement {
         outputSection.append(el("h4", "chat-tool-section-title", "Result"), output);
         body.append(outputSection);
         card.append(body);
-        this.#log.append(card);
-        this.#toolCalls.set(ev.toolId, { card, status, output, outputSection });
+        const group = this.#stepGroup();
+        group.start(stepTitle(ev));
+        group.body.append(card);
+        this.#toolCalls.set(ev.toolId, { group, card, status, output, outputSection });
         break;
       }
       case "tool-result": {
         const call = ev.toolId ? this.#toolCalls.get(ev.toolId) : undefined;
         if (call) {
+          call.group.finish(!!ev.toolError);
           call.status.textContent = ev.toolError ? "Error" : "Done";
           call.card.dataset["state"] = ev.toolError ? "error" : "done";
           call.output.textContent = prettyToolText(ev.output || "No text result returned.");
@@ -647,8 +805,9 @@ export class PhChat extends HTMLElement {
         this.#processing.hidden = true;
         // A reply that begins without a start event (or after a reset) still needs a box.
         if (!this.#current) {
+          this.#endSteps(); // tools after this text start a new folded run
           this.#current = this.#message(this.#who, "chat-ai", true);
-          this.#current.meta.textContent = this.#who;
+          this.#current.meta.title = this.#who;
         }
         this.#current.box.dataset["streaming"] = "true";
         this.#current.append(ev.text ?? "");
@@ -662,8 +821,11 @@ export class PhChat extends HTMLElement {
         if (c) {
           c.flush();
           delete c.box.dataset["streaming"];
-          const bits = [c.who, ev.ms ? `${(ev.ms / 1000).toFixed(1)} s` : "", ev.out ? `${ev.in ?? 0} in, ${ev.out} out` : "", ev.cost ? `about $${ev.cost.toFixed(4)}` : ""];
+          // One short line; the model name and exact token counts are in the tooltip.
+          const tokens = (ev.in ?? 0) + (ev.out ?? 0);
+          const bits = [ev.ms ? `${(ev.ms / 1000).toFixed(1)} s` : "", tokens ? `${tokens >= 1000 ? `${(tokens / 1000).toFixed(1)}k` : tokens} tokens` : "", ev.cost ? `$${ev.cost.toFixed(3)}` : ""];
           c.meta.textContent = bits.filter(Boolean).join(" · ");
+          c.meta.title = [c.who, ev.out ? `${ev.in ?? 0} in, ${ev.out} out` : ""].filter(Boolean).join(" · ");
         }
         this.#current = null;
         this.#setRunning(false);
@@ -699,7 +861,24 @@ export class PhChat extends HTMLElement {
     }
   }
 
+  /** Closes the current folded run (its row stops saying "working") so the next tool call starts a new one. */
+  #endSteps(): void {
+    this.#steps?.settle();
+    this.#steps = null;
+  }
+
+  /** The folded run tool calls are added to; a new one starts after any message or card. */
+  #stepGroup(): StepGroup {
+    if (!this.#steps) {
+      this.#steps = new StepGroup();
+      this.#log.append(this.#steps.box);
+    }
+    return this.#steps;
+  }
+
   #finishToolCalls(label: string): void {
+    this.#steps?.settle();
+    this.#endSteps();
     for (const [id, call] of this.#toolCalls) {
       call.status.textContent = label;
       call.card.dataset["state"] = "incomplete";

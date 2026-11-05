@@ -6,24 +6,24 @@ Context file for design work (see Impeccable's `DESIGN.md` convention). `PRODUCT
 
 **Operate mode.** Phoenix is a compact desktop workspace used alongside a web page. Dark surfaces frame the page and the assistant; consistent edges, clear labels and visible selection make the interface easy to scan without adding decoration.
 
-Calm and precise, not a developer console and not playful. Phoenix is a tool for a person who delegates work and wants to watch it, so state is always legible and nothing decorates.
+Calm and precise, not a developer console and not playful. Surfaces are rounded cards with a soft mauve glow from the top left, in the manner of a modern dashboard: big bold headings, pill-shaped controls and tags. Phoenix is a tool for a person who delegates work and wants to watch it, so state is always legible and nothing decorates.
 
 ## Colour
 
-All colours are OKLCH. Neutral surfaces use a restrained blue-grey and clear lightness steps; an ember accent marks choices and agent state.
+The palette is the mauve-shadow scale, defined as `--color-mauve-shadow-50` to `950` in `ui/app.css`; roles point at it.
 
-| Token | L | Used for |
+| Token | Value | Used for |
 |---|---|---|
-| `chrome` | 0.16 | Title bar, left rail and divider |
-| `sunken` | 0.18 | Inputs, the omnibox |
-| `canvas` | 0.205 | Toolbar, home, settings and composer |
-| `panel` | 0.225 | Agent panel |
-| `raised` | 0.275 | Controls, selected items |
-| `overlay` | 0.245 | Popovers, menus |
-| `line` / `line-strong` | 0.32 / 0.41 | Hairlines, input outlines |
-| `fg` / `fg-muted` / `fg-subtle` | 0.945 / 0.76 / 0.64 | Text, secondary text, hints and metadata |
+| `chrome`, `sunken` | shadow-950 `#150e12` | Title bar, left rail, divider, inputs, the omnibox |
+| `panel` | `#190f14` | Agent panel (cards sit on it) |
+| `canvas` | shadow-900 `#1f141a` | Toolbar, home, settings |
+| `overlay` | `#2b1d25` | Popovers, menus |
+| `raised`, `line` | shadow-800 `#3d2934` | Controls, selected items, hairlines |
+| `line-strong` | shadow-700 `#5c3d4e` | Input outlines, tag outlines |
+| `fg` / `fg-muted` / `fg-subtle` | shadow-50 / 200 / `#b690a5` | Text, secondary text, hints and metadata |
+| `--card`, `--card-soft`, `--card-edge` | gradient 155deg `#3a2631` to `#1f141a`; softer variant; `#3d2934` | Card surfaces and their 1 px edge |
 
-**One accent, ember** (`oklch(0.745 0.165 52)`), used only for the primary action, the current selection and the running state. If ember appears anywhere else it is a bug. `ok` (green), `warn` and `danger` (red) mean state and nothing else. Text on the accent uses `accent-ink`, never white.
+**One accent, mauve.** Text, marks, dots and the caret use `accent` (shadow-400, `#ad859b`). Filled buttons use `accent-fill` (shadow-600, `#7a5268`; hover `#86596f`, pressed shadow-700) with `accent-fill-ink` (shadow-50) text. Both are for the primary action, the current selection and the running state only. `ok` (green), `warn` and `danger` (red) mean state and nothing else.
 
 Measured contrast against the real background: smallest text is 5.1:1 (12 px metadata on the panel), placeholder 5.7:1, body text 8 to 16:1. Keep every text token at 4.5:1 or better on every surface it can sit on.
 
@@ -37,17 +37,21 @@ Scale, about 1.15 per step: 12 / 13 / 14 / 16 / 19 / 22 px (`text-xs` to `text-2
 
 - Spacing follows Tailwind's 4 px unit; padding inside any bordered or filled container is at least 12 px.
 - Radii: 4 (chips, tabs), 6 (controls), 8 (inputs, menus, popovers, the rail buttons), 12 (the big surfaces: home search, provider list, composer, user message).
-- No cards inside cards. Groups are lists separated by hairlines (inset `box-shadow`), not nested boxes.
-- One shadow (`shadow-pop`), used only by popovers and menus. Everything else is flat.
-- No side-stripe accents, no gradients, no glow.
+- Cards are `rounded-xl` with a 1 px `--card-edge` and a `--card` (or quieter `--card-soft`) gradient. Use `--card` for things the user acts on (idea cards, the selected tab, approvals) and `--card-soft` for things that report (tool steps, tables, the composer).
+- Pills (`rounded-full`) for buttons, tabs, tags and the segmented control; the model tag above a reply is an outlined pill.
+- Inside a card, rows are separated by hairlines (inset `box-shadow`), not nested boxes.
+- One shadow (`shadow-pop`), used only by popovers and menus. Depth otherwise comes from the gradient and the edge.
+- No side-stripe accents, no gradient text, no glow.
 
 ## Components
 
-- **Buttons.** Primary (ember fill, one per view), default (raised), quiet (text only). Small variant for dense rows. Same height as the inputs beside them.
+- **Buttons.** Pills. Primary (deep mauve fill, light text, one per view), default (raised), quiet (text only). Small variant for dense rows. Same height as the inputs beside them.
 - **Status.** A filled dot means state (ready, busy, error). A hollow ring means "not set up yet". The agent pill in the title bar shows idle or running and turns into a Stop control while a run is active.
-- **Selection.** Selected rows use a `raised` background, sometimes with an accent icon or check; the active assistant tab uses an accent underline.
-- **Chat.** User messages sit in a raised bubble; agent replies are plain text with the model name above and cost line below. Errors say what happened in plain words. The Share page chip is a toggle (`aria-pressed`), off until the user turns it on, and stays as chosen.
-- **Assistant panel.** A labelled header and underlined tabs separate chat, activity and approvals. An 8 px divider resizes the panel by pointer or keyboard; its preferred width is remembered. Width defaults to 380 px and ranges from 300 to 840 px, with a 320 px page target when space allows. Left and right arrows adjust width by 16 px (64 px with Shift); Home and End select the available minimum and maximum, and double-click resets the default.
+- **Selection.** Selected rows use a `raised` background, sometimes with an accent icon or check; the active assistant tab is a pill with the `--card` gradient and edge.
+- **Chat.** User messages sit in a mauve gradient bubble; agent replies are plain text with the model name in a pill above and the cost line below. A run of tool calls folds into one pill that opens into a card of rows. The empty state offers three idea cards, each with an icon tile. Errors say what happened in plain words. The Share page chip is a toggle (`aria-pressed`), off until the user turns it on, and stays as chosen.
+- **Session bar.** Under the tabs, a card shows the current session (icon tile, a "Session" label, its title, a count of saved sessions) and opens a "Switch session" list: one bordered card per session with its date and message count, the open one marked Current. A bordered **New** button next to it starts a clean session (disabled until there is something to leave). Switching is disabled while a reply streams, and the list says why. Click outside or press Escape to close.
+- **Unfocused controls are bordered.** Tabs, New, Share page, the model pill, Decline and Copy all carry a 1 px `line-strong` border at rest; hover and selection move the border to mauve-600.
+- **Assistant panel.** A labelled header and pill tabs separate chat, activity and approvals. An 8 px divider resizes the panel by pointer or keyboard; its preferred width is remembered. Width defaults to 380 px and ranges from 300 to 840 px, with a 320 px page target when space allows. Left and right arrows adjust width by 16 px (64 px with Shift); Home and End select the available minimum and maximum, and double-click resets the default.
 - **Model picker.** A fixed popover stays inside the assistant panel and groups provider, model and reasoning controls under clear labels. Providers scroll horizontally instead of wrapping into a large block; the model list uses available height up to its cap and remains independently scrollable. Provider and model radio groups support arrow keys, Home and End, and retain focus after updates. A compact selector sets reasoning effort when available, and catalogs with more than 12 models have a filter.
 - **Quick actions.** A 44 px bar under the page, always visible. A small label says what Phoenix thinks the page is (a guess, so it is worded as a label, not a claim), then up to six compact buttons. The first is the likeliest request and is the only accent in the bar. Buttons disable while a reply streams. The set changes only when the page or selection changes, never under the pointer.
 - **Empty states** teach the next step (the chat's empty state explains Share page; Get started lists the three things to do).

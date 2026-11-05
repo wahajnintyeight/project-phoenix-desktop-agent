@@ -108,9 +108,8 @@ func browserEnterText(ctx context.Context, state browserTabState, ref browserRef
 	if err := validateEditableNode(desc.Node); err != nil {
 		return browser.Output{}, err
 	}
-	if desc.Node.NodeID == 0 {
-		return browser.Output{}, errors.New("the page field is no longer available")
-	}
+	// describeNode only fills in nodeId once the DOM tree has been requested, so the backend ID
+	// (which the snapshot gave us) is what identifies the field from here on.
 	if _, _, err := cdpCall(ctx, state.ID, state.Epoch, "DOM.scrollIntoViewIfNeeded", map[string]any{"backendNodeId": ref.BackendNodeID}); err != nil {
 		return browser.Output{}, err
 	}
@@ -130,7 +129,7 @@ func browserEnterText(ctx context.Context, state browserTabState, ref browserRef
 	if err := dispatchMouse(ctx, state, "mouseMoved", x, y, 0, 0, 0); err != nil {
 		return browser.Output{}, err
 	}
-	if _, _, err := cdpCall(ctx, state.ID, state.Epoch, "DOM.focus", map[string]any{"nodeId": desc.Node.NodeID}); err != nil {
+	if _, _, err := cdpCall(ctx, state.ID, state.Epoch, "DOM.focus", map[string]any{"backendNodeId": ref.BackendNodeID}); err != nil {
 		return browser.Output{}, err
 	}
 	if replace {
@@ -197,7 +196,7 @@ func browserSelect(ctx context.Context, state browserTabState, ref browserRef, v
 	if err := cdpCallJSON(ctx, state.ID, state.Epoch, "DOM.describeNode", map[string]any{"backendNodeId": ref.BackendNodeID}, &desc); err != nil {
 		return browser.Output{}, err
 	}
-	if strings.ToLower(desc.Node.LocalName) != "select" || desc.Node.NodeID == 0 {
+	if strings.ToLower(desc.Node.LocalName) != "select" {
 		return browser.Output{}, errors.New("that page control is not a native select element")
 	}
 	if _, _, err := cdpCall(ctx, state.ID, state.Epoch, "DOM.scrollIntoViewIfNeeded", map[string]any{"backendNodeId": ref.BackendNodeID}); err != nil {
@@ -243,7 +242,7 @@ func browserSelect(ctx context.Context, state browserTabState, ref browserRef, v
 
 func browserPress(ctx context.Context, state browserTabState, args browser.PressArgs) (browser.Output, error) {
 	if point, ok := browserFocusedPoint(ctx, state); ok {
-		if showBrowserAgentPointer(ctx, state, point.X, point.Y, "press") {
+		if showBrowserAgentPointerLabeled(ctx, state, point.X, point.Y, "press", pressLabel(args.Key)) {
 			if err := browserPointerBeat(ctx); err != nil {
 				return browser.Output{}, err
 			}
@@ -387,7 +386,7 @@ func browserScroll(ctx context.Context, state browserTabState, args browser.Scro
 	case "right":
 		dx = float64(amount)
 	}
-	if showBrowserAgentPointer(ctx, state, x, y, "scroll") {
+	if showBrowserAgentPointerLabeled(ctx, state, x, y, "scroll", args.Direction) {
 		if err := browserPointerBeat(ctx); err != nil {
 			return browser.Output{}, err
 		}
@@ -432,4 +431,10 @@ func browserElementLabel(ref browserRef) string {
 		return "page element " + strconv.Itoa(ref.BackendNodeID)
 	}
 	return clipBrowser(ref.Name, 100)
+}
+
+// pressLabel is the text of the on-page key chip. Keys are already allow-listed, so this only
+// bounds the length.
+func pressLabel(key string) string {
+	return clipBrowser(key, 24)
 }

@@ -59,6 +59,13 @@ type savedChatSummary struct {
 	ID        string    `json:"id"`
 	Title     string    `json:"title"`
 	UpdatedAt time.Time `json:"updatedAt"`
+	Messages  int       `json:"messages"`
+}
+
+// savedChatList is what the panel receives: the sessions, newest first, and which one is open.
+type savedChatList struct {
+	Current string             `json:"current"`
+	Items   []savedChatSummary `json:"items"`
 }
 
 type agentActivity struct {
@@ -290,7 +297,7 @@ func saveUserMessage(chatID string, display, contextText string) (string, int) {
 	trimSavedChats()
 	index := len(c.Messages) - 1
 	persistSavedChats()
-	pushSavedChats()
+	pushSavedChatsFor(id)
 	return id, index
 }
 
@@ -448,7 +455,11 @@ func removeAgentData(path string) {
 	queueAgentDataWrite(agentDataWrite{path: path, remove: true})
 }
 
-func pushSavedChats() {
+func pushSavedChats() { pushSavedChatsFor(chat.currentID) }
+
+// pushSavedChatsFor sends the session list with `current` marked as the open one. A new session
+// gets its id only after saveUserMessage returns, so that caller names it explicitly.
+func pushSavedChatsFor(current string) {
 	if !ready {
 		return
 	}
@@ -457,9 +468,9 @@ func pushSavedChats() {
 	})
 	items := make([]savedChatSummary, 0, len(savedChats))
 	for _, c := range savedChats {
-		items = append(items, savedChatSummary{ID: c.ID, Title: c.Title, UpdatedAt: c.UpdatedAt})
+		items = append(items, savedChatSummary{ID: c.ID, Title: c.Title, UpdatedAt: c.UpdatedAt, Messages: len(c.Messages)})
 	}
-	post("u" + fs + "chat" + fs + "chats" + fs + jsonString(items))
+	post("u" + fs + "chat" + fs + "chats" + fs + jsonString(savedChatList{Current: current, Items: items}))
 }
 
 func pushAgentActivity() {
@@ -488,6 +499,7 @@ func activateSavedChat(c *savedChat) {
 	chat.currentID = c.ID
 	chat.pendingMessageIndex = -1
 	chat.history = nil
+	pushSavedChats()
 	display := make([]chatDisplayMessage, 0, len(c.Messages))
 	for _, m := range c.Messages {
 		if m.Role == "user" || m.Role == "assistant" {

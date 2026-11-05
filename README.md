@@ -15,7 +15,7 @@ Phoenix brings a multi-tab browser and AI provider controls into one native desk
 
 ## What works today
 
-- Wails v3 desktop app (system tray, single instance, installer) with a redesigned dark interface (calm neutrals, one ember accent) and a multi-tab browser powered by WebView2.
+- Wails v3 desktop app (system tray, single instance, installer) with a redesigned dark interface (warm mauve-shadow neutrals, one mauve accent) and a multi-tab browser powered by WebView2.
 - Address bar for URLs and web searches, with a configurable HTTPS search provider.
 - A quick-action bar under the page: one-click requests that change with the page you are on (a job posting, an article, a form, search results, or text you have selected), so you send a request without typing it.
 - Provider setup, model selection, connection checks, and a quick model picker.

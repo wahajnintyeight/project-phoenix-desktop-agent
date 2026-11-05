@@ -51,6 +51,9 @@ func main() {
 	if len(os.Args) > 1 && os.Args[1] == "mcp-desktop" {
 		os.Exit(runDesktopMCP())
 	}
+	if len(os.Args) > 1 && os.Args[1] == "mcp-files" {
+		os.Exit(runFilesMCP())
+	}
 	if len(os.Args) > 1 && os.Args[1] == "mcp-browser" {
 		os.Exit(runBrowserMCP())
 	}
@@ -87,7 +90,8 @@ func main() {
 			WebviewUserDataPath:   filepath.Join(local, "Phoenix", "ui"),
 		},
 		SingleInstance: &application.SingleInstanceOptions{
-			UniqueID: "com.phoenix.desktop",
+			// An isolated test profile must not hand over to (or be blocked by) the real app.
+			UniqueID: singleInstanceID(),
 			// Starting Phoenix again brings the running one forward.
 			OnSecondInstanceLaunch: func(application.SecondInstanceData) { runLater(showWindow) },
 		},
@@ -102,7 +106,7 @@ func main() {
 		MinHeight:        560,
 		Frameless:        true,
 		URL:              "/",
-		BackgroundColour: application.NewRGB(0x15, 0x17, 0x1a),
+		BackgroundColour: application.NewRGB(0x15, 0x0e, 0x12),
 		// The UI is not a web page: no browser menus, devtools or zoom unless debugging.
 		DevToolsEnabled:            debugBuild,
 		DefaultContextMenuDisabled: !debugBuild,
@@ -392,4 +396,11 @@ func uiKeyBindings() map[string]func(application.Window) {
 		m["ctrl+"+strconv.Itoa(i)] = run(func() { selectNth(n, last) })
 	}
 	return m
+}
+
+func singleInstanceID() string {
+	if os.Getenv("PHOENIX_TEST_PROFILE") != "" {
+		return "com.phoenix.desktop.test"
+	}
+	return "com.phoenix.desktop"
 }

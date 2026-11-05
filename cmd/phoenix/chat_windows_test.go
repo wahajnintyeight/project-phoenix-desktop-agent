@@ -84,3 +84,25 @@ func TestFriendlyChatError(t *testing.T) {
 		t.Errorf("should name the provider: %q", got)
 	}
 }
+
+func TestTrimHistoryCondensesDroppedTurns(t *testing.T) {
+	h := turns(chatMaxHistory+6, 10)
+	h[0].Content = "find me golang jobs in Berlin"
+	got := trimHistory(h)
+	if len(got) == 0 || got[0].Role != "user" {
+		t.Fatal("must start on a user turn")
+	}
+	if !strings.Contains(got[0].Content, "condensed automatically") || !strings.Contains(got[0].Content, "golang jobs in Berlin") {
+		t.Fatalf("older turns were dropped without a digest: %q", got[0].Content)
+	}
+	total := 0
+	for _, m := range got {
+		total += len(m.Content)
+	}
+	if total > chatMaxChars {
+		t.Fatalf("history with digest is %d characters, limit %d", total, chatMaxChars)
+	}
+	if got := trimHistory(turns(4, 10)); strings.Contains(got[0].Content, "condensed") {
+		t.Fatal("a short conversation must not get a digest")
+	}
+}

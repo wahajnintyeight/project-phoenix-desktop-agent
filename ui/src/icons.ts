@@ -12,6 +12,10 @@ const STROKES = {
   copy: "M5.5 5.5h7v8h-7zM3.5 10.5V2.5h7",
   plus: "M8 3v10M3 8h10",
   close: "m4 4 8 8M12 4l-8 8",
+  list: "M6 4h7M6 8h7M6 12h7M3 4h.01M3 8h.01M3 12h.01",
+  pen: "M3 13l.7-3L10.5 3.2a1.4 1.4 0 0 1 2 2L5.7 12 3 13Z",
+  chat: "M3 3.5h10v7H8.5L5.5 13v-2.5H3v-7Z",
+  compose: "M7 3H3.5v9.5H13V9M12.5 2.5l1 1-5 5-1.5.5.5-1.5 5-5Z",
   bolt: "M9 1.5 3.5 9H8l-1 5.5L12.5 7H8l1-5.5Z",
 } as const;
 

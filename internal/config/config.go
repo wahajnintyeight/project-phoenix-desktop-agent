@@ -18,6 +18,7 @@ import (
 
 	"phoenix/internal/mcp"
 	"phoenix/internal/provider"
+	"phoenix/internal/workspace"
 )
 
 // ProviderConfig is one provider's settings.
@@ -59,6 +60,11 @@ type Desktop struct {
 	CLIPath string `yaml:"cli_path,omitempty"`
 }
 
+// Workspace is the folder the agent stores files in. Empty means Documents\Phoenix.
+type Workspace struct {
+	Dir string `yaml:"dir,omitempty"`
+}
+
 // Providers is the providers section.
 type Providers struct {
 	Default string         `yaml:"default,omitempty"`
@@ -74,6 +80,7 @@ type Config struct {
 	Providers Providers `yaml:"providers"`
 	Browser   Browser   `yaml:"browser,omitempty"`
 	Desktop   Desktop   `yaml:"desktop,omitempty"`
+	Workspace Workspace `yaml:"workspace,omitempty"`
 	// MCPServers are the installed MCP servers by name. Entries run programs or call URLs, so
 	// they are validated on load and only the Settings UI may change them.
 	MCPServers map[string]mcp.Server `yaml:"mcp_servers,omitempty"`
@@ -188,6 +195,9 @@ func (c *Config) normalize() {
 		c.Browser.SearchURL = ""
 	}
 	c.MCPServers = mcp.CleanMap(c.MCPServers)
+	if d := c.Workspace.Dir; d != "" && (!filepath.IsAbs(d) || workspace.ValidateLocation(d) != nil) {
+		c.Workspace.Dir = ""
+	}
 	if p := c.Desktop.CLIPath; p != "" && (!filepath.IsAbs(p) || !strings.HasSuffix(strings.ToLower(p), ".exe")) {
 		c.Desktop.CLIPath = ""
 	}

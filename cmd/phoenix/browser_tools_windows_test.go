@@ -1,9 +1,13 @@
 package main
 
 import (
+	"context"
 	"strconv"
 	"strings"
 	"testing"
+	"time"
+
+	sdk "github.com/modelcontextprotocol/go-sdk/mcp"
 
 	"phoenix/internal/browser"
 )
@@ -69,7 +73,7 @@ func TestBrowserSnapshotCapsRefsAndText(t *testing.T) {
 		}
 	}
 	session := &browserSession{}
-	out, err := formatBrowserSnapshot(browserTabState{ID: 4, Host: "example.com"}, 8, nodes, session)
+	out, err := formatBrowserSnapshot(browserTabState{ID: 4, Host: "example.com"}, 8, nodes, session, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -88,5 +92,39 @@ func TestBrowserDragArgumentsRequireBothSnapshotRefs(t *testing.T) {
 	good.Arguments = []byte(`{"tab_id":1,"from_ref":"@s12345:e1","to_ref":"missing"}`)
 	if _, err := decodeBrowserCall(good); err == nil {
 		t.Fatal("invalid destination ref accepted")
+	}
+}
+
+// Every tool the MCP server publishes must be accepted by the host bridge and decoded by
+// decodeBrowserCall; a tool added to one list and not the other fails silently at run time.
+func TestEveryPublishedBrowserToolIsHandledByTheHost(t *testing.T) {
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+	serverT, clientT := sdk.NewInMemoryTransports()
+	ss, err := browser.NewMCPServer(nil).Connect(ctx, serverT, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer ss.Close()
+	cs, err := sdk.NewClient(&sdk.Implementation{Name: "test", Version: "1"}, nil).Connect(ctx, clientT, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer cs.Close()
+	listed, err := cs.ListTools(ctx, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(listed.Tools) == 0 {
+		t.Fatal("no tools published")
+	}
+	for _, tool := range listed.Tools {
+		if !knownBrowserTool(tool.Name) {
+			t.Errorf("%s is published to the model but rejected by the host bridge", tool.Name)
+		}
+		// An unknown tool name is the only decode error this probe may produce.
+		if _, err := decodeBrowserCall(browser.Call{Tool: tool.Name, Arguments: []byte(`{}`)}); err != nil && err.Error() == "unknown browser operation" {
+			t.Errorf("%s has no argument decoder", tool.Name)
+		}
 	}
 }
