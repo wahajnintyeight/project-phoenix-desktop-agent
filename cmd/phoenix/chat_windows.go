@@ -287,13 +287,13 @@ func startChatRun(ctx context.Context, cancel context.CancelFunc, id provider.ID
 	}
 	filesNote := ""
 	if supportsMCP {
-		if root, err := openWorkspace(); err != nil {
-			logf("workspace: %v", err)
-		} else if srv, err := filesServer(root); err != nil {
+		if lib, err := openLibrary(); err != nil {
+			logf("library: %v", err)
+		} else if srv, err := filesServer(); err != nil {
 			logf("files server: %v", err)
 		} else {
 			extra = append(extra, srv)
-			filesNote = root.Describe()
+			filesNote = lib.Describe()
 		}
 	}
 	if browserToolsAdded {

@@ -7,6 +7,7 @@ import "./quick-model";
 import "./browser-settings";
 import "./mcp-settings";
 import "./desktop-settings";
+import "./files-view";
 // Keep the bare import: chat registers the <ph-chat> custom element as a side effect.
 import "./chat";
 import type { PhChat } from "./chat";
@@ -19,7 +20,7 @@ initPanelResize();
 const $ = (id: string): HTMLElement | null => document.getElementById(id);
 
 // Go may only set these. Anything else is ignored.
-const SETTABLE_PROPS = new Set(["tabs", "history", "chats", "activity", "value", "disabled", "src", "hidden", "data", "result", "models", "events", "actions"]);
+const SETTABLE_PROPS = new Set(["tabs", "history", "chats", "activity", "value", "disabled", "src", "hidden", "data", "result", "models", "events", "actions", "preview"]);
 const SETTABLE_ATTRS = new Set(["data-view", "data-state"]);
 
 // ── Message handling (Go → UI) ──────────────────────────────────────────
@@ -158,6 +159,20 @@ $("freeze")?.addEventListener("load", (e) => {
   if ((e.target as HTMLImageElement).src.startsWith("data:image/gif")) return;
   requestAnimationFrame(() => requestAnimationFrame(() => send("m", "frozen")));
 }, { passive: true });
+
+// The rail shows which section is open: the view name is on #app, set by Go.
+const appRoot = $("app");
+if (appRoot) {
+  const syncRail = (): void => {
+    const view = appRoot.dataset["view"] ?? "home";
+    document.querySelectorAll<HTMLElement>("[data-rail]").forEach((b) => {
+      const on = b.dataset["rail"] === "files" ? view === "files" : b.dataset["rail"] === "browser" ? view === "home" || view === "web" : false;
+      b.setAttribute("aria-pressed", String(on));
+    });
+  };
+  new MutationObserver(syncRail).observe(appRoot, { attributes: true, attributeFilter: ["data-view"] });
+  syncRail();
+}
 
 // Agent panel sections: local view state, nothing for Go to know.
 const agent = document.querySelector<HTMLElement>(".agent");

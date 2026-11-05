@@ -176,6 +176,11 @@ func onMessage(message string) {
 		if len(f) > 1 {
 			logf("msg g %s", f[1])
 		}
+	case "f":
+		// File uploads carry file contents: log the operation only.
+		if len(f) > 1 {
+			logf("msg f %s", f[1])
+		}
 	case "v":
 		// Provider messages can carry an API key: log the operation, never the fields. For
 		// MCP the second field can be pasted JSON holding secrets, so only the operation is
@@ -201,6 +206,8 @@ func onMessage(message string) {
 		setSlot(f[1:])
 	case "v": // provider management
 		handleProviderOp(f)
+	case "f": // the Files view
+		handleFilesOp(f)
 	case "g": // chat with the agent
 		handleChatOp(f)
 	case "m": // menu popover state
@@ -290,6 +297,10 @@ func handleAction(action, id string) {
 		clearHistory()
 	case "menu.settings":
 		runLater(openSettings)
+	case "menu.files":
+		runLater(openFiles)
+	case "menu.browser":
+		runLater(showBrowser)
 	case "tab.select", "tab.close":
 		n, err := strconv.Atoi(id)
 		if err != nil {

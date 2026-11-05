@@ -244,14 +244,15 @@
   .menu-item kbd { @apply text-xs text-fg-subtle; }
 
   /* ── rail ────────────────────────────────────────────────────────── */
-  .rail { @apply flex flex-col items-center gap-1 border-r border-line bg-chrome py-3; }
-  .rail-btn { @apply grid size-9 place-items-center rounded-lg text-fg-subtle transition-colors; }
-  .rail-btn:hover { @apply bg-raised text-fg; }
-  .rail-btn[aria-pressed="true"] { @apply bg-raised text-accent; }
+  .rail { @apply flex flex-col items-center gap-1.5 border-r border-line bg-chrome py-3; }
+  .rail-btn { @apply grid size-11 place-items-center rounded-xl border border-transparent text-fg-subtle transition-colors; }
+  .rail-btn:hover { @apply text-fg; border-color: var(--color-line-strong); }
+  .rail-btn[aria-pressed="true"] { background: var(--card); border-color: var(--color-mauve-shadow-600); @apply text-fg; }
+  .rail-btn[aria-pressed="true"] svg { @apply text-accent; }
   .rail-settings { @apply mt-auto; }
 
   /* ── page slot: Go places the page's WebView2 exactly over this box ─ */
-  .workspace { display: grid; min-height: 0; grid-template-columns: 52px minmax(0, 1fr) 8px var(--agent-width, 380px); }
+  .workspace { display: grid; min-height: 0; grid-template-columns: 68px minmax(0, 1fr) 8px var(--agent-width, 380px); }
   .stage { @apply flex min-h-0 min-w-0 flex-col; }
   .slot { @apply scroll relative min-h-0 min-w-0 flex-1 overflow-auto bg-canvas; container-type: inline-size; }
   .panel-resize { position: relative; z-index: 2; min-width: 8px; cursor: col-resize; touch-action: none; background: var(--color-chrome); }
@@ -277,6 +278,8 @@
   [data-view="home"] .home { display: flex; }
   .settings { display: none; }
   [data-view="settings"] .settings { display: block; }
+  .files { display: none; }
+  [data-view="files"] .files { display: block; height: 100%; }
 
   /* ── start page ──────────────────────────────────────────────────── */
   .home-search { @apply h-11 w-full rounded-xl border border-line-strong bg-sunken pr-4 pl-11 text-base text-fg transition-colors; }
@@ -383,6 +386,159 @@
   .chat-approval .btn-quiet { @apply border-line-strong; }
   .chat-approval-actions { @apply flex flex-wrap items-center gap-2; }
   .chat-approval-result { @apply text-xs text-fg-muted; }
+
+  /* ── Files view: a file explorer ─────────────────────────────────── */
+  ph-files { @apply relative grid size-full min-h-0 overflow-hidden; grid-template-columns: 15.5rem minmax(0, 1fr); background: var(--color-canvas); container-type: inline-size; }
+  .fx-side { @apply flex min-h-0 flex-col border-r border-line bg-panel; }
+  .fx-side-head { @apply flex items-center gap-3 px-4 pt-4 pb-3; }
+  .fx-side-mark { @apply grid size-9 place-items-center rounded-xl text-accent; background: var(--card); border: 1px solid var(--card-edge); }
+  .fx-side-title { @apply flex min-w-0 flex-col; }
+  .fx-side-title strong { @apply text-lg leading-tight font-bold text-fg; }
+  .fx-side-title span { @apply text-xs text-fg-subtle; }
+  .fx-side-scroll { @apply flex min-h-0 flex-1 flex-col gap-4 overflow-y-auto px-2 pb-3; }
+  .fx-quick, .fx-group { @apply flex flex-col gap-0.5; }
+  .fx-group-title { @apply px-2.5 pt-1 pb-1 text-xs font-semibold tracking-wide text-fg-subtle uppercase; }
+  .fx-item { @apply flex h-9 w-full min-w-0 items-center gap-2.5 rounded-full border border-transparent px-3 text-left text-sm text-fg-muted transition-colors; }
+  .fx-item:hover { @apply bg-overlay text-fg; }
+  .fx-item[aria-current="page"] { @apply text-fg; background: var(--card); border-color: var(--color-mauve-shadow-600); }
+  .fx-item[data-over="true"], .fx-crumb[data-over="true"], .fx-file[data-over="true"] { @apply text-fg; background: color-mix(in oklab, var(--color-mauve-shadow-500) 34%, transparent); border-color: var(--color-mauve-shadow-500); }
+  .fx-item svg { @apply shrink-0 text-accent; }
+  .fx-item-name { @apply min-w-0 flex-1 truncate; }
+  .fx-count { @apply shrink-0 rounded-full px-1.5 text-xs text-fg-subtle; background: color-mix(in oklab, var(--color-mauve-shadow-500) 22%, transparent); }
+  .fx-tree { @apply flex flex-col gap-0.5; }
+  .fx-tree-empty { @apply px-3 py-1 text-xs text-fg-subtle; }
+  .fx-node { @apply flex items-center; padding-left: calc(var(--depth, 0) * 0.9rem); }
+  .fx-twist { @apply grid size-5 shrink-0 place-items-center rounded-full text-fg-subtle; }
+  .fx-twist:hover { @apply bg-overlay text-fg; }
+  .fx-leaf { @apply h-8; }
+  .fx-side-foot { @apply flex flex-col gap-1 border-t border-line p-2; }
+  .fx-usage { @apply px-3 pt-1 pb-1 text-xs text-fg-subtle; }
+
+  .fx-main { @apply flex min-h-0 min-w-0 flex-col; }
+  .fx-tools { @apply border-b border-line px-4 py-3; }
+  .fx-bar { @apply flex items-center gap-3; }
+  .fx-navs { @apply flex shrink-0 items-center gap-1; }
+  .fx-nav { @apply grid size-9 place-items-center rounded-full border border-line-strong text-fg-muted transition-colors; }
+  .fx-nav:hover:not(:disabled) { @apply text-fg; border-color: var(--color-mauve-shadow-600); background: var(--card-soft); }
+  .fx-nav:disabled { @apply opacity-40; }
+  .fx-nav[aria-pressed="true"] { @apply text-fg; background: var(--card); border-color: var(--color-mauve-shadow-600); }
+  .fx-crumbs { min-width: 8rem; @apply flex h-9 flex-1 items-center gap-1 overflow-hidden rounded-full border border-line-strong bg-sunken px-2; }
+  .fx-crumb { @apply inline-flex h-7 max-w-48 shrink-0 items-center gap-1.5 rounded-full border border-transparent px-2.5 text-sm text-fg-muted transition-colors; }
+  .fx-crumb:last-child { @apply shrink; min-width: 0; }
+  .fx-crumb span { @apply truncate; }
+  .fx-crumb svg { @apply shrink-0 text-accent; }
+  .fx-crumb:hover:not(:disabled) { @apply bg-overlay text-fg; }
+  .fx-crumb-now { @apply font-semibold text-fg; }
+  .fx-sep { @apply text-fg-subtle; }
+  .fx-searchwrap { @apply relative flex w-64 shrink-0 items-center text-fg-subtle; }
+  .fx-searchwrap svg { @apply pointer-events-none absolute left-3; }
+  .fx-search { @apply h-9 w-full rounded-full pl-9; }
+
+  .fx-ribbon { @apply flex flex-wrap items-center gap-1.5 border-b border-line px-4 py-2; }
+  .fx-act { @apply inline-flex h-8 items-center gap-2 rounded-full border border-line-strong px-3 text-sm text-fg-muted transition-colors; }
+  .fx-act svg { @apply text-accent; }
+  .fx-act:hover:not(:disabled) { @apply text-fg; border-color: var(--color-mauve-shadow-600); background: var(--card-soft); }
+  .fx-act:disabled { @apply opacity-40; }
+  .fx-act-primary { @apply border-transparent font-semibold; background: var(--color-accent-fill); color: var(--color-accent-fill-ink); }
+  .fx-act-primary svg { color: inherit; }
+  .fx-act-primary:hover:not(:disabled) { background: var(--color-accent-fill-hover); color: var(--color-accent-fill-ink); border-color: transparent; }
+  .fx-act-danger:hover:not(:disabled) { @apply text-danger; border-color: color-mix(in oklab, var(--color-danger) 50%, transparent); }
+  .fx-act-danger:hover:not(:disabled) svg { @apply text-danger; }
+  .fx-ribbon-sep { @apply mx-1 h-5 w-px bg-line-strong; }
+
+  .fx-body { @apply relative grid min-h-0 flex-1; grid-template-columns: minmax(0, 1fr); }
+  ph-files[data-pane="on"] .fx-body { grid-template-columns: minmax(0, 1fr) 19rem; }
+  .fx-list { @apply flex min-h-0 min-w-0 flex-col overflow-y-auto p-3; outline: none; }
+  .fx-list:focus-visible { box-shadow: inset 0 0 0 1px var(--color-mauve-shadow-600); }
+  .fx-spacer { @apply min-h-8 flex-1; }
+  .fx-more { @apply px-3 py-2 text-xs text-fg-subtle; }
+  .fx-row { @apply grid items-center gap-x-3 rounded-lg px-3; grid-template-columns: minmax(0, 1fr) 8.5rem 9rem 6rem; }
+  .fx-head { @apply sticky top-0 z-10 h-8 border-b border-line text-xs text-fg-subtle; background: var(--color-canvas); border-radius: 0; }
+  .fx-col { @apply inline-flex items-center gap-1 text-left text-xs font-semibold; }
+  button.fx-col:hover { @apply text-fg; }
+  .fx-file { @apply h-11 cursor-default border border-transparent text-sm text-fg; user-select: none; }
+  .fx-file:hover { background: var(--card-soft); }
+  .fx-file[aria-selected="true"] { background: var(--card); border-color: var(--color-mauve-shadow-600); }
+  .fx-file[data-cut="true"] .fx-name, .fx-file[data-dragging="true"] { opacity: 0.5; }
+  .fx-name { @apply flex min-w-0 items-center gap-3; }
+  .fx-mark { @apply grid size-8 shrink-0 place-items-center rounded-lg text-accent; background: color-mix(in oklab, var(--color-mauve-shadow-500) 20%, transparent); }
+  .fx-mark-dir { background: color-mix(in oklab, var(--color-mauve-shadow-500) 36%, transparent); }
+  .fx-label { @apply truncate; }
+  .fx-where { @apply shrink-0 truncate text-xs; max-width: 40%; }
+  .fx-dim { @apply truncate text-xs text-fg-subtle; }
+  .fx-tag { @apply inline-flex h-5 items-center rounded-full border px-2 text-xs font-medium text-accent capitalize; border-color: var(--color-mauve-shadow-600); }
+  .fx-rename { @apply h-8 min-w-0 flex-1 rounded-md px-2 text-sm; }
+  .fx-trash { grid-template-columns: minmax(0, 1fr) 9rem 9rem 6rem; }
+  .fx-c-size { @apply text-right; }
+
+  ph-files[data-view="grid"] .fx-list { @apply grid content-start gap-3 p-4; grid-template-columns: repeat(auto-fill, minmax(8.5rem, 1fr)); }
+  ph-files[data-view="grid"] .fx-file { @apply flex h-auto flex-col items-center gap-2 rounded-xl px-2 py-4 text-center; }
+  ph-files[data-view="grid"] .fx-name { @apply flex-col; }
+  ph-files[data-view="grid"] .fx-mark { @apply size-14 rounded-2xl; }
+  ph-files[data-view="grid"] .fx-label { @apply max-w-full whitespace-normal; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow-wrap: anywhere; }
+  ph-files[data-view="grid"] .fx-where { @apply hidden; }
+  ph-files[data-view="grid"] .fx-spacer, ph-files[data-view="grid"] .fx-more, ph-files[data-view="grid"] .fx-empty { grid-column: 1 / -1; }
+
+  .fx-detail { @apply min-h-0 overflow-y-auto border-l border-line bg-panel p-3; }
+  .fx-detail[hidden] { display: none; }
+  .fx-card { @apply flex flex-col gap-3 rounded-2xl border p-3; background: var(--card); border-color: var(--card-edge); }
+  .fx-card-note { @apply gap-2 p-4; }
+  .fx-card-note h3 { @apply text-lg font-bold text-fg; }
+  .fx-card-note p { @apply text-sm text-fg-muted; }
+  .fx-prev { @apply grid max-h-56 min-h-28 place-items-center overflow-hidden rounded-xl bg-sunken; }
+  .fx-img { @apply max-h-56 max-w-full object-contain; }
+  .fx-text { @apply max-h-56 w-full overflow-auto p-3 font-mono text-xs whitespace-pre-wrap text-fg-muted; overflow-wrap: anywhere; }
+  .fx-bigmark { @apply grid size-16 place-items-center rounded-2xl text-accent; background: color-mix(in oklab, var(--color-mauve-shadow-500) 26%, transparent); }
+  .fx-dname { @apply text-lg leading-snug font-bold text-fg; overflow-wrap: anywhere; }
+  .fx-meta { @apply grid gap-x-3 gap-y-1 text-xs; grid-template-columns: auto minmax(0, 1fr); }
+  .fx-meta dt { @apply text-fg-subtle; }
+  .fx-meta dd { @apply text-fg-muted; overflow-wrap: anywhere; }
+  .fx-form { @apply flex flex-col gap-2.5; }
+  .fx-field { @apply flex flex-col gap-1 text-xs text-fg-subtle; }
+  .fx-field .field { @apply w-full text-sm; }
+  .fx-form .btn { @apply self-start; }
+
+  /* A narrow window (the agent panel is open beside this view): the details pane floats over the
+     list instead of squeezing it, and the least useful columns give way. */
+  @container (max-width: 60rem) {
+    ph-files[data-pane="on"] .fx-body { grid-template-columns: minmax(0, 1fr); }
+    .fx-detail { @apply absolute inset-y-0 right-0 z-20 w-76 max-w-full shadow-pop; }
+    .fx-row { grid-template-columns: minmax(0, 1fr) 7.5rem 4.5rem; }
+    .fx-c-kind { @apply hidden; }
+    .fx-searchwrap { flex: 0 1 10rem; min-width: 6rem; }
+  }
+  @container (max-width: 44rem) {
+    .fx-c-when { @apply hidden; }
+    .fx-row { grid-template-columns: minmax(0, 1fr) 4.5rem; }
+    .fx-searchwrap { flex: 0 1 8rem; }
+  }
+
+  .fx-status { @apply flex items-center gap-4 border-t border-line px-4 py-1.5 text-xs text-fg-subtle; }
+  .fx-status-end { @apply ml-auto; }
+
+  .fx-empty { @apply m-auto flex max-w-md flex-col items-center gap-3 py-12 text-center; }
+  .fx-empty-mark { @apply grid size-14 place-items-center rounded-2xl text-accent; background: var(--card); border: 1px solid var(--card-edge); }
+  .fx-empty h3 { @apply text-xl font-bold text-fg; }
+  .fx-empty p { @apply text-base text-fg-muted; }
+
+  .fx-menu { @apply absolute z-50 flex min-w-52 flex-col rounded-xl border p-1 shadow-pop; background: var(--color-overlay); border-color: var(--color-line-strong); }
+  .fx-menu[hidden] { display: none; }
+  .fx-menu-item { @apply flex h-8 items-center gap-2.5 rounded-lg px-2.5 text-left text-sm text-fg; }
+  .fx-menu-item svg { @apply text-accent; }
+  .fx-menu-item:hover:not(:disabled), .fx-menu-item:focus-visible { @apply bg-raised; outline: none; }
+  .fx-menu-item:disabled { @apply opacity-40; }
+  .fx-menu-danger, .fx-menu-danger svg { @apply text-danger; }
+  .fx-menu-label { @apply flex-1; }
+  .fx-menu-gap { @apply size-4; }
+  .fx-menu kbd { @apply font-sans text-xs text-fg-subtle; }
+  .fx-menu-sep { @apply my-1 border-line; }
+
+  .fx-toast { @apply absolute bottom-10 left-1/2 z-40 flex -translate-x-1/2 items-center gap-3 rounded-full border py-2 pr-2 pl-5 text-sm text-fg shadow-pop; background: var(--color-overlay); border-color: var(--color-line-strong); }
+  .fx-toast[data-error="true"] { @apply text-danger; border-color: color-mix(in oklab, var(--color-danger) 50%, transparent); }
+  .fx-toast[hidden] { display: none; }
+  .fx-toast > span { @apply py-1; }
+  .fx-drop { @apply absolute inset-3 z-30 flex flex-col items-center justify-center gap-3 rounded-2xl border-2 border-dashed text-lg text-fg; border-color: var(--color-mauve-shadow-500); background: color-mix(in oklab, var(--color-canvas) 88%, transparent); pointer-events: none; }
+  .fx-drop[hidden] { display: none; }
 
   /* ── MCP servers ─────────────────────────────────────────────────── */
   ph-mcp { @apply flex min-w-0 flex-col gap-4; }
@@ -581,7 +737,10 @@
   .chat-history-meta, .chat-history-empty { @apply text-xs text-fg-subtle; }
   .chat-history-empty { @apply px-3 py-3; }
   .chat-history-now { @apply inline-flex h-5 shrink-0 items-center rounded-full border px-2 text-xs font-medium text-accent; border-color: var(--color-mauve-shadow-600); }
-  .chat-log { @apply scroll flex min-h-0 flex-1 flex-col gap-4 overflow-auto px-4 pt-2 pb-4; user-select: text; -webkit-user-select: text; }
+  .chat-log-wrap { @apply relative min-h-0 flex-1; }
+  .chat-log { @apply scroll absolute inset-0 flex min-h-0 flex-col gap-4 overflow-auto px-4 pt-2 pb-4; user-select: text; -webkit-user-select: text; }
+  .chat-scroll-latest { @apply absolute right-4 bottom-3 z-10 inline-flex h-8 items-center gap-1.5 rounded-full border px-3 text-xs font-medium text-fg shadow-pop transition-colors; background: var(--color-overlay); border-color: var(--color-line-strong); }
+  .chat-scroll-latest:hover { border-color: var(--color-mauve-shadow-600); background: var(--color-raised); }
   .chat-empty { @apply my-auto flex flex-col gap-3 py-6; }
   .chat-empty h2 { @apply text-2xl font-bold; }
   .chat-empty p { @apply max-w-[36ch] text-fg-muted; }

@@ -36,8 +36,8 @@ func navigateBrowserTab(ctx context.Context, args browser.NavigateArgs) (any, er
 		if t == nil {
 			return nil, errors.New("the browser tab is no longer available")
 		}
-		if t.kind == kindSettings {
-			return nil, errors.New("open a browser tab before navigating; Settings is not a page tab")
+		if t.kind == kindSettings || t.kind == kindFiles {
+			return nil, errors.New("open a browser tab before navigating; Settings and Files are not page tabs")
 		}
 		if t.kind == kindHome {
 			t.kind, t.title, t.url, t.loading = kindWeb, "", args.URL, true

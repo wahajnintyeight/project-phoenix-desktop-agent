@@ -212,7 +212,9 @@ const IDEAS: readonly [string, IconName][] = [
 ];
 
 export class PhChat extends HTMLElement {
+  readonly #logWrap = el("div", "chat-log-wrap");
   readonly #log = el("div", "chat-log");
+  readonly #scrollLatest = el("button", "chat-scroll-latest");
   readonly #empty = el("div", "chat-empty");
   readonly #processing = el("div", "chat-processing");
   readonly #processingText = el("span");
@@ -247,6 +249,11 @@ export class PhChat extends HTMLElement {
   #current: Msg | null = null;
   #scrollFrame = 0;
   #scrollDirty = false;
+  readonly #syncScrollLatest = (): void => {
+    const remaining = this.#log.scrollHeight - this.#log.scrollTop - this.#log.clientHeight;
+    const threshold = Math.max(120, Math.min(200, this.#log.clientHeight * 0.25));
+    this.#scrollLatest.hidden = remaining < threshold;
+  };
   #inputWidth = 0;
   readonly #inputObserver = new ResizeObserver((entries) => {
     const width = entries[0]?.contentRect.width ?? 0;
@@ -269,6 +276,13 @@ export class PhChat extends HTMLElement {
     // The log would announce every streamed word; the status pill and the finished reply do
     // that job instead.
     this.#log.setAttribute("aria-live", "off");
+    this.#log.addEventListener("scroll", this.#syncScrollLatest, { passive: true });
+    this.#scrollLatest.type = "button";
+    this.#scrollLatest.hidden = true;
+    this.#scrollLatest.setAttribute("aria-label", "Scroll to latest message");
+    this.#scrollLatest.title = "Scroll to latest message";
+    this.#scrollLatest.append(icon("chevronDown", 14), el("span", undefined, "Latest"));
+    this.#scrollLatest.addEventListener("click", () => this.scrollToLatest(), { passive: true });
     this.#processing.setAttribute("role", "status");
     this.#processing.setAttribute("aria-live", "polite");
     this.#processing.hidden = true;
@@ -356,7 +370,8 @@ export class PhChat extends HTMLElement {
     this.#chatHistory.append(trigger, pop);
     const head = el("div", "chat-head");
     head.append(this.#chatHistory, this.#newChat);
-    this.append(head, this.#log, wrap);
+    this.#logWrap.append(this.#log, this.#scrollLatest);
+    this.append(head, this.#logWrap, wrap);
     this.#inputObserver.observe(this.#input);
 
     this.#input.addEventListener("keydown", (e) => {
@@ -416,6 +431,7 @@ export class PhChat extends HTMLElement {
         this.#scrollDirty = false;
       }
       this.#log.scrollTop = this.#log.scrollHeight;
+      this.#syncScrollLatest();
       this.#scrollFrame = requestAnimationFrame(() => {
         this.#scrollFrame = 0;
         if (this.#log.clientHeight && (this.#scrollDirty || this.#log.scrollHeight - this.#log.scrollTop - this.#log.clientHeight > 1)) {

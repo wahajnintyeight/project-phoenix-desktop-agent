@@ -5,60 +5,79 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"sync"
 
 	sdk "github.com/modelcontextprotocol/go-sdk/mcp"
 
+	"phoenix/internal/config"
+	"phoenix/internal/library"
 	"phoenix/internal/mcp"
-	"phoenix/internal/workspace"
 )
 
-// workspaceDir is where the agent's files live: the configured folder, else Documents\Phoenix.
-func workspaceDir() string {
-	if hub != nil {
-		if d := hub.WorkspaceDir(); d != "" {
-			return d
-		}
+// libraryDBPath is the SQLite file that holds every file the user and the agent keep. It sits
+// next to config.yaml, so a test profile gets its own. The files exist only inside this database:
+// nothing is written to a folder on disk.
+func libraryDBPath() string {
+	if cfgStore != nil {
+		return filepath.Join(filepath.Dir(cfgStore.Path()), "library.db")
 	}
-	if d := os.Getenv("PHOENIX_WORKSPACE"); d != "" {
-		return d
-	}
-	home, err := os.UserHomeDir()
+	p, err := config.DefaultPath()
 	if err != nil {
 		return ""
 	}
-	return filepath.Join(home, "Documents", "Phoenix")
+	return filepath.Join(filepath.Dir(p), "library.db")
 }
 
-// openWorkspace opens (creating if needed) the current workspace.
-func openWorkspace() (*workspace.Root, error) {
-	dir := workspaceDir()
-	if dir == "" {
-		return nil, fmt.Errorf("no workspace folder")
-	}
-	return workspace.Open(dir)
+var (
+	libOnce  sync.Once
+	libStore *library.Store
+	libErr   error
+)
+
+// openLibrary opens the shared library once for this process.
+func openLibrary() (*library.Store, error) {
+	libOnce.Do(func() {
+		clearOpenDir()
+		path := libraryDBPath()
+		if path == "" {
+			libErr = fmt.Errorf("no place to keep the library")
+			return
+		}
+		libStore, libErr = library.Open(path)
+		if libErr != nil {
+			logf("library: %v", libErr)
+		}
+	})
+	return libStore, libErr
 }
 
-// filesServer is the per-run MCP child that serves the file tools for one workspace. The
-// folder is passed by environment; the child enforces confinement itself.
-func filesServer(root *workspace.Root) (mcp.Resolved, error) {
+// filesServer is the per-run MCP child that serves the file tools. The database path is passed
+// by environment; the child opens the same database (WAL, so both sides can work at once).
+func filesServer() (mcp.Resolved, error) {
 	exe, err := os.Executable()
 	if err != nil {
 		return mcp.Resolved{}, err
 	}
 	return mcp.Resolved{
-		Server:    mcp.Server{Name: workspace.ServerName, Transport: mcp.Stdio, Command: exe, Args: []string{"mcp-files"}, Enabled: true},
-		EnvValues: map[string]string{"PHOENIX_WORKSPACE": root.Dir()},
+		Server:    mcp.Server{Name: library.ServerName, Transport: mcp.Stdio, Command: exe, Args: []string{"mcp-files"}, Enabled: true},
+		EnvValues: map[string]string{"PHOENIX_LIBRARY_DB": libraryDBPath()},
 	}, nil
 }
 
 // runFilesMCP is `phoenix.exe mcp-files`.
 func runFilesMCP() int {
-	root, err := workspace.Open(os.Getenv("PHOENIX_WORKSPACE"))
+	db := os.Getenv("PHOENIX_LIBRARY_DB")
+	if db == "" {
+		fmt.Fprintln(os.Stderr, "files server: no library")
+		return 1
+	}
+	st, err := library.Open(db)
 	if err != nil {
 		fmt.Fprintln(os.Stderr, "files server:", err)
 		return 1
 	}
-	if err := workspace.NewServer(root).Run(context.Background(), &sdk.StdioTransport{}); err != nil {
+	defer st.Close()
+	if err := library.NewServer(st, "agent").Run(context.Background(), &sdk.StdioTransport{}); err != nil {
 		fmt.Fprintln(os.Stderr, "files server:", err)
 		return 1
 	}
