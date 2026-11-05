@@ -5,6 +5,9 @@ import "./provider-card";
 import "./model-list";
 import "./quick-model";
 import "./browser-settings";
+import "./profile-settings";
+import "./theme-picker";
+import { initTheme } from "./themes";
 import "./mcp-settings";
 import "./desktop-settings";
 import "./files-view";
@@ -112,6 +115,8 @@ document.querySelector("[data-settings-nav]")?.addEventListener("click", (e) => 
 }, { passive: true });
 
 // Display preferences only scale Phoenix chrome; the separately hosted page keeps its zoom.
+initTheme();
+
 const displayScale = document.querySelector<HTMLInputElement>("#display-scale");
 const displayScaleValue = document.querySelector<HTMLOutputElement>("#display-scale-value");
 const compactSpacing = document.querySelector<HTMLInputElement>("#compact-spacing");

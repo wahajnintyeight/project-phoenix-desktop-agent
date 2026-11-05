@@ -79,3 +79,11 @@ Scale, about 1.15 per step: 12 / 13 / 14 / 16 / 19 / 22 px (`text-xs` to `text-2
 - A light theme.
 - A keyboard-only walkthrough, other window sizes and display scaling, and Windows 11 (snap layouts).
 - A `critique` pass with screenshots by someone other than the author.
+
+## Files explorer
+
+The Files view is a three-part explorer on the canvas: a `panel` sidebar (quick locations, kinds, folder tree, trash, usage), a main column (round nav buttons, a pill path bar, search, a ribbon of pill actions with Add files as the one filled action, the list, a status bar) and a details card on the right. Rows are 44px, selected rows take the `--card` gradient with a mauve-600 edge, folders get a stronger mauve tile, kinds are mauve-outlined pills. Drop targets (folders, tree nodes, crumbs) tint mauve-500. When the window is narrow the details card floats over the list and the Kind and Modified columns give way (container queries). Context menus use `overlay` with a 1px `line-strong` edge; Delete is the only danger-coloured action.
+
+## Themes and modes
+
+Five palettes (Mauve shadow, Honey garden, Soft sand, Neutral earth, Steel), each in dark and light, plus Match Windows. A palette is two nine-step ramps (neutral and accent) in `ui/src/themes.ts`; the role variables the stylesheet reads are derived from them by fixed rules and written once onto `<html>`, so switching costs one pass over about 45 properties. Filled-button ink is chosen and the fill nudged until it reaches 4.5:1 in every state; all ten variants were checked for text, muted text, accent and danger contrast. Honey garden uses honey bronze as the accent, muted teal for surfaces in dark and linen in light, and light coral for danger. The picker in Settings > General draws each palette in its own colours for the mode in effect. The old single-name setting (dark, soft-sand, earth, steel) is migrated on first load.

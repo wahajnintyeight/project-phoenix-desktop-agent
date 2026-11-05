@@ -167,7 +167,7 @@
   .seg { @apply inline-flex flex-wrap gap-0.5 self-start rounded-full border border-line bg-sunken p-0.5; }
   .seg-btn { @apply h-7 rounded-full px-3.5 text-sm text-fg-muted transition-colors; }
   .seg-btn:hover { @apply text-fg; }
-  .seg-btn[aria-checked="true"] { @apply bg-overlay text-fg; }
+  .seg-btn[aria-checked="true"] { background: var(--color-accent-fill); color: var(--color-accent-fill-ink); }
 
   .chip { @apply inline-flex h-5 items-center rounded-full border border-line-strong px-2 text-xs font-normal text-fg-muted; }
 
@@ -539,6 +539,36 @@
   .fx-toast > span { @apply py-1; }
   .fx-drop { @apply absolute inset-3 z-30 flex flex-col items-center justify-center gap-3 rounded-2xl border-2 border-dashed text-lg text-fg; border-color: var(--color-mauve-shadow-500); background: color-mix(in oklab, var(--color-canvas) 88%, transparent); pointer-events: none; }
   .fx-drop[hidden] { display: none; }
+
+  /* ── Theme picker ────────────────────────────────────────────────── */
+  ph-theme-picker { @apply flex max-w-3xl flex-col gap-4; }
+  .theme-row { @apply flex flex-wrap items-center gap-4; }
+  .theme-grid { @apply grid gap-3; grid-template-columns: repeat(auto-fill, minmax(11rem, 1fr)); }
+  .theme-card { @apply flex flex-col gap-2.5 rounded-2xl border border-line-strong p-2.5 text-left transition-colors; background: var(--card-soft); }
+  .theme-card:hover { border-color: var(--color-mauve-shadow-600); }
+  .theme-card[aria-checked="true"] { background: var(--card); border-color: var(--color-accent); box-shadow: 0 0 0 1px var(--color-accent); }
+  .theme-preview { @apply relative flex h-20 overflow-hidden rounded-xl border; background: var(--pv-bg); border-color: var(--pv-line); }
+  .pv-side { @apply block w-1/4 shrink-0; background: var(--pv-panel); border-right: 1px solid var(--pv-line); }
+  .pv-body { @apply flex flex-1 flex-col justify-center gap-1.5 px-3; }
+  .pv-line { @apply block h-1.5 rounded-full; background: var(--pv-fg); opacity: 0.75; }
+  .pv-line-a { width: 70%; }
+  .pv-line-b { width: 45%; opacity: 0.4; }
+  .pv-pill { @apply mt-0.5 block h-3 w-10 rounded-full; background: var(--pv-accent); }
+  .theme-label { @apply flex items-center justify-between gap-2 px-0.5; }
+  .theme-text { @apply flex min-w-0 flex-col; }
+  .theme-text strong { @apply truncate text-sm font-semibold text-fg; }
+  .theme-text span { @apply truncate text-xs text-fg-subtle; }
+  .theme-tick { @apply grid size-5 shrink-0 place-items-center rounded-full; background: var(--color-accent-fill); color: var(--color-accent-fill-ink); }
+
+  /* ── About you ───────────────────────────────────────────────────── */
+  ph-profile-settings { @apply flex max-w-3xl flex-col gap-3; }
+  .profile-area { @apply min-h-64 w-full resize-y rounded-xl p-4 text-base leading-relaxed; }
+  .profile-meter { @apply flex items-center gap-3; }
+  .profile-bar { @apply h-1.5 flex-1 overflow-hidden rounded-full bg-raised; }
+  .profile-fill { @apply h-full rounded-full; background: var(--color-mauve-shadow-500); }
+  .profile-bar[data-over="true"] .profile-fill { background: var(--color-warn); }
+  .profile-sent { @apply text-sm font-medium text-fg; }
+  .profile-actions { @apply flex flex-wrap items-center gap-2; }
 
   /* ── MCP servers ─────────────────────────────────────────────────── */
   ph-mcp { @apply flex min-w-0 flex-col gap-4; }

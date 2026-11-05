@@ -167,7 +167,7 @@ func TestTools(t *testing.T) {
 	}
 	defer cs.Close()
 	tools, err := cs.ListTools(ctx, nil)
-	if err != nil || len(tools.Tools) != 11 {
+	if err != nil || len(tools.Tools) != 12 {
 		t.Fatalf("tools: %d %v", len(tools.Tools), err)
 	}
 	call := func(name string, args map[string]any) (string, bool) {
@@ -188,5 +188,23 @@ func TestTools(t *testing.T) {
 	}
 	if out, bad := call("files_delete", map[string]any{"path": "r/cv.md"}); bad || !strings.Contains(out, "trash") {
 		t.Fatalf("delete: %q", out)
+	}
+}
+
+func TestSettings(t *testing.T) {
+	s := newStore(t)
+	if s.Setting("a") != "" {
+		t.Fatal("unset should be empty")
+	}
+	if err := s.SetSetting("a", "one"); err != nil {
+		t.Fatal(err)
+	}
+	s.SetSetting("a", "two")
+	if s.Setting("a") != "two" {
+		t.Fatal("update failed")
+	}
+	s.SetSetting("a", "")
+	if s.Setting("a") != "" {
+		t.Fatal("clear failed")
 	}
 }

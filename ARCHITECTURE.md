@@ -41,7 +41,7 @@ The Wails UI webview and page webviews are separate browser environments. The UI
 | MCP | Official `modelcontextprotocol/go-sdk` for stdio and Streamable HTTP clients/servers |
 | Configuration | YAML v3 in `config.yaml`; typed fields for providers, browser search, desktop tools and MCP servers |
 | Secrets | Windows DPAPI-backed local vault; configuration stores references, not resolved secret values |
-| Persistence | Bounded local JSON files for browser history, saved chats and activity; no SQLite database is currently used |
+| Persistence | Bounded local JSON files for browser history, saved chats and activity; one SQLite database (`library.db`) for the file library |
 
 The browser engine boundary is currently WebView2-specific. There is no alternate CEF implementation or cross-engine adapter. The application does not depend on `agent-desktop`; its native desktop tools are Phoenix-owned Go code.
 
@@ -149,7 +149,7 @@ The chat command list is an enum-backed registry in `ui/src/slash-commands.ts`. 
 
 ## 9. State, persistence and configuration
 
-Phoenix currently uses bounded files rather than SQLite:
+Phoenix uses bounded JSON files for history, chats and activity, and one SQLite database for the file library:
 
 | Data | Location | Contents and bounds |
 |---|---|---|
@@ -158,12 +158,13 @@ Phoenix currently uses bounded files rather than SQLite:
 | Browser history | `history.json` beside settings | Up to 100 most recently visited HTTP(S) URLs. Fragments are removed; query strings are retained. The new-tab view shows up to eight. |
 | Saved chats | `chats.json` beside settings | Up to 40 conversations, 64 messages per chat and 120,000 bytes of transcript/context per chat. |
 | Agent activity | `agent-activity.json` beside settings | Up to 500 safe summaries; Activity displays the newest 100. Raw tool arguments/results, page text and approval descriptions are excluded. |
+| File library | `library.db` beside settings (pure-Go `modernc.org/sqlite`, WAL) | Every file and folder the user adds or the agent saves, with kind, note and source address. Files exist only as rows in this database (100 MB per file); nothing is written to a folder on disk. |
 | Page profile | `%LOCALAPPDATA%\Phoenix\spike\browser` | WebView2 cookies and site sessions. The legacy `spike` path is retained to preserve existing sign-ins. |
 | UI profile | `%LOCALAPPDATA%\Phoenix\ui` | Wails UI webview data. |
 
 Chat and activity writes are bounded, coalesced off the UI thread and flushed during a normal quit. A saved transcript contains what the user sent and what the assistant replied; it does not separately persist raw tool payloads or the shared-page snapshot. Assistant text may still quote information it used. Browser history is a distinct store and can be cleared independently.
 
-There is no SQLite schema, migration system, workspace file index, résumé facts database, application tracker, or backup subsystem in the current code. Those were proposals in the earlier draft, not implemented architecture.
+There is no migration system beyond the library's `user_version`, résumé facts database, application tracker, or backup subsystem in the current code.
 
 ## 10. Security boundaries
 
@@ -183,8 +184,8 @@ There is no SQLite schema, migration system, workspace file index, résumé fact
 
 ## 12. Current gaps and open work
 
-- **Files and workspace:** the workspace-confined file toolset exists (`internal/workspace`, MCP server `phoenix-files`, started as `phoenix.exe mcp-files`; folder from `workspace.dir`, default `Documents\Phoenix`). A Files view in the UI, document indexing and Drive integration are not implemented.
-- **Product data:** no résumé profile store, application tracker, SQLite database, backup/restore flow, setup wizard, native notification center, updater or signed release pipeline.
+- **Files:** the SQLite file library (`internal/library`, MCP server `phoenix-files`, started as `phoenix.exe mcp-files`) and the Files explorer in the UI exist. Document indexing beyond file text and Drive integration are not implemented.
+- **Product data:** no résumé profile store, application tracker, library backup/export flow, setup wizard, native notification center, updater or signed release pipeline.
 - **Tool capabilities:** provider support is detected at the provider level, not consistently per model. Models without function-call support can fail when tools are offered.
 - **Browser:** no arbitrary script, file upload/download, batch, trace/replay or robust coordinate interaction for canvas-only applications. Iframes and canvas are not represented by the accessibility snapshot.
 - **Desktop interaction:** different DPI/multi-monitor coverage and elevated windows (UIPI) need more validation; computer-use commands are Win32-specific.
@@ -210,6 +211,10 @@ The next architecture changes should preserve the tool boundary: a provider may 
 - [vercel-labs/agent-desktop](https://github.com/vercel-labs/agent-desktop) — inspiration only; not a dependency
 - [pbakaus/impeccable](https://github.com/pbakaus/impeccable) — design workflow inspiration
 
-## Workspace files
+## File library
 
-The agent has one storage folder (default `Documents\Phoenix`, setting `workspace.dir`). `internal/workspace` resolves every model-supplied path relative to it and rejects `..`, drive letters, ADS colons, reserved device names and symlinks/junctions, in the MCP child that touches the disk. Tools: `files_list`, `files_read` (text only, paged), `files_write` (create/overwrite/append, 1 MiB per call), `files_mkdir`, `files_move`, `files_copy`, `files_delete`, `files_search`. Deletes and overwrites move the old content to `.phoenix-trash/<timestamp>/` inside the workspace instead of destroying it; that folder is hidden from the agent. Moves and copies never replace an existing item. Each run adds the server and a system-prompt note naming the folder and its top-level contents, so the agent knows storage exists.
+Files live inside Phoenix, in the SQLite database `library.db` (table `nodes`: a tree of folders and files with content, kind, note, source address, origin `user`/`agent`, and soft-delete columns). They are not visible in Explorer; only the Files view in the app, or a SQLite tool, shows them. Both the host and the per-run MCP child (`phoenix.exe mcp-files`, env `PHOENIX_LIBRARY_DB`) open the same file (WAL, busy timeout).
+
+`internal/library` validates every path (no `..`, drive letters, colons, control characters, depth 12, length 240) and keeps names unique per folder, case-insensitively. Agent tools: `files_list`, `files_read` (text only, paged), `files_write` (create/overwrite/append, 1 MiB per call), `files_mkdir`, `files_move`, `files_copy`, `files_delete`, `files_search`, `files_find` (by kind or words), `files_set_info`, `files_save_url`. Deletes and overwrites go to the trash (soft delete, restorable); only the user can empty it. `files_save_url` downloads https addresses only (no credentials, no cookies, 25 MB, private/loopback addresses refused at connect time, programs and scripts refused) and records the source, so a file such as a generated résumé is kept and found again by kind. Each run adds the server and a system-prompt note listing what the library holds, so the agent knows it has somewhere to store things.
+
+The Files view (`ui/src/files-view.ts`, host `cmd/phoenix/files_view_windows.go`) is an explorer: sidebar with All files, Recent, kinds, a folder tree and the trash; back/forward/up, a path bar and search; list and icon views with sortable columns; multi-select, rename, copy, cut and paste, drag onto folders, context menus, keyboard shortcuts; a details pane with a preview and editable kind and note; add files by dialog or drag and drop. Opening a file in another program writes a temporary copy under `%LOCALAPPDATA%\Phoenix\open`, cleared at start-up; Save as writes a copy where the user chooses. Programs and scripts are never launched from the library.

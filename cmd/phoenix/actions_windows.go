@@ -42,7 +42,20 @@ const probeScript = `(() => {
     if (ty === "password") password = true;
   }
   const art = document.querySelector("article");
+  const root = document.querySelector("main,[role=main]") || document.body;
+  // Counted with capped selectors: a huge page costs about the same as a small one.
+  let rows = 0;
+  for (const t of Array.from(document.querySelectorAll("table")).slice(0, 3)) rows += Math.min(t.rows ? t.rows.length : 0, 200);
+  const cards = document.querySelectorAll('article,[class*="card" i],[class*="result" i],[data-testid*="card" i],[itemtype*="Product"],li>a>img');
+  const h1 = document.querySelector("h1");
   return {
+    site: meta("og:site_name"),
+    h1: h1 && h1.textContent ? String(h1.textContent).trim().replace(/\s+/g, " ").slice(0, 80) : "",
+    desc: meta("og:description") || meta("description"),
+    tableRows: rows,
+    codeBlock: Math.min(document.querySelectorAll("pre").length, 50),
+    cards: Math.min(cards.length, 60),
+    reading: root && root.textContent ? Math.min(root.textContent.length, 200000) : 0,
     og: meta("og:type"),
     ld: ld,
     fields: fields,
@@ -55,6 +68,13 @@ const probeScript = `(() => {
 })()`
 
 type probeSnap struct {
+	Site       string   `json:"site"`
+	H1         string   `json:"h1"`
+	Desc       string   `json:"desc"`
+	TableRows  int      `json:"tableRows"`
+	CodeBlock  int      `json:"codeBlock"`
+	Cards      int      `json:"cards"`
+	Reading    int      `json:"reading"`
 	OG         string   `json:"og"`
 	LD         []string `json:"ld"`
 	Fields     int      `json:"fields"`
@@ -92,12 +112,13 @@ func refreshActions(fresh bool) {
 		return
 	}
 	if t.kind != kindWeb || t.wv == nil || t.url == "" || t.url == "about:blank" {
-		pushActions(quick.KindStart, false)
+		pushActions(quick.KindStart, false, quick.Signals{})
 		return
 	}
 	id, addr, title := t.id, t.url, t.title
 	if fresh {
-		pushActions(quick.Classify(quick.Signals{URL: addr, Title: title}), false)
+		sig := quick.Signals{URL: addr, Title: title}
+		pushActions(quick.Classify(sig), false, sig)
 	}
 	if t.loading {
 		return // the document in the tab is the old one; the probe runs when the load ends
@@ -107,20 +128,22 @@ func refreshActions(fresh bool) {
 		if err != nil || activeID != id {
 			return // the page is busy or the user has moved on: keep what is showing
 		}
-		kind := quick.Classify(quick.Signals{
+		sig := quick.Signals{
 			URL: addr, Title: title, OGType: snap.OG, LDTypes: snap.LD, Fields: snap.Fields,
 			Password: snap.Password, ArticleLen: snap.ArticleLen, Video: snap.Video, Price: snap.Price,
-			SelLen: snap.SelLen,
-		})
-		pushActions(kind, snap.SelLen >= 3)
+			SelLen: snap.SelLen, Site: snap.Site, H1: snap.H1, Desc: snap.Desc, TableRows: snap.TableRows,
+			CodeBlock: snap.CodeBlock, Cards: snap.Cards, Reading: snap.Reading,
+		}
+		pushActions(quick.Classify(sig), snap.SelLen >= 3, sig)
 	})
 }
 
-func pushActions(kind quick.Kind, selection bool) {
+func pushActions(kind quick.Kind, selection bool, sig quick.Signals) {
 	list := quick.For(kind, selection)
 	items := make([]actionJSON, len(list))
+	context := quick.Context(kind, selection, sig)
 	var key strings.Builder
-	key.WriteString(string(kind))
+	key.WriteString(string(kind) + "|" + context)
 	if selection {
 		key.WriteString("+sel")
 	}
@@ -132,7 +155,7 @@ func pushActions(kind quick.Kind, selection bool) {
 	} else {
 		quickState.key = k
 	}
-	post("u" + fs + "quick-actions" + fs + "actions" + fs + jsonString(actionsJSON{Context: quick.Label(kind, selection), Items: items}))
+	post("u" + fs + "quick-actions" + fs + "actions" + fs + jsonString(actionsJSON{Context: context, Items: items}))
 }
 
 // scheduleActionRefresh re-reads a page once it has had time to render. Many sites build

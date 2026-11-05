@@ -168,8 +168,18 @@ func NewServer(s *Store, origin string) *sdk.Server {
 		}
 		return fmt.Sprintf("Saved %s (%s). Find it again with files_find.", saved, humanSize(size)), nil
 	})
+	tool(srv, "user_profile", "Read the user's saved notes about themselves (background, likes, dislikes, how they work) in full. A short version is already in your instructions; call this only when a part not shown there would change your answer.", func(_ struct{}) (string, error) {
+		t := s.Setting(ProfileKey)
+		if t == "" {
+			return "The user has not written any notes about themselves.", nil
+		}
+		return t, nil
+	})
 	return srv
 }
+
+// ProfileKey is the setting that holds the user's notes about themselves.
+const ProfileKey = "profile.text"
 
 func tool[T any](s *sdk.Server, name, desc string, fn func(T) (string, error)) {
 	sdk.AddTool(s, &sdk.Tool{Name: name, Description: desc}, func(_ context.Context, _ *sdk.CallToolRequest, in T) (*sdk.CallToolResult, any, error) {

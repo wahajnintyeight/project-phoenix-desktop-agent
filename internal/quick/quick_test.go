@@ -31,6 +31,24 @@ func TestClassify(t *testing.T) {
 		{"form", Signals{URL: "https://acme.com/apply", Fields: 6}, KindForm},
 		{"plain", Signals{URL: "https://example.com/"}, KindGeneric},
 		{"file url", Signals{URL: "file:///c:/x.html"}, KindStart},
+		{"pdf", Signals{URL: "https://acme.com/report.pdf"}, KindPDF},
+		{"github repo", Signals{URL: "https://github.com/golang/go"}, KindRepo},
+		{"github issue", Signals{URL: "https://github.com/golang/go/issues/12"}, KindIssue},
+		{"github home", Signals{URL: "https://github.com/"}, KindGeneric},
+		{"stack overflow", Signals{URL: "https://stackoverflow.com/questions/1/x"}, KindQA},
+		{"reddit thread", Signals{URL: "https://www.reddit.com/r/go/comments/abc/x/"}, KindQA},
+		{"gmail", Signals{URL: "https://mail.google.com/mail/u/0/"}, KindMail},
+		{"recipe", Signals{URL: "https://food.example/r/1", LDTypes: []string{"Recipe"}}, KindRecipe},
+		{"hotel", Signals{URL: "https://travel.example/h/1", LDTypes: []string{"Hotel"}}, KindTravel},
+		{"cart", Signals{URL: "https://shop.example/cart", Price: true}, KindCheckout},
+		{"pricing", Signals{URL: "https://saas.example/pricing"}, KindPricing},
+		{"docs host", Signals{URL: "https://docs.acme.com/start", CodeBlock: 2, Reading: 3000}, KindDocs},
+		{"docs path needs content", Signals{URL: "https://acme.com/docs"}, KindGeneric},
+		{"many code blocks", Signals{URL: "https://blog.example/post", CodeBlock: 5}, KindDocs},
+		{"linkedin profile", Signals{URL: "https://www.linkedin.com/in/someone"}, KindProfile},
+		{"table page", Signals{URL: "https://stats.example/t", TableRows: 40, Reading: 2000}, KindData},
+		{"listing by cards", Signals{URL: "https://shop.example/c/shoes", Cards: 20}, KindListing},
+		{"listing by schema", Signals{URL: "https://shop.example/c/x", LDTypes: []string{"ItemList"}}, KindListing},
 	}
 	for _, c := range cases {
 		if got := Classify(c.s); got != c.want {
@@ -40,7 +58,7 @@ func TestClassify(t *testing.T) {
 }
 
 func TestEveryKindHasValidActions(t *testing.T) {
-	kinds := []Kind{KindStart, KindGeneric, KindArticle, KindJob, KindProduct, KindForm, KindLogin, KindVideo, KindSearch}
+	kinds := []Kind{KindStart, KindGeneric, KindArticle, KindJob, KindJobSearch, KindProduct, KindForm, KindLogin, KindVideo, KindSearch, KindRepo, KindIssue, KindDocs, KindQA, KindMail, KindRecipe, KindTravel, KindListing, KindCheckout, KindPricing, KindData, KindProfile, KindPDF}
 	for _, k := range kinds {
 		for _, sel := range []bool{false, true} {
 			list := For(k, sel)
@@ -98,5 +116,18 @@ func TestPromptsNeverPromiseActions(t *testing.T) {
 		if a.Prompt == "" {
 			t.Errorf("%s has no prompt", id)
 		}
+	}
+}
+
+func TestContextNamesTheSite(t *testing.T) {
+	got := Context(KindRepo, false, Signals{URL: "https://www.github.com/golang/go"})
+	if got != "Repository · github.com" {
+		t.Fatalf("got %q", got)
+	}
+	if got := Context(KindArticle, false, Signals{URL: "https://x.example/a", Site: "The Example Times"}); got != "Article · The Example Times" {
+		t.Fatalf("got %q", got)
+	}
+	if got := Context(KindStart, false, Signals{}); got != "Start" {
+		t.Fatalf("got %q", got)
 	}
 }

@@ -3,7 +3,8 @@
 // The aim is less typing: the common request for a kind of page is one click, and it is
 // worded once, here, instead of by the user each time. Classification uses only cheap signals
 // read locally from the page (address, title, structured-data types, form fields); nothing is
-// sent to a model to choose the buttons. Everything here is pure, so it is tested without a
+// sent to a model to choose the buttons. One small script reads the page once; the rest is
+// string and set lookups, so choosing is microseconds and costs no tokens. Everything here is pure, so it is tested without a
 // browser.
 package quick
 
@@ -26,6 +27,19 @@ const (
 	KindLogin     Kind = "login"
 	KindVideo     Kind = "video"
 	KindSearch    Kind = "search"
+	KindRepo      Kind = "repo"  // a code repository page
+	KindIssue     Kind = "issue" // an issue or pull request
+	KindDocs      Kind = "docs"  // documentation or an API reference
+	KindQA        Kind = "qa"    // a question and its answers, or a discussion thread
+	KindMail      Kind = "mail"  // a web mail client
+	KindRecipe    Kind = "recipe"
+	KindTravel    Kind = "travel"   // a hotel, flight or place
+	KindListing   Kind = "listing"  // many items to pick from: a catalogue, a category, a feed
+	KindCheckout  Kind = "checkout" // cart or checkout
+	KindPricing   Kind = "pricing"
+	KindData      Kind = "data"    // a page that is mostly a table
+	KindProfile   Kind = "profile" // a person's profile page
+	KindPDF       Kind = "pdf"
 )
 
 // Signals are the facts read from a page. URL and Title come from the tab; the rest from a
@@ -41,6 +55,15 @@ type Signals struct {
 	Video      bool
 	Price      bool
 	SelLen     int // characters the user has selected
+
+	// What the page says about itself, kept short.
+	Site      string // og:site_name
+	H1        string
+	Desc      string // meta description
+	TableRows int    // rows in the first tables
+	CodeBlock int    // <pre> blocks
+	Cards     int    // repeated card-like items
+	Reading   int    // characters of text in <main>, or the body
 }
 
 // Action is one button. Prompt is what the model is told; Label is what the user sees and
@@ -59,6 +82,12 @@ var jobHosts = []string{
 	"greenhouse.io", "lever.co", "myworkdayjobs.com", "ashbyhq.com", "workable.com",
 	"smartrecruiters.com", "indeed.", "glassdoor.", "wellfound.com", "rozee.pk", "bayt.com",
 }
+
+var mailHosts = []string{"mail.google.com", "outlook.live.com", "outlook.office.com", "outlook.office365.com", "mail.yahoo.com", "proton.me", "mail.proton.me", "fastmail.com"}
+
+var codeHosts = []string{"github.com", "gitlab.com", "bitbucket.org", "codeberg.org"}
+
+var docHosts = []string{"readthedocs.", "developer.mozilla.org", "learn.microsoft.com", "docs.rs", "pkg.go.dev", "devdocs.io", "docs.python.org", "developer.apple.com"}
 
 var searchHosts = []string{"google.", "bing.com", "duckduckgo.com", "search.brave.com", "yahoo.com", "ecosia.org"}
 
@@ -90,7 +119,19 @@ func Classify(s Signals) Kind {
 		return false
 	}
 
+	segs := strings.Count(strings.Trim(path, "/"), "/") + 1
+	if strings.Trim(path, "/") == "" {
+		segs = 0
+	}
 	switch {
+	case strings.HasSuffix(path, ".pdf"):
+		return KindPDF
+	case hostIn(mailHosts):
+		return KindMail
+	case hostIn(codeHosts) && containsAny(path, "/issues/", "/pull/", "/pulls/", "/merge_requests/", "/-/issues/"):
+		return KindIssue
+	case hostIn(codeHosts) && segs >= 2 && !containsAny(path, "/search", "/orgs/", "/settings", "/marketplace", "/topics", "/trending"):
+		return KindRepo
 	case (hostIn(jobHosts) || strings.Contains(host, "linkedin.")) && isJobSearchPage(path, u.Query()):
 		return KindJobSearch
 	case has("JobPosting"),
@@ -104,6 +145,21 @@ func Classify(s Signals) Kind {
 		return KindVideo
 	case hostIn(searchHosts) && (path == "/search" || strings.Contains(u.RawQuery, "q=")):
 		return KindSearch
+	case has("QAPage", "DiscussionForumPosting", "Question") || strings.Contains(host, "stackoverflow.") || strings.Contains(host, "stackexchange.") ||
+		(strings.Contains(host, "reddit.com") && strings.Contains(path, "/comments/")) || strings.Contains(host, "news.ycombinator.com") && path == "/item":
+		return KindQA
+	case has("Recipe"):
+		return KindRecipe
+	case has("Hotel", "LodgingBusiness", "Flight", "TouristAttraction", "TouristTrip", "Resort"):
+		return KindTravel
+	case containsAny(path, "/cart", "/checkout", "/basket", "/bag", "/payment"):
+		return KindCheckout
+	case (has("Person", "ProfilePage") && s.Fields < 4) || (strings.Contains(host, "linkedin.") && strings.HasPrefix(path, "/in/")):
+		return KindProfile
+	case hostIn(docHosts) || strings.HasPrefix(host, "docs.") || strings.HasPrefix(host, "developer.") || containsAny(path, "/docs", "/documentation", "/reference", "/api/", "/guide", "/manual") && (s.CodeBlock > 0 || s.Reading > 800) || has("TechArticle") && s.CodeBlock > 0 || s.CodeBlock >= 4:
+		return KindDocs
+	case strings.HasPrefix(strings.Trim(path, "/"), "pricing") || containsAny(path, "/pricing", "/plans") || containsAny(title, "pricing", "plans &") && s.Fields < 4:
+		return KindPricing
 	case s.Password && s.Fields <= 4:
 		return KindLogin
 	case has("Product", "Offer") || s.Price || strings.EqualFold(s.OGType, "product"):
@@ -112,6 +168,10 @@ func Classify(s Signals) Kind {
 		return KindArticle
 	case s.Fields >= 4:
 		return KindForm
+	case s.TableRows >= 12 && s.Reading < 6000:
+		return KindData
+	case has("ItemList", "CollectionPage", "OfferCatalog", "SearchResultsPage") || s.Cards >= 8:
+		return KindListing
 	}
 	return KindGeneric
 }
@@ -163,10 +223,58 @@ func Label(k Kind, hasSelection bool) string {
 		return "Video"
 	case KindSearch:
 		return "Search results"
+	case KindRepo:
+		return "Repository"
+	case KindIssue:
+		return "Issue or pull request"
+	case KindDocs:
+		return "Documentation"
+	case KindQA:
+		return "Question and answers"
+	case KindMail:
+		return "Mail"
+	case KindRecipe:
+		return "Recipe"
+	case KindTravel:
+		return "Travel"
+	case KindListing:
+		return "Listing"
+	case KindCheckout:
+		return "Cart or checkout"
+	case KindPricing:
+		return "Pricing"
+	case KindData:
+		return "Data table"
+	case KindProfile:
+		return "Profile"
+	case KindPDF:
+		return "PDF"
 	case KindGeneric:
 		return "Page"
 	}
 	return "Start"
+}
+
+// Context is the short line shown beside the buttons: what the page looks like, and where. The
+// site is named so the user can see the guess was made about this page and not the last one.
+func Context(k Kind, hasSelection bool, s Signals) string {
+	label := Label(k, hasSelection)
+	if k == KindStart {
+		return label
+	}
+	name := strings.TrimSpace(s.Site)
+	if name == "" {
+		if u, err := url.Parse(s.URL); err == nil {
+			name = strings.TrimPrefix(strings.ToLower(u.Hostname()), "www.")
+		}
+	}
+	if r := []rune(name); len(r) > 28 {
+		name = string(r[:27]) + "…"
+	}
+	if name == "" {
+		return label
+	}
+	return label + " · " + name
 }
 
 // For returns the buttons for a kind, most useful first (the first is drawn as the primary
@@ -206,6 +314,19 @@ var byKind = map[Kind][]string{
 	KindLogin:     {"legit", "summarise"},
 	KindVideo:     {"videoabout", "videocomment", "keypoints"},
 	KindSearch:    {"bestresult", "searchsum", "refine"},
+	KindRepo:      {"repoabout", "repostart", "repohealth", "keypoints"},
+	KindIssue:     {"issuesum", "issuereply", "issuenext", "simplify"},
+	KindDocs:      {"docsum", "docexample", "docgotcha", "simplify", "keypoints"},
+	KindQA:        {"qabest", "qasum", "qadisagree", "simplify"},
+	KindMail:      {"mailsum", "mailreply", "mailtodo"},
+	KindRecipe:    {"recipequick", "recipeswap", "recipeshop", "keypoints"},
+	KindTravel:    {"travelweigh", "travelcheck", "travelplan", "proscons"},
+	KindListing:   {"listbest", "listcompare", "listfilter", "summarise"},
+	KindCheckout:  {"checkcosts", "formrisk", "lookfor"},
+	KindPricing:   {"pricecompare", "pricehidden", "pricepick", "keypoints"},
+	KindData:      {"datasum", "datatrend", "dataoutlier", "keypoints"},
+	KindProfile:   {"profsum", "profmatch", "profintro"},
+	KindPDF:       {"tldr", "keypoints", "pdfaction", "simplify"},
 }
 
 const honest = " If you need facts about me that are not on the page, ask up to three short questions instead of inventing them."
@@ -297,6 +418,65 @@ var catalog = map[string]Action{
 	// Video.
 	"videoabout":   {ID: "videoabout", Label: "What is this about?", Page: true, Prompt: "From the title, description and any text visible on this page, say what this video is about. Note that you cannot watch it."},
 	"videocomment": {ID: "videocomment", Label: "Draft a comment", Page: true, Prompt: "Draft a short, thoughtful comment I could leave on this video, based on what the page says."},
+
+	// Code.
+	"repoabout":  {ID: "repoabout", Label: "What is this project?", Page: true, Prompt: "From the visible page and README, say what this project is, who it is for, and what language and tooling it uses."},
+	"repostart":  {ID: "repostart", Label: "How do I run it?", Page: true, Prompt: "From what is on this page, how do I install and run this project? List the steps and any requirements. Say what is missing."},
+	"repohealth": {ID: "repohealth", Label: "Is it maintained?", Page: true, Prompt: "Using only what is visible here (recent activity, releases, issues, stars, licence), is this project healthy and safe to depend on? Say what you cannot see."},
+	"issuesum":   {ID: "issuesum", Label: "Summarise the thread", Page: true, Prompt: "Summarise this issue or pull request: the problem, what has been decided, and what is still open."},
+	"issuereply": {ID: "issuereply", Label: "Draft a reply", Page: true, Prompt: "Draft a short, constructive reply I could post on this thread. I will post it myself."},
+	"issuenext":  {ID: "issuenext", Label: "What blocks this?", Page: true, Prompt: "What is blocking this issue or pull request, and what would move it forward?"},
+
+	// Documentation.
+	"docsum":     {ID: "docsum", Label: "Summarise this page", Page: true, Prompt: "Summarise what this documentation page covers in a few bullets, then say when I would use it."},
+	"docexample": {ID: "docexample", Label: "Show a short example", Page: true, Prompt: "Give me one short, working example based on this documentation page. Use only what the page says; say if it is not enough."},
+	"docgotcha":  {ID: "docgotcha", Label: "Watch out for", Page: true, Prompt: "List the pitfalls, limits and version-specific caveats mentioned on this page."},
+
+	// Questions and discussions.
+	"qabest":     {ID: "qabest", Label: "Best answer", Page: true, Prompt: "Which answer on this page best solves the question, and why? Note any answer that is outdated or risky."},
+	"qasum":      {ID: "qasum", Label: "Summarise thread", Page: true, Prompt: "Summarise the question and the main answers in a few bullets."},
+	"qadisagree": {ID: "qadisagree", Label: "Where do they disagree?", Page: true, Prompt: "Where do the answers or comments disagree, and who is more likely right?"},
+
+	// Mail.
+	"mailsum":   {ID: "mailsum", Label: "Summarise this email", Page: true, Prompt: "Summarise the open email or the visible inbox in a few bullets and mark what needs a reply."},
+	"mailreply": {ID: "mailreply", Label: "Draft a reply", Page: true, Prompt: "Draft a short, polite reply to the open email, with placeholders in [brackets]. I will send it myself."},
+	"mailtodo":  {ID: "mailtodo", Label: "What needs action?", Page: true, Prompt: "List anything in the visible email or inbox that needs me to act, with deadlines if shown."},
+
+	// Recipes.
+	"recipequick": {ID: "recipequick", Label: "Quick version", Page: true, Prompt: "Give a short version of this recipe: ingredients and the steps in a few lines, with total time."},
+	"recipeswap":  {ID: "recipeswap", Label: "Swap ingredients", Page: true, Prompt: "Which ingredients in this recipe have easy substitutes, for example for allergies or what is usually in a kitchen?"},
+	"recipeshop":  {ID: "recipeshop", Label: "Shopping list", Page: true, Prompt: "Turn this recipe into a shopping list grouped by aisle."},
+
+	// Travel.
+	"travelweigh": {ID: "travelweigh", Label: "Is it a good option?", Page: true, Prompt: "Is this a good option? Weigh price, location, rating and what the page does not say."},
+	"travelcheck": {ID: "travelcheck", Label: "Hidden costs", Page: true, Prompt: "What extra costs, fees or conditions (cancellation, baggage, taxes, resort fees) apply here? Say what is missing."},
+	"travelplan":  {ID: "travelplan", Label: "Plan around this", Page: true, Prompt: "Suggest a simple plan for the day or trip around this place or booking, using only what the page says."},
+
+	// Lists of things.
+	"listbest":    {ID: "listbest", Label: "Which stand out?", Page: true, Prompt: "Of the items shown, which three stand out and why? Say what you based that on."},
+	"listcompare": {ID: "listcompare", Label: "Compare the top few", Page: true, Prompt: "Compare the first few items shown in a small table: the main differences and what each is best for."},
+	"listfilter":  {ID: "listfilter", Label: "How should I filter?", Page: true, Prompt: "Which filters or sorting on this page would help me narrow this down fastest, and in what order?"},
+
+	// Checkout.
+	"checkcosts": {ID: "checkcosts", Label: "Check the total", Page: true, Prompt: "Add up what is shown in this cart or checkout and point out fees, shipping, taxes, subscriptions or add-ons I might not expect. Never enter payment details."},
+
+	// Pricing.
+	"pricecompare": {ID: "pricecompare", Label: "Compare plans", Page: true, Prompt: "Compare the plans on this page in a small table: price, limits, and what each is for."},
+	"pricehidden":  {ID: "pricehidden", Label: "What is the catch?", Page: true, Prompt: "What limits, add-on costs, contract terms or fine print should I watch for on these plans?"},
+	"pricepick":    {ID: "pricepick", Label: "Which plan fits me?", Page: true, Prompt: "Which plan is the most sensible for a typical individual user, and what would make me pick a different one?" + honest},
+
+	// Tables.
+	"datasum":     {ID: "datasum", Label: "What does this show?", Page: true, Prompt: "Say what this table or data page shows, what the columns mean, and the headline numbers."},
+	"datatrend":   {ID: "datatrend", Label: "Spot the trend", Page: true, Prompt: "What trend or pattern is visible in this data? Quote the numbers you use."},
+	"dataoutlier": {ID: "dataoutlier", Label: "Anything odd?", Page: true, Prompt: "Is anything in this data an outlier, gap or inconsistency? Quote the rows."},
+
+	// People.
+	"profsum":   {ID: "profsum", Label: "Summarise this person", Page: true, Prompt: "Summarise this profile: role, background and anything relevant to me. Use only what the page shows."},
+	"profmatch": {ID: "profmatch", Label: "Why connect?", Page: true, Prompt: "Based on this profile, what would be a good reason to get in touch, and what is common ground?" + honest},
+	"profintro": {ID: "profintro", Label: "Draft an intro", Page: true, Prompt: "Draft a short, respectful first message to this person, with placeholders in [brackets]. Do not send it."},
+
+	// PDFs.
+	"pdfaction": {ID: "pdfaction", Label: "What do I need to do?", Page: true, Prompt: "What is this document asking me to do or decide, and by when?"},
 
 	// Search results.
 	"bestresult": {ID: "bestresult", Label: "Which result is best?", Page: true, Prompt: "Looking at these search results, which looks most useful for what I searched, and why?"},

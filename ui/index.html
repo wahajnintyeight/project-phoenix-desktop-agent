@@ -1,5 +1,5 @@
 <!doctype html>
-<html lang="en" data-theme="dark">
+<html lang="en" data-theme="mauve">
 <head>
 <meta charset="utf-8">
 <meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'self' {{SCRIPT_HASH}}; connect-src 'self'; style-src {{STYLE_HASH}}; img-src data:">
@@ -132,6 +132,7 @@
           <nav class="settings-nav" data-settings-nav aria-label="Settings sections">
             <h1 class="mb-4 px-3">Settings</h1>
             <button class="nav-item" data-section-btn="providers" aria-current="true">AI providers</button>
+            <button class="nav-item" data-section-btn="profile" aria-current="false">About you</button>
             <button class="nav-item" data-section-btn="mcp" aria-current="false">Tools (MCP)</button>
             <button class="nav-item" data-section-btn="desktop" aria-current="false">Computer use</button>
             <button class="nav-item" data-section-btn="browser" aria-current="false">Browser</button>
@@ -173,6 +174,14 @@
               </section>
             </div>
 
+            <div class="flex-col gap-6" data-for="profile">
+              <div class="flex flex-col gap-2">
+                <h2>About you</h2>
+                <p class="max-w-[62ch] text-base text-fg-muted">Tell the agent who you are, what you like and dislike and how you work. It uses this in every chat to fit its help to you.</p>
+              </div>
+              <ph-profile-settings id="profile-settings"></ph-profile-settings>
+            </div>
+
             <div class="flex-col gap-6" data-for="mcp">
               <div class="flex flex-col gap-2">
                 <h2>Tools (MCP)</h2>
@@ -199,6 +208,14 @@
 
             <div class="flex-col gap-8" data-for="general">
               <h2>General</h2>
+
+              <section class="flex flex-col gap-3">
+                <div>
+                  <h3>Appearance</h3>
+                  <p class="text-fg-muted">Pick a palette, then dark, light or follow Windows.</p>
+                </div>
+                <ph-theme-picker id="theme-picker"></ph-theme-picker>
+              </section>
 
               <section class="flex flex-col gap-3">
                 <div>

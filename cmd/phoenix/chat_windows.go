@@ -305,6 +305,7 @@ func startChatRun(ctx context.Context, cancel context.CancelFunc, id provider.ID
 		system += chatDesktop
 	}
 	system += filesNote
+	system += profileNote()
 	go func() {
 		defer cancel()
 		started := time.Now()

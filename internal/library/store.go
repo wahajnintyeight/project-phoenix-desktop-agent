@@ -87,6 +87,11 @@ CREATE UNIQUE INDEX IF NOT EXISTS nodes_name ON nodes(COALESCE(parent_id, 0), na
 CREATE INDEX IF NOT EXISTS nodes_parent ON nodes(parent_id);
 CREATE INDEX IF NOT EXISTS nodes_kind ON nodes(kind) WHERE deleted_at IS NULL;
 CREATE INDEX IF NOT EXISTS nodes_trash ON nodes(deleted_at) WHERE trash_root = 1;
+CREATE TABLE IF NOT EXISTS settings (
+  key        TEXT PRIMARY KEY,
+  value      TEXT NOT NULL,
+  updated_at INTEGER NOT NULL
+);
 PRAGMA user_version = 2;
 `
 
@@ -662,4 +667,27 @@ func GuessKind(name string) string {
 		return "resume"
 	}
 	return ""
+}
+
+// ── Settings ───────────────────────────────────────────────────────────────
+
+// Setting returns a stored value, or "" when there is none. Settings are small private notes the
+// app keeps (such as the user's profile); the file tools never see them.
+func (s *Store) Setting(key string) string {
+	var v string
+	if s.db.QueryRow(`SELECT value FROM settings WHERE key = ?`, key).Scan(&v) != nil {
+		return ""
+	}
+	return v
+}
+
+// SetSetting stores a value; an empty value removes the setting.
+func (s *Store) SetSetting(key, value string) error {
+	if value == "" {
+		_, err := s.db.Exec(`DELETE FROM settings WHERE key = ?`, key)
+		return err
+	}
+	_, err := s.db.Exec(`INSERT INTO settings(key, value, updated_at) VALUES(?,?,?)
+		ON CONFLICT(key) DO UPDATE SET value = excluded.value, updated_at = excluded.updated_at`, key, value, now())
+	return err
 }
