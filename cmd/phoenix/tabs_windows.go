@@ -44,6 +44,9 @@ type tab struct {
 	cv *edge.Chromium // nil for the home tab
 	wv unsafe.Pointer // ICoreWebView2*
 
+	byAgent  bool      // opened for the agent's work; closed when it is done (see tabhygiene_windows.go)
+	openedAt time.Time // when, for choosing the oldest to close
+
 	browserEpoch atomic.Uint64 // bumped for each top-level navigation; invalidates page refs
 }
 
@@ -351,8 +354,12 @@ func prepareWebTab(t *tab) bool {
 				return
 			}
 			comCall(args, newWindowPutNewWindow, uintptr(child.wv))
+			if chat.busy {
+				markAgentTab(child) // an Apply link or popup opened during an agent run
+			}
 			tabs = append(tabs, child)
 			activate(child.id)
+			enforceTabCap()
 		})
 	})
 	must(wvAddWindowCloseRequested, "WindowCloseRequested", func(_, _ unsafe.Pointer) {
@@ -393,6 +400,7 @@ func navigateActive(input string) {
 		return
 	}
 	t := activeTab()
+	adoptTab(t) // typing an address into an agent's tab makes it the user's
 	if t == nil || t.kind == kindSettings || t.kind == kindFiles {
 		runLater(func() { createWebTab(target) })
 		return

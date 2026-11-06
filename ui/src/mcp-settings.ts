@@ -1,7 +1,12 @@
-// <ph-mcp>: install and manage MCP servers. Secret values stay in Go's encrypted vault;
-// this component only receives their names and renders all server-supplied text safely.
+// <ph-mcp>: add, edit and manage MCP servers. Secret values stay in Go's encrypted vault; this
+// component only receives their names and renders all server-supplied text safely.
+//
+// One screen at a time: the list, a server's details, the editor (the same form adds a server
+// and edits one; its type and name can always be changed) and the review of what is about to be
+// saved. Go stages and validates everything, so what the review shows is what gets installed.
 import { el } from "./dom";
 import { send } from "./protocol";
+import { lines, normalizeName, splitCommand, suggestName, type Kind } from "./mcp-names";
 
 interface ServerView {
   name: string;
@@ -29,7 +34,7 @@ interface McpData {
   pending?: PendingView[];
   updating?: boolean;
   error?: string;
-  /** Set after an installation or edit is saved; the form is cleared. */
+  /** Set after an installation or edit is saved. */
   installed?: boolean;
 }
 
@@ -43,8 +48,9 @@ interface TestResult {
   tools?: { name: string; description?: string }[];
 }
 
-type Mode = "json" | "command" | "url";
-type View = "list" | "detail" | "edit";
+type View = "list" | "detail" | "editor";
+
+// ── helpers ────────────────────────────────────────────────────────────────
 
 function field(label: string, hint: string | undefined, control: HTMLElement): HTMLLabelElement {
   const l = el("label");
@@ -54,9 +60,9 @@ function field(label: string, hint: string | undefined, control: HTMLElement): H
   return l;
 }
 
-function input(placeholder: string, label: string): HTMLInputElement {
+function input(placeholder: string, label: string, type = "text"): HTMLInputElement {
   const i = el("input", "field");
-  i.type = "text";
+  i.type = type;
   i.placeholder = placeholder;
   i.spellcheck = false;
   i.autocomplete = "off";
@@ -74,42 +80,89 @@ function area(placeholder: string, label: string, rows = 3): HTMLTextAreaElement
   return t;
 }
 
-const lines = (s: string): string[] => s.split("\n").map((l) => l.replace(/\r$/, "")).filter((l) => l.trim() !== "");
+/** Name and value rows for headers or environment variables. A saved value is never shown: a
+ *  blank value keeps it, a typed one replaces it, and removing the row deletes it. */
+class Pairs {
+  readonly box = el("div", "mcp-kv");
+  readonly #rows = el("div", "mcp-kv-rows");
+  readonly #add: HTMLButtonElement;
+  readonly #nameHint: string;
 
-function pairs(s: string, sep: string): Record<string, string> {
-  const out: Record<string, string> = {};
-  for (const l of lines(s)) {
-    const i = l.indexOf(sep);
-    if (i > 0) out[l.slice(0, i).trim()] = l.slice(i + sep.length).trim();
+  constructor(nameHint: string, addLabel: string) {
+    this.#nameHint = nameHint;
+    this.#add = el("button", "btn btn-quiet btn-sm", addLabel);
+    this.#add.type = "button";
+    this.#add.addEventListener("click", () => {
+      const row = this.#row("", "", false);
+      this.#rows.append(row);
+      row.querySelector<HTMLInputElement>("input")?.focus();
+    }, { passive: true });
+    this.box.append(this.#rows, this.#add);
   }
-  return out;
+
+  /** Replaces the rows. `saved` lists names whose values are already stored. */
+  set(saved: string[], filled: Record<string, string> = {}): void {
+    this.#rows.replaceChildren(...saved.map((k) => this.#row(k, filled[k] ?? "", true)));
+  }
+
+  clear(): void {
+    this.#rows.replaceChildren();
+  }
+
+  /** Rows with a name; blank value means "keep the saved one" (Go ignores it for a new server). */
+  values(): Record<string, string> {
+    const out: Record<string, string> = {};
+    for (const row of Array.from(this.#rows.querySelectorAll<HTMLElement>(".mcp-kv-row"))) {
+      const [k, v] = Array.from(row.querySelectorAll<HTMLInputElement>("input"));
+      const key = k?.value.trim() ?? "";
+      if (key) out[key] = v?.value ?? "";
+    }
+    return out;
+  }
+
+  #row(key: string, value: string, saved: boolean): HTMLElement {
+    const row = el("div", "mcp-kv-row");
+    const k = input(this.#nameHint, "Name");
+    k.value = key;
+    const v = input(saved ? "Saved. Leave blank to keep" : "Value", "Value", "password");
+    v.value = value;
+    const rm = el("button", "btn btn-quiet btn-sm", "Remove");
+    rm.type = "button";
+    rm.setAttribute("aria-label", "Remove this row");
+    rm.addEventListener("click", () => row.remove(), { passive: true });
+    row.append(k, v, rm);
+    return row;
+  }
 }
 
+// ── component ──────────────────────────────────────────────────────────────
+
 export class PhMcp extends HTMLElement {
+  readonly #notice = el("p", "msg mcp-notice");
   readonly #overview = el("div", "mcp-overview");
   readonly #detail = el("div", "mcp-detail");
   readonly #editor = el("div", "mcp-editor");
-  readonly #editorSlot = el("div", "mcp-editor-slot");
+  readonly #review = el("div", "mcp-review");
   readonly #list = el("div", "mcp-list");
   readonly #summary = el("p", "mcp-summary");
   readonly #empty = el("div", "mcp-empty");
-  readonly #notice = el("p", "msg mcp-notice");
-  readonly #review = el("div", "mcp-review");
   readonly #seg = el("div", "seg");
   readonly #form = el("div", "mcp-form");
-  readonly #add = el("details", "mcp-add");
-  readonly #json = area('{ "mcpServers": { "name": { "command": "npx", "args": ["-y", "package"] } } }', "Server definition as JSON", 6);
-  readonly #name = input("my-server", "Server name");
-  readonly #command = input("npx", "Command");
-  readonly #args = area("-y\n@scope/some-mcp-server", "Arguments, one per line");
-  readonly #env = area("API_KEY=value", "Environment variables, one NAME=value per line");
+  readonly #formNotice = el("p", "msg mcp-notice");
+  readonly #title = el("h3", "mcp-editor-title");
+  readonly #json = area('{ "mcpServers": { "name": { "command": "npx", "args": ["-y", "package"] } } }', "Server definition as JSON", 8);
+  readonly #name = input("", "Server name");
+  readonly #command = input("npx -y @scope/some-mcp-server", "Command");
+  readonly #args = area("One per line (optional)", "Arguments, one per line", 2);
   readonly #url = input("https://example.com/mcp", "Server address");
-  readonly #headers = area("Authorization: Bearer value", "Headers, one Name: value per line");
-  readonly #stage = el("button", "btn btn-primary", "Review installation");
-  #mode: Mode = "json";
+  readonly #headers = new Pairs("Header name, for example Authorization", "Add header");
+  readonly #env = new Pairs("Variable name, for example API_KEY", "Add variable");
+  readonly #submitBtn = el("button", "btn btn-primary", "Review");
+  #kind: Kind = "url";
   #view: View = "list";
   #selected = "";
-  #editing = "";
+  #editing = ""; // the server being edited, "" when adding
+  #submittedName = ""; // the name last sent for review, to open its details after saving
   #tests = new Map<string, TestResult>();
   #busy = new Set<string>();
   #removing = "";
@@ -126,45 +179,42 @@ export class PhMcp extends HTMLElement {
 
   connectedCallback(): void {
     if (this.childElementCount > 0) return;
-    this.#notice.setAttribute("role", "status");
-    this.#notice.setAttribute("aria-live", "polite");
+    for (const n of [this.#notice, this.#formNotice]) {
+      n.setAttribute("role", "status");
+      n.setAttribute("aria-live", "polite");
+    }
     this.#review.hidden = true;
     this.#review.setAttribute("role", "group");
     this.#review.setAttribute("aria-label", "Review before saving");
 
     this.#seg.setAttribute("role", "radiogroup");
-    this.#seg.setAttribute("aria-label", "How to add a server");
+    this.#seg.setAttribute("aria-label", "Type of server");
     this.#seg.addEventListener("click", (e) => {
-      const b = (e.target as Element | null)?.closest<HTMLElement>("[data-mode]");
-      const m = b?.dataset["mode"] as Mode | undefined;
-      if (m && !this.#editing) {
-        this.#mode = m;
-        this.#renderForm();
-      }
+      const k = (e.target as Element | null)?.closest<HTMLElement>("[data-kind]")?.dataset["kind"] as Kind | undefined;
+      if (k && k !== this.#kind) this.#setKind(k);
     }, { passive: true });
-    this.#stage.type = "button";
-    this.#stage.addEventListener("click", () => this.#submit(), { passive: true });
-
-    const summary = el("summary", "btn btn-primary mcp-add-trigger");
-    summary.prepend(plus());
-    summary.append(document.createTextNode("Add servers"));
-    this.#add.append(summary, this.#form);
+    for (const f of [this.#name, this.#url, this.#command]) {
+      f.addEventListener("input", () => this.#syncSuggestion(), { passive: true });
+      f.addEventListener("keydown", (e) => { if (e.key === "Enter") this.#submit(); });
+    }
+    this.#args.addEventListener("input", () => this.#syncSuggestion(), { passive: true });
+    this.#submitBtn.type = "button";
+    this.#submitBtn.addEventListener("click", () => this.#submit(), { passive: true });
 
     this.#empty.append(
       el("h3", undefined, "No MCP servers yet"),
-      el("p", "text-fg-muted", "Add a trusted server to give the agent access to its tools. Test the connection first, then choose whether the agent can use it."),
+      el("p", "text-fg-muted", "Add a trusted server to give the agent access to its tools. You review the connection before anything is saved, then test it and choose whether the agent can use it."),
     );
 
-    this.#overview.append(this.#summary, this.#list, this.#empty, this.#add,
+    const addButton = el("button", "btn btn-primary mcp-add-trigger");
+    addButton.type = "button";
+    addButton.dataset["op"] = "add";
+    addButton.append(plus(), document.createTextNode("Add server"));
+    this.#overview.append(this.#summary, this.#list, this.#empty, addButton,
       el("p", "mcp-safety text-xs text-fg-muted", "Program servers run with your Windows permissions. Credentials are stored encrypted and never shown here."));
-    const editorTitle = el("h3", "mcp-editor-title");
-    editorTitle.tabIndex = -1;
-    this.#editor.append(
-      backButton("Server details", "back-detail"),
-      editorTitle,
-      el("p", "text-fg-muted mcp-editor-help", "Change the address or launch command. Review changes before saving."),
-      this.#editorSlot,
-    );
+
+    this.#title.tabIndex = -1;
+    this.#editor.append(backButton("Back", "back-editor"), this.#title, this.#form);
 
     this.append(this.#notice, this.#review, this.#overview, this.#detail, this.#editor);
     this.addEventListener("click", (e) => this.#onAction(e));
@@ -172,7 +222,7 @@ export class PhMcp extends HTMLElement {
     this.#review.addEventListener("click", (e) => {
       const b = (e.target as Element | null)?.closest<HTMLElement>("[data-review]");
       if (!b) return;
-      this.#notice.textContent = "";
+      this.#say("", false);
       send("v", b.dataset["review"] === "confirm" ? "mcp-confirm" : "mcp-cancel");
     });
 
@@ -181,21 +231,30 @@ export class PhMcp extends HTMLElement {
   }
 
   set data(value: McpData) {
+    const previous = this.#data;
     this.#data = value;
     if (value.installed) {
-      const editing = this.#editing;
-      this.#add.open = false;
-      if (editing) {
-        this.#editing = "";
-        this.#view = "detail";
-        this.#selected = editing;
-        this.#tests.delete(editing);
-        this.#add.append(this.#form);
-        this.#say("Connection settings saved. Test the server to confirm it is ready.", false);
-      } else {
-        this.#say("Server added and left off. Open its details to test the connection and choose whether the agent can use it.", false);
+      const was = this.#editing;
+      const saved = this.#submittedName;
+      const isNew = (n: string) => !previous.servers.some((s) => s.name === n);
+      if (was && saved && saved !== was) { // renamed: the old name's test and state no longer apply
+        this.#tests.delete(was);
+        this.#busy.delete(was);
       }
+      this.#editing = "";
+      this.#tests.delete(saved);
       this.#resetForm();
+      if (saved && value.servers.some((s) => s.name === saved)) {
+        this.#selected = saved;
+        this.#view = "detail";
+        this.#say(was
+          ? "Saved. Test the server to confirm it is ready."
+          : isNew(saved) ? "Added and left off. Test the connection, then turn on agent access." : "Saved.", false);
+      } else {
+        this.#view = "list";
+        this.#say("Servers added and left off. Open one to test it and turn on agent access.", false);
+      }
+      this.#focusHeading();
     }
     for (const name of [...this.#tests.keys()]) {
       if (!value.servers.some((s) => s.name === name)) this.#tests.delete(name);
@@ -203,12 +262,9 @@ export class PhMcp extends HTMLElement {
     for (const name of [...this.#busy]) {
       if (!value.servers.some((s) => s.name === name)) this.#busy.delete(name);
     }
-    if (this.#selected && !value.servers.some((s) => s.name === this.#selected)) {
+    if (this.#view === "detail" && !value.servers.some((s) => s.name === this.#selected)) {
       this.#selected = "";
-      this.#editing = "";
       this.#view = "list";
-      this.#add.append(this.#form);
-      this.#resetForm();
     }
     if (this.#removing && !value.servers.some((s) => s.name === this.#removing)) this.#removing = "";
     if (this.isConnected) this.#render();
@@ -224,11 +280,16 @@ export class PhMcp extends HTMLElement {
     if (this.isConnected) this.#render();
   }
 
+  // ── actions ──────────────────────────────────────────────────────────────
+
   #onAction(e: Event): void {
     const b = (e.target as Element | null)?.closest<HTMLElement>("[data-op]");
     const name = b?.closest<HTMLElement>("[data-server]")?.dataset["server"] ?? "";
     if (!b) return;
     switch (b.dataset["op"]) {
+      case "add":
+        this.#enterEditor(null);
+        break;
       case "open":
         if (!name) return;
         this.#selected = name;
@@ -241,12 +302,16 @@ export class PhMcp extends HTMLElement {
         this.#selected = "";
         this.#render();
         break;
-      case "back-detail":
-        this.#leaveEdit();
+      case "back-editor": // leave the editor without saving
+        this.#editing = "";
+        this.#say("", false);
+        this.#view = this.#selected && this.#data.servers.some((s) => s.name === this.#selected) ? "detail" : "list";
+        this.#render();
+        this.#focusHeading();
         break;
       case "edit": {
         const server = this.#data.servers.find((s) => s.name === name);
-        if (server) this.#enterEdit(server);
+        if (server) this.#enterEditor(server);
         break;
       }
       case "test":
@@ -284,121 +349,150 @@ export class PhMcp extends HTMLElement {
     if (c?.matches("[data-enable]") && name) send("v", "mcp-enable", name, c.checked ? "1" : "0");
   }
 
-  #enterEdit(server: ServerView): void {
-    this.#editing = server.name;
-    this.#selected = server.name;
-    this.#view = "edit";
-    this.#mode = server.transport === "http" ? "url" : "command";
-    this.#name.value = server.name;
-    this.#command.value = server.command ?? "";
-    this.#args.value = (server.args ?? []).join("\n");
-    this.#env.value = (server.env ?? []).map((key) => `${key}=`).join("\n");
-    this.#url.value = server.url ?? "";
-    this.#headers.value = (server.headers ?? []).map((key) => `${key}:`).join("\n");
-    this.#add.open = false;
-    this.#editorSlot.append(this.#form);
-    const title = this.#editor.querySelector<HTMLElement>(".mcp-editor-title");
-    if (title) title.textContent = `Edit ${server.name}`;
+  /** Opens the editor to add a server (null) or to edit one. */
+  #enterEditor(server: ServerView | null): void {
+    this.#resetForm();
+    this.#editing = server?.name ?? "";
+    if (server) {
+      this.#selected = server.name;
+      this.#kind = server.transport === "http" ? "url" : "command";
+      this.#name.value = server.name;
+      this.#command.value = server.command ?? "";
+      this.#args.value = (server.args ?? []).join("\n");
+      this.#url.value = server.url ?? "";
+      this.#headers.set(server.headers ?? []);
+      this.#env.set(server.env ?? []);
+    }
+    this.#view = "editor";
+    this.#say("", false);
     this.#renderForm();
     this.#render();
     this.#focusHeading();
   }
 
-  #leaveEdit(): void {
-    this.#editing = "";
-    this.#view = "detail";
-    this.#add.append(this.#form);
-    this.#resetForm();
-    this.#render();
-    this.#focusHeading();
+  #setKind(kind: Kind): void {
+    this.#kind = kind;
+    this.#say("", false);
+    this.#renderForm();
   }
 
   #resetForm(): void {
-    this.#mode = "json";
-    for (const f of [this.#json, this.#name, this.#command, this.#args, this.#env, this.#url, this.#headers]) f.value = "";
+    this.#kind = "url";
+    for (const f of [this.#json, this.#name, this.#command, this.#args, this.#url]) f.value = "";
+    this.#headers.clear();
+    this.#env.clear();
     this.#renderForm();
   }
 
+  #suggestion(): string {
+    return suggestName(this.#kind, this.#url.value, [this.#command.value, ...lines(this.#args.value)].join(" "));
+  }
+
+  #syncSuggestion(): void {
+    this.#name.placeholder = this.#suggestion() || "my-server";
+  }
+
   #submit(): void {
-    this.#notice.textContent = "";
-    const name = this.#editing || this.#name.value.trim();
-    if (!name) return this.#say("Give the server a name.", true);
-    let def: Record<string, unknown>;
-    if (this.#mode === "json" && !this.#editing) {
+    this.#say("", false);
+    if (this.#kind === "json") {
+      if (!this.#json.value.trim()) return this.#say("Paste the server's JSON first.", true);
+      this.#submittedName = "";
       send("v", "mcp-stage", this.#json.value);
       return;
     }
-    if (this.#mode === "command") {
-      def = { command: this.#command.value.trim(), args: lines(this.#args.value) };
-      const env = pairs(this.#env.value, "=");
-      if (Object.keys(env).length) def["env"] = env;
-    } else {
-      def = { url: this.#url.value.trim() };
-      const headers = pairs(this.#headers.value, ":");
+    const name = normalizeName(this.#name.value) || this.#suggestion();
+    if (!name) return this.#say("Enter a name, or fill in the address or command and Phoenix will suggest one.", true);
+    let def: Record<string, unknown>;
+    if (this.#kind === "url") {
+      const url = this.#url.value.trim();
+      if (!url) return this.#say("Enter the server's web address.", true);
+      def = { url };
+      const headers = this.#headers.values();
       if (Object.keys(headers).length) def["headers"] = headers;
+    } else {
+      const words = splitCommand(this.#command.value);
+      const extra = lines(this.#args.value);
+      if (words.length === 0) return this.#say("Enter the program to run, for example npx.", true);
+      // "npx -y pkg" typed into Command works: the first word is the program, the rest arguments.
+      def = { command: words[0], args: [...words.slice(1), ...extra] };
+      const env = this.#env.values();
+      if (Object.keys(env).length) def["env"] = env;
     }
     const text = JSON.stringify({ mcpServers: { [name]: def } });
+    this.#submittedName = name;
     if (this.#editing) send("v", "mcp-update-stage", this.#editing, text);
     else send("v", "mcp-stage", text);
   }
 
   #say(text: string, error: boolean): void {
-    this.#notice.className = `msg mcp-notice ${error ? "is-error" : "is-ok"}`;
-    this.#notice.setAttribute("role", error ? "alert" : "status");
-    this.#notice.textContent = text;
+    for (const n of [this.#notice, this.#formNotice]) {
+      n.className = `msg mcp-notice ${error ? "is-error" : "is-ok"}`;
+      n.setAttribute("role", error ? "alert" : "status");
+      n.textContent = "";
+    }
+    (this.#view === "editor" ? this.#formNotice : this.#notice).textContent = text;
   }
 
+  // ── rendering ────────────────────────────────────────────────────────────
+
   #renderForm(): void {
-    const modes: [Mode, string][] = [["json", "Paste JSON"], ["command", "Program"], ["url", "Web address"]];
-    this.#seg.replaceChildren(...modes.map(([m, label]) => {
+    const kinds: [Kind, string][] = [["url", "Web address"], ["command", "Program"]];
+    if (!this.#editing) kinds.push(["json", "Paste JSON"]);
+    this.#seg.replaceChildren(...kinds.map(([k, label]) => {
       const b = el("button", "seg-btn", label);
       b.type = "button";
       b.setAttribute("role", "radio");
-      b.setAttribute("aria-checked", String(this.#mode === m));
-      b.dataset["mode"] = m;
+      b.setAttribute("aria-checked", String(this.#kind === k));
+      b.dataset["kind"] = k;
       return b;
     }));
-    const parts: HTMLElement[] = [];
-    if (!this.#editing) parts.push(this.#seg);
-    if (this.#mode === "json" && !this.#editing) {
-      parts.push(field("Server definition", "Paste the server's JSON. Several servers can be added at once.", this.#json));
-    } else if (this.#mode === "command") {
-      if (!this.#editing) parts.push(field("Name", "Lowercase letters, digits and hyphens.", this.#name));
-      parts.push(
-        field("Command", "The program to run, for example npx, node or python.", this.#command),
-        field("Arguments", "One per line.", this.#args),
-        field("Environment variables", this.#editing
-          ? "Leave an existing NAME= blank to keep it. Remove its line to delete it; add NAME=value to replace or add a credential."
-          : "Optional. One NAME=value per line. Values are stored encrypted.", this.#env),
-      );
+    const parts: HTMLElement[] = [this.#seg];
+    if (this.#kind === "json") {
+      parts.push(field("Server definition", "Paste the JSON the server's install instructions give. Several servers can be added at once.", this.#json));
     } else {
-      if (!this.#editing) parts.push(field("Name", "Lowercase letters, digits and hyphens.", this.#name));
-      parts.push(
-        field("Address", "Starts with https:// (http only for this computer).", this.#url),
-        field("Headers", "One Name: value per line. Values are stored encrypted.", this.#headers),
-      );
-      if (this.#editing) parts.push(el("p", "mcp-form-hint text-xs text-fg-muted", "Leave an existing header blank to keep it. Remove its line to delete it; enter a value to replace it."));
+      parts.push(field("Name", "Lowercase letters, digits and hyphens. Leave blank to use the suggestion.", this.#name));
+      if (this.#kind === "url") {
+        parts.push(
+          field("Web address", "The server's Streamable HTTP address. It starts with https:// (http only for this computer).", this.#url),
+          field("Headers", this.#editing
+            ? "Credentials sent with every request. Saved values are hidden: leave a value blank to keep it, type to replace it, or remove the row to delete it."
+            : "Optional, for example Authorization with a Bearer token. Values are stored encrypted.", this.#headers.box),
+        );
+      } else {
+        parts.push(
+          field("Command", "The program and, if you like, its arguments: for example npx -y @scope/some-mcp-server.", this.#command),
+          field("More arguments", "Optional, one per line.", this.#args),
+          field("Environment variables", this.#editing
+            ? "Saved values are hidden: leave a value blank to keep it, type to replace it, or remove the row to delete it."
+            : "Optional, for example an API key. Values are stored encrypted.", this.#env.box),
+        );
+      }
     }
-    this.#stage.textContent = this.#editing ? "Review changes" : "Review installation";
+    this.#submitBtn.textContent = this.#kind === "json" ? "Review installation" : this.#editing ? "Review changes" : "Review installation";
     const row = el("div", "row");
-    row.append(this.#stage);
-    parts.push(row);
+    row.append(this.#submitBtn);
+    parts.push(this.#formNotice, row);
+    this.#title.textContent = this.#editing ? `Edit ${this.#editing}` : "Add a server";
     this.#form.replaceChildren(...parts);
+    this.#syncSuggestion();
   }
 
   #render(): void {
     const { servers, pending, error } = this.#data;
     if (error) this.#say(error, true);
-    else if (this.#notice.classList.contains("is-error")) this.#say("", false);
-
-    this.#overview.hidden = this.#view !== "list";
-    this.#detail.hidden = this.#view !== "detail";
-    this.#editor.hidden = this.#view !== "edit";
+    else if (this.#notice.classList.contains("is-error") || this.#formNotice.classList.contains("is-error")) this.#say("", false);
+    const staged = pending ?? [];
+    const reviewing = staged.length > 0;
+    this.#review.hidden = !reviewing;
+    this.#overview.hidden = reviewing || this.#view !== "list";
+    this.#detail.hidden = reviewing || this.#view !== "detail";
+    this.#editor.hidden = reviewing || this.#view !== "editor";
     this.#renderOverview(servers);
     if (this.#view === "detail") this.#renderDetail();
-    const staged = pending ?? [];
-    this.#review.hidden = staged.length === 0;
-    if (staged.length) this.#renderReview(staged, Boolean(this.#data.updating));
+    if (reviewing) {
+      this.#renderReview(staged, Boolean(this.#data.updating));
+      this.#review.scrollIntoView({ block: "nearest" });
+    }
   }
 
   #renderOverview(servers: ServerView[]): void {
@@ -438,12 +532,11 @@ export class PhMcp extends HTMLElement {
     if (!server) return;
     this.#detail.dataset["server"] = server.name;
     const top = el("div", "mcp-detail-top");
-    const back = backButton("All servers", "back-list");
-    top.append(back, this.#status(server.name));
+    top.append(backButton("All servers", "back-list"), this.#status(server.name));
 
     const title = el("h3", "mcp-detail-title", server.name);
     title.tabIndex = -1;
-    const transport = el("span", "chip", server.transport === "http" ? "Streamable HTTP" : "Local program");
+    const transport = el("span", "chip", server.transport === "http" ? "Web address" : "Program");
     const heading = el("div", "mcp-detail-heading");
     heading.append(title, transport);
     const endpoint = el("code", "mcp-detail-endpoint", server.summary);
@@ -457,7 +550,7 @@ export class PhMcp extends HTMLElement {
     const test = el("button", "btn", testLabel);
     test.type = "button";
     test.dataset["op"] = "test";
-    const edit = el("button", "btn btn-quiet", "Edit connection");
+    const edit = el("button", "btn btn-quiet", "Edit");
     edit.type = "button";
     edit.dataset["op"] = "edit";
     edit.disabled = this.#busy.has(server.name);
@@ -508,7 +601,6 @@ export class PhMcp extends HTMLElement {
     }
 
     this.#detail.replaceChildren(top, heading, controls, intro, ...(authHint ? [authHint] : []), connection, credentials, testSection, destructive);
-    this.#detail.querySelector<HTMLElement>(".mcp-detail-title")!.tabIndex = -1;
   }
 
   #status(name: string): HTMLElement {
@@ -589,15 +681,15 @@ export class PhMcp extends HTMLElement {
     const confirm = el("button", "btn btn-primary", updating ? "Save changes" : pending.length === 1 ? "Install server" : `Install ${pending.length} servers`);
     confirm.type = "button";
     confirm.dataset["review"] = "confirm";
-    const cancel = el("button", "btn btn-quiet", "Cancel");
+    const cancel = el("button", "btn btn-quiet", "Back");
     cancel.type = "button";
     cancel.dataset["review"] = "cancel";
     const row = el("div", "row");
     row.append(confirm, cancel);
     this.#review.replaceChildren(
-      el("h3", undefined, updating ? "Review connection changes" : pending.length === 1 ? "Review server before installing" : `Review ${pending.length} servers before installing`),
+      el("h3", undefined, updating ? "Review changes" : pending.length === 1 ? "Review server before installing" : `Review ${pending.length} servers before installing`),
       el("p", "text-fg-muted", updating
-        ? "Saving does not test this connection. If agent access is on, Phoenix may start it on the next agent turn. Blank credential values keep their saved value; removed keys are deleted."
+        ? "Saving does not test the connection. If agent access is on, Phoenix may start it on the next agent turn. Blank credential values keep their saved value; removed rows are deleted."
         : "Installing leaves servers off. Testing or enabling one starts the exact connection shown below."),
       ...pending.flatMap((server) => {
         const out: HTMLElement[] = [el("p", "font-semibold mcp-review-name", server.name), el("code", "mcp-review-command", server.summary)];
@@ -611,8 +703,8 @@ export class PhMcp extends HTMLElement {
 
   #focusHeading(): void {
     requestAnimationFrame(() => {
-      const selector = this.#view === "edit" ? ".mcp-editor-title" : ".mcp-detail-title";
-      this.querySelector<HTMLElement>(selector)?.focus();
+      const selector = this.#view === "editor" ? ".mcp-editor-title" : this.#view === "detail" ? ".mcp-detail-title" : null;
+      if (selector) this.querySelector<HTMLElement>(selector)?.focus();
     });
   }
 
@@ -628,7 +720,7 @@ export class PhMcp extends HTMLElement {
 function failureHelp(error: string): { title: string; advice: string } {
   const message = error.toLowerCase();
   if (message.includes("unauthorized") || /\b401\b/.test(message)) {
-    return { title: "The server did not accept the sign-in", advice: "Choose Test / sign in and complete authorization in your browser. If it still fails, check that the signed-in account has access." };
+    return { title: "The server did not accept the sign-in", advice: "Choose Test / sign in and complete authorization in your browser. If it still fails, check the token or header you saved, and that the account has access." };
   }
   if (message.includes("forbidden") || /\b403\b/.test(message)) {
     return { title: "The account does not have access", advice: "Check that this account is allowed to use the server, then test again." };
@@ -636,7 +728,7 @@ function failureHelp(error: string): { title: string; advice: string } {
   if (message.includes("timeout") || message.includes("deadline exceeded")) {
     return { title: "The connection timed out", advice: "Check that the server is running and its address is reachable, then try again." };
   }
-  return { title: "Phoenix could not complete the connection", advice: "Check the address or launch command and the server's authentication requirements, then test again." };
+  return { title: "Phoenix could not complete the connection", advice: "Check the address or launch command and the server's authentication requirements, then test again. You can change them with Edit." };
 }
 
 function plus(): SVGElement {

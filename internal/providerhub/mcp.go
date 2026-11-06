@@ -39,6 +39,11 @@ func (h *Hub) MCPEnabled() []mcp.Server {
 	return out
 }
 
+// mcpOwnedRefPrefix marks vault entries Phoenix created for MCP servers (see mcpSecretName).
+// A reference to anything else (a secret the user named, an environment variable) is never
+// deleted with the server.
+const mcpOwnedRefPrefix = "vault:mcp-"
+
 func mcpSecretName(server, kind string, i int) string {
 	return fmt.Sprintf("mcp-%s-%s%d", server, kind, i)
 }
@@ -116,26 +121,33 @@ func (h *Hub) MCPAdd(s mcp.Server, env, headers map[string]string) error {
 	return nil
 }
 
-// MCPUpdate replaces a server's connection settings. Blank values keep existing secret
-// references; omitted keys remove them. New values are stored under fresh vault names so a
-// failed config save cannot overwrite credentials that are still in use.
-func (h *Hub) MCPUpdate(s mcp.Server, env, headers map[string]string) error {
+// MCPUpdate replaces the connection settings of the server called oldName. The server may be
+// renamed (s.Name) and may change type (program or web address). Blank values keep existing
+// secret references of the same kind; omitted keys remove them, and credentials that no longer
+// apply (environment variables after a switch to a web address, say) are deleted. New values
+// are stored under fresh vault names so a failed config save cannot overwrite credentials that
+// are still in use.
+func (h *Hub) MCPUpdate(oldName string, s mcp.Server, env, headers map[string]string) error {
 	s.Name = strings.TrimSpace(s.Name)
 	if mcp.Reserved(s.Name) {
 		return errors.New("names starting with phoenix- are reserved")
 	}
 	var old mcp.Server
-	var exists bool
-	h.store.View(func(c *config.Config) { old, exists = c.MCPServers[s.Name] })
+	var exists, taken bool
+	h.store.View(func(c *config.Config) {
+		old, exists = c.MCPServers[oldName]
+		_, taken = c.MCPServers[s.Name]
+	})
 	if !exists {
 		return errors.New("no such server")
 	}
-	if s.Transport != old.Transport {
-		return errors.New("changing a server's transport requires removing and adding it again")
+	renamed := s.Name != oldName
+	if renamed && taken {
+		return errors.New("a server named " + s.Name + " is already installed")
 	}
 	s.Enabled = old.Enabled
-	if s.Transport == mcp.HTTP && s.URL == old.URL {
-		s.OAuthRef = old.OAuthRef
+	if s.Transport == mcp.HTTP && old.Transport == mcp.HTTP && s.URL == old.URL {
+		s.OAuthRef = old.OAuthRef // the sign-in is for this address; a new address needs a new one
 	}
 	s.Env, s.Headers = nil, nil
 	if err := s.Validate(); err != nil {
@@ -194,10 +206,14 @@ func (h *Hub) MCPUpdate(s mcp.Server, env, headers map[string]string) error {
 	}
 	saved := false
 	err = h.store.Update(func(c *config.Config) {
-		current, ok := c.MCPServers[s.Name]
+		current, ok := c.MCPServers[oldName]
 		if !ok || !reflect.DeepEqual(current, old) {
 			return
 		}
+		if _, clash := c.MCPServers[s.Name]; renamed && clash {
+			return
+		}
+		delete(c.MCPServers, oldName)
 		c.MCPServers[s.Name] = s
 		saved = true
 	})
@@ -216,7 +232,9 @@ func (h *Hub) MCPUpdate(s mcp.Server, env, headers map[string]string) error {
 			retained[ref] = true
 		}
 	}
-	prefix := "vault:mcp-" + s.Name + "-"
+	// Phoenix-owned secrets are named after the server they were created for, which may not be
+	// its current name once it has been renamed, so match the shared prefix.
+	prefix := mcpOwnedRefPrefix
 	for _, refs := range []map[string]string{old.Env, old.Headers} {
 		for _, ref := range refs {
 			if strings.HasPrefix(ref, prefix) && !retained[ref] {
@@ -255,7 +273,7 @@ func (h *Hub) MCPRemove(name string) error {
 	if err := h.store.Update(func(c *config.Config) { delete(c.MCPServers, name) }); err != nil {
 		return err
 	}
-	prefix := "vault:mcp-" + name + "-"
+	prefix := mcpOwnedRefPrefix
 	for _, m := range []map[string]string{s.Env, s.Headers} {
 		for _, ref := range m {
 			if strings.HasPrefix(ref, prefix) {

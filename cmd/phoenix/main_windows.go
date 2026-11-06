@@ -73,10 +73,19 @@ func main() {
 
 	// Dev only: a DevTools port on loopback for scripts. The UI and the pages are separate
 	// browser processes, so the pages use the next port. Never enable in a release build.
+	// The agent keeps working while Phoenix is minimized, covered by other windows or hidden in
+	// the tray. Chromium would otherwise treat those pages as hidden and throttle their timers,
+	// pause rendering and freeze background tabs, so scripts, lazy loading and screenshots stall.
+	browserArgs = []string{
+		"--disable-features=CalculateNativeWinOcclusion",
+		"--disable-backgrounding-occluded-windows",
+		"--disable-renderer-backgrounding",
+		"--disable-background-timer-throttling",
+	}
 	var uiArgs []string
 	if port, err := strconv.Atoi(os.Getenv("PHOENIX_DEBUG_PORT")); err == nil && port > 0 {
 		uiArgs = []string{"--remote-debugging-port=" + strconv.Itoa(port), "--remote-debugging-address=127.0.0.1"}
-		browserArgs = []string{"--remote-debugging-port=" + strconv.Itoa(port+1), "--remote-debugging-address=127.0.0.1"}
+		browserArgs = append(browserArgs, "--remote-debugging-port="+strconv.Itoa(port+1), "--remote-debugging-address=127.0.0.1")
 	}
 
 	app = application.New(application.Options{
@@ -158,6 +167,7 @@ func setupTray() {
 		flushAgentDataWrites()
 		if hub != nil {
 			hub.Close() // stops the MCP servers Phoenix started
+			cleanupUploads()
 		}
 		app.Quit()
 	})
@@ -263,6 +273,7 @@ func uiReady() {
 		initHistory()
 		initAgentPersistence()
 		initProviders()
+		startDevScript()
 		startAppInit() // library, approvals, saved MCP servers, desktop thread: all in the background
 	}
 	ready = true
@@ -332,6 +343,8 @@ func handleAction(action, id string) {
 		}
 		if action == "tab.select" {
 			activate(n)
+			_, t := findTab(n)
+			adoptTab(t) // the user chose it, so it is theirs now
 		} else {
 			closeTab(n)
 		}

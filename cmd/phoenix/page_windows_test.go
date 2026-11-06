@@ -55,3 +55,14 @@ func TestPageLabelHidesTheQueryString(t *testing.T) {
 		t.Errorf("no title: %q", got)
 	}
 }
+
+func TestForBrowserToolsDropsPastedText(t *testing.T) {
+	p := pageSnap{URL: "https://x.test/job", Title: "Role | Acme", Text: "SECRET BODY TEXT"}
+	got := forBrowserTools("apply" + "\n\n" + pageBlock(p))
+	if strings.Contains(got, "SECRET BODY TEXT") || !strings.Contains(got, "Role | Acme") || !strings.Contains(got, "https://x.test/job") || !strings.Contains(got, "browser_snapshot") {
+		t.Fatalf("%q", got)
+	}
+	if got := forBrowserTools("hi"); !strings.Contains(got, "browser_snapshot") || !strings.HasPrefix(got, "hi") {
+		t.Fatalf("%q", got)
+	}
+}

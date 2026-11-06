@@ -172,8 +172,8 @@ func (b browserInvoker) Invoke(ctx context.Context, call browser.Call) (browser.
 
 func knownBrowserTool(name string) bool {
 	switch name {
-	case "browser_tabs", "browser_read", "browser_snapshot", "browser_screenshot", "browser_navigate", "browser_click",
-		"browser_type", "browser_fill", "browser_drag", "browser_copy", "browser_paste", "browser_press", "browser_scroll", "browser_wait", "browser_select",
+	case "browser_tabs", "browser_read", "browser_snapshot", "browser_screenshot", "browser_navigate", "browser_click", "browser_click_text", "browser_extract",
+		"browser_type", "browser_fill", "browser_fill_form", "browser_upload", "browser_drag", "browser_copy", "browser_paste", "browser_press", "browser_scroll", "browser_wait", "browser_select",
 		"browser_back", "browser_forward", "browser_reload", "browser_open_tab", "browser_close_tab", "browser_switch_tab":
 		return true
 	}

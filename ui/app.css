@@ -320,6 +320,7 @@
   .nav-item[aria-current="true"] { @apply bg-raised font-medium text-fg; }
   .settings [data-for] { display: none; }
   .settings[data-section="providers"] [data-for="providers"],
+  .settings[data-section="memory"] [data-for="memory"],
   .settings[data-section="mcp"] [data-for="mcp"],
   .settings[data-section="desktop"] [data-for="desktop"],
   .settings[data-section="browser"] [data-for="browser"],
@@ -389,6 +390,19 @@
   .chat-approval .btn-quiet { @apply border-line-strong; }
   .chat-approval-actions { @apply flex flex-wrap items-center gap-2; }
   .chat-approval-result { @apply text-xs text-fg-muted; }
+
+  /* Choices: the agent's options as buttons, plus a box for a different answer. */
+  .chat-choices { @apply mt-3 flex flex-col gap-2 rounded-xl border p-3; background: var(--card-soft); border-color: var(--card-edge); }
+  .chat-choices-question { @apply text-sm font-semibold text-fg; }
+  .chat-choices-list { @apply flex flex-wrap gap-2; }
+  .chat-choice { @apply h-auto min-h-8 max-w-full whitespace-normal py-1.5 text-left; overflow-wrap: anywhere; }
+  .chat-choice[aria-pressed="true"] { background: var(--color-accent-fill); color: var(--color-accent-fill-ink); border-color: transparent; }
+  .chat-choices-custom { @apply flex items-center gap-2; }
+  .chat-choices-input { @apply h-8 min-w-0 flex-1 rounded-lg border border-line-strong bg-sunken px-3 text-sm text-fg placeholder:text-fg-subtle; }
+  .chat-choices-go { @apply size-8 shrink-0 justify-center p-0; }
+  .chat-choices[data-answered] { @apply opacity-70; }
+  .chat-choices[data-answered] .chat-choices-custom { @apply hidden; }
+  .chat-log[aria-busy="true"] .chat-choices:not([data-answered]) { @apply pointer-events-none opacity-50; }
 
   /* ── Files view: a file explorer ─────────────────────────────────── */
   ph-files { @apply relative grid size-full min-h-0 overflow-hidden; grid-template-columns: 15.5rem minmax(0, 1fr); background: var(--color-canvas); container-type: inline-size; }
@@ -573,6 +587,23 @@
   .profile-sent { @apply text-sm font-medium text-fg; }
   .profile-actions { @apply flex flex-wrap items-center gap-2; }
 
+  /* ── Memory ──────────────────────────────────────────────────────── */
+  ph-memory-settings { @apply flex max-w-3xl flex-col gap-4; }
+  .mem-bar { @apply flex flex-wrap items-center gap-2; }
+  .mem-bar .field { @apply min-w-48 flex-1; }
+  .mem-add { @apply grid gap-2 rounded-xl border border-line p-3; grid-template-columns: 1fr 1fr; }
+  .mem-add .field-wide { grid-column: 1 / -1; }
+  .mem-topic { @apply flex flex-col gap-1; }
+  .mem-topic h3 { @apply px-1 text-xs font-medium uppercase tracking-wide text-fg-subtle; }
+  .mem-row { @apply flex items-start gap-3 rounded-lg px-3 py-2; }
+  .mem-row:hover { @apply bg-raised; }
+  .mem-text { @apply flex min-w-0 flex-1 flex-col; }
+  .mem-key { @apply text-xs text-fg-muted; }
+  .mem-value { @apply break-words text-sm text-fg; }
+  .mem-meta { @apply text-xs text-fg-subtle; }
+  .mem-actions { @apply flex shrink-0 gap-1; }
+  .mem-edit { @apply flex min-w-0 flex-1 flex-col gap-2; }
+
   /* ── MCP servers ─────────────────────────────────────────────────── */
   ph-mcp { @apply flex min-w-0 flex-col gap-4; }
   .mcp-notice { @apply rounded-md; }
@@ -597,11 +628,6 @@
   .mcp-empty { @apply flex flex-col items-start gap-2 border-t border-line pt-4; }
   .mcp-empty h3 { @apply text-base; }
   .mcp-empty p { @apply max-w-[52ch]; }
-  .mcp-add { @apply flex flex-col gap-3 border-t border-line pt-4; }
-  .mcp-add-trigger { @apply w-fit; list-style: none; }
-  .mcp-add-trigger::-webkit-details-marker { display: none; }
-  .mcp-add-trigger svg { @apply shrink-0; }
-  .mcp-add[open] > .mcp-form { @apply pt-1; }
   .mcp-safety { @apply max-w-[62ch] border-t border-line pt-3; }
   .mcp-detail-top { @apply flex items-center justify-between gap-3; }
   .mcp-back { @apply w-fit; }
@@ -632,6 +658,16 @@
   .mcp-editor-title { @apply text-lg; }
   .mcp-editor-help, .mcp-form-hint { @apply max-w-[62ch]; }
   .mcp-form { @apply flex flex-col gap-3 pt-3; }
+  .mcp-form .seg { @apply mb-1; }
+  .mcp-form .mcp-notice:empty { @apply hidden; }
+  .mcp-add-trigger { @apply w-fit; }
+  .mcp-add-trigger svg { @apply shrink-0; }
+  /* Header and environment rows: name, value, remove. Labels wrap the whole group, so the row
+     controls are plain inputs in a grid. */
+  .mcp-kv { @apply flex flex-col gap-2; }
+  .mcp-kv-rows { @apply flex flex-col gap-2; }
+  .mcp-kv-row { @apply grid items-center gap-2; grid-template-columns: minmax(0, 1fr) minmax(0, 1.2fr) auto; }
+  .mcp-kv > .btn { @apply w-fit; }
   .mcp-form label { @apply flex flex-col gap-1 text-sm font-medium; }
   .mcp-form label small { @apply font-normal text-fg-muted; }
   .mcp-form textarea.field { @apply h-auto min-h-16 py-2 font-mono text-xs; resize: vertical; }
@@ -900,6 +936,13 @@
   .chat-local .chat-text { @apply text-sm whitespace-pre-wrap text-fg-muted; }
 
   .chat-composer { @apply relative px-3 pt-1 pb-3; }
+  /* Messages waiting for the agent: one row each, with Steer and remove. */
+  .chat-queue { @apply mb-2 flex max-h-40 flex-col gap-1.5 overflow-y-auto rounded-xl border p-2; background: var(--card-soft); border-color: var(--card-edge); }
+  .chat-queue[hidden] { display: none; }
+  .chat-queue-item { @apply flex items-center gap-2; }
+  .chat-queue-text { @apply min-w-0 flex-1 truncate text-sm text-fg-muted; }
+  .chat-queue-note { @apply text-xs text-fg-muted; }
+  .chat-queue-remove { @apply px-1.5; }
   .slash-menu {
     @apply scroll absolute z-20 max-h-[min(18rem,55vh)] overflow-y-auto rounded-lg border border-line-strong bg-overlay p-1 shadow-pop;
     inset-inline: calc(var(--spacing) * 3);

@@ -226,7 +226,7 @@ func browserSelect(ctx context.Context, state browserTabState, ref browserRef, v
 	if err := cdpCallJSON(ctx, state.ID, state.Epoch, "DOM.resolveNode", map[string]any{"backendNodeId": ref.BackendNodeID}, &resolved); err != nil {
 		return browser.Output{}, err
 	}
-	function := `function(v){const o=Array.from(this.options).find(x=>x.value===v);if(!o)throw new Error("option not found");this.value=v;this.dispatchEvent(new Event("input",{bubbles:true}));this.dispatchEvent(new Event("change",{bubbles:true}));return true}`
+	function := `function(v){const w=String(v).trim().toLowerCase();const os=Array.from(this.options);const o=os.find(x=>x.value===v)||os.find(x=>x.text.trim().toLowerCase()===w)||os.find(x=>x.text.trim().toLowerCase().startsWith(w));if(!o)throw new Error("option not found");this.value=o.value;this.dispatchEvent(new Event("input",{bubbles:true}));this.dispatchEvent(new Event("change",{bubbles:true}));return true}`
 	var callResult runtimeResult
 	if err := cdpCallJSON(ctx, state.ID, state.Epoch, "Runtime.callFunctionOn", map[string]any{
 		"objectId": resolved.Object.ObjectID, "functionDeclaration": function,

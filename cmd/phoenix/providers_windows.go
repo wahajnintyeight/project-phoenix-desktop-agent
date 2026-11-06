@@ -300,6 +300,7 @@ func pushBrowser() {
 		"t"+fs+"config-path"+fs+cfgStore.Path(),
 	)
 	pushProfile()
+	pushMemory()
 }
 
 // setSearchURL validates and saves the address bar's search engine.
@@ -358,6 +359,10 @@ func handleProviderOp(f []string) {
 		if len(f) > 2 {
 			setSearchURL(f[2])
 		}
+		return
+	}
+	if strings.HasPrefix(sub, "memory-") {
+		handleMemoryOp(f)
 		return
 	}
 	if strings.HasPrefix(sub, "profile-") {

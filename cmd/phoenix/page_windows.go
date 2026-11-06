@@ -131,3 +131,26 @@ func pageLabel(p pageSnap) string {
 	}
 	return host
 }
+
+const lookFirst = "\n\n[Phoenix: do not answer from memory or from earlier turns. Look at the live browser first (browser_tabs, browser_snapshot), then act with the browser tools and confirm each result before you report it.]"
+
+// forBrowserTools replaces pasted page text with a pointer when the agent has browser tools. The
+// pasted text is a frozen copy of one tab; with it in the message models answer from it and never
+// touch the real page, so they only get the address and title and must look for themselves.
+func forBrowserTools(prompt string) string {
+	i := strings.Index(prompt, "\n\nThe user has shared the web page")
+	if i < 0 {
+		return prompt + lookFirst
+	}
+	block := prompt[i:]
+	var url, title string
+	for _, line := range strings.Split(block, "\n") {
+		switch {
+		case strings.HasPrefix(line, "URL: ") && url == "":
+			url = strings.TrimPrefix(line, "URL: ")
+		case strings.HasPrefix(line, "Title: ") && title == "":
+			title = strings.TrimPrefix(line, "Title: ")
+		}
+	}
+	return prompt[:i] + "\n\nThe user is looking at: " + title + " (" + url + ")." + lookFirst
+}

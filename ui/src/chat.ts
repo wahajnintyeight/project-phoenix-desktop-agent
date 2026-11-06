@@ -1,6 +1,7 @@
 // <ph-chat>: the conversation with the agent. Go owns the conversation; this element only
 // draws what Go reports (`events`) and sends what the user types ("g send", "g stop",
 // "g new"). Every message is placed with textContent: model output is untrusted text.
+import { choicePanel, splitChoices } from "./choices";
 import { el } from "./dom";
 import { icon, type IconName } from "./icons";
 import { MarkdownView } from "./markdown";
@@ -10,8 +11,10 @@ import { send } from "./protocol";
 import { resolveSlashCommand, searchSlashCommands, type SlashCommandDefinition } from "./slash-commands";
 
 export interface ChatEvent {
-  k: "user" | "note" | "processing" | "tool" | "tool-result" | "approve" | "approved" | "start" | "delta" | "done" | "error" | "stopped" | "reset" | "restore";
+  k: "user" | "note" | "processing" | "tool" | "tool-result" | "approve" | "approved" | "start" | "delta" | "done" | "error" | "stopped" | "reset" | "restore" | "queue";
   text?: string;
+  queue?: { id: number; text: string }[];
+  ctx?: number;
   provider?: string;
   model?: string;
   ms?: number;
@@ -111,7 +114,18 @@ class Msg {
   flush(): void {
     if (this.#frame) cancelAnimationFrame(this.#frame);
     this.#frame = 0;
-    this.#md?.set(this.#raw);
+    this.#md?.set(splitChoices(this.#raw).body);
+  }
+
+  /** The reply is complete: if it ends in a choices block, draw the buttons under it. */
+  showChoices(): void {
+    if (!this.#md || this.box.querySelector(".chat-choices")) return;
+    const { choices } = splitChoices(this.#raw);
+    if (!choices) return;
+    const panel = choicePanel(choices, (text) => {
+      panel.dispatchEvent(new CustomEvent<{ text: string; question: string }>("phoenix-choice", { bubbles: true, detail: { text, question: choices.question } }));
+    });
+    this.text.after(panel);
   }
 
   #copyText(): void {
@@ -212,6 +226,14 @@ const IDEAS: readonly [string, IconName][] = [
   ["Draft a short reply to this", "pen"],
 ];
 
+const CONTEXT_WINDOW = 256_000;
+
+/** "context 87k/256k", shown once a conversation is long enough for the window to matter. */
+function contextLabel(tokens: number | undefined): string {
+  if (!tokens || tokens < CONTEXT_WINDOW / 4) return "";
+  return `context ${Math.round(tokens / 1000)}k/${CONTEXT_WINDOW / 1000}k`;
+}
+
 export class PhChat extends HTMLElement {
   readonly #logWrap = el("div", "chat-log-wrap");
   readonly #log = el("div", "chat-log");
@@ -222,6 +244,7 @@ export class PhChat extends HTMLElement {
   readonly #input = el("textarea", "chat-input");
   readonly #commandMenu = el("div", "slash-menu");
   readonly #send = el("button", "send-btn");
+  readonly #queue = el("div", "chat-queue"); // messages waiting for the agent, with Steer and remove
   readonly #share = el("button", "share-chip");
   readonly #newChat = el("button", "chat-new");
   readonly #title = el("span", "chat-title", "New chat");
@@ -278,6 +301,14 @@ export class PhChat extends HTMLElement {
     // that job instead.
     this.#log.setAttribute("aria-live", "off");
     this.#log.addEventListener("scroll", this.#syncScrollLatest, { passive: true });
+    // A tapped option (or a typed answer) is sent as the user's next message.
+    this.#log.addEventListener("phoenix-choice", (e) => {
+      const { text, question } = (e as CustomEvent<{ text: string; question: string }>).detail;
+      if (!text || this.#running) return;
+      this.#setRunning(true);
+      send("g", "send", text, this.#shareOn ? "1" : "0", "c" + question); // "c": remember this answer
+
+    });
     this.#scrollLatest.type = "button";
     this.#scrollLatest.hidden = true;
     this.#scrollLatest.setAttribute("aria-label", "Scroll to latest message");
@@ -347,7 +378,10 @@ export class PhChat extends HTMLElement {
     const composer = el("div", "composer");
     composer.append(this.#input, bar);
     const wrap = el("div", "chat-composer");
-    wrap.append(this.#commandMenu, composer);
+    this.#queue.hidden = true;
+    this.#queue.setAttribute("role", "list");
+    this.#queue.setAttribute("aria-label", "Queued messages");
+    wrap.append(this.#commandMenu, this.#queue, composer);
 
     this.#newChat.type = "button";
     this.#newChat.disabled = true; // nothing to leave until the first message
@@ -401,7 +435,8 @@ export class PhChat extends HTMLElement {
       const command = this.#commands[Number(option?.dataset["commandIndex"])];
       if (command) this.#runCommand(command);
     }, { passive: true });
-    this.#send.addEventListener("click", () => (this.#running ? send("g", "stop") : this.#submitInput()), { passive: true });
+    // While the agent works the button is Stop; with text in the box it queues that message.
+    this.#send.addEventListener("click", () => (this.#running && this.#input.value.trim() === "" ? send("g", "stop") : this.#submitInput()), { passive: true });
     this.#share.addEventListener("click", () => this.#setShare(!this.#shareOn), { passive: true });
     this.#newChat.addEventListener("click", () => send("g", "new"), { passive: true });
     document.addEventListener("pointerdown", this.#closeHistory, { passive: true });
@@ -489,16 +524,42 @@ export class PhChat extends HTMLElement {
 
   /** Send is Stop while a reply is on its way, and disabled while there is nothing to send. */
   #syncSend(): void {
-    this.#send.replaceChildren(icon(this.#running ? "stop" : "arrowUp", 16));
-    this.#send.dataset["mode"] = this.#running ? "stop" : "send";
-    this.#send.setAttribute("aria-label", this.#running ? "Stop" : "Send message");
-    this.#send.disabled = !this.#running && this.#input.value.trim() === "";
+    const empty = this.#input.value.trim() === "";
+    const stop = this.#running && empty;
+    this.#send.replaceChildren(icon(stop ? "stop" : "arrowUp", 16));
+    this.#send.dataset["mode"] = stop ? "stop" : "send";
+    this.#send.setAttribute("aria-label", stop ? "Stop" : this.#running ? "Add to queue" : "Send message");
+    this.#send.title = this.#running && !empty ? "Add to queue" : "";
+    this.#send.disabled = !this.#running && empty;
+  }
+
+  /** Waiting messages sit above the composer; Steer interrupts the agent with one now. */
+  #renderQueue(items: { id: number; text: string }[], note?: string): void {
+    this.#queue.replaceChildren();
+    this.#queue.hidden = items.length === 0 && !note;
+    if (note) this.#queue.append(el("p", "chat-queue-note", note));
+    for (const item of items) {
+      const row = el("div", "chat-queue-item");
+      row.setAttribute("role", "listitem");
+      const steer = el("button", "btn btn-sm", "Steer");
+      steer.type = "button";
+      steer.title = "Interrupt the agent and send this now";
+      steer.addEventListener("click", () => send("g", "steer", String(item.id)), { passive: true });
+      const remove = el("button", "btn btn-quiet btn-sm chat-queue-remove");
+      remove.type = "button";
+      remove.setAttribute("aria-label", `Remove queued message: ${item.text}`);
+      remove.append(icon("close", 12));
+      remove.addEventListener("click", () => send("g", "unqueue", String(item.id)), { passive: true });
+      row.append(el("span", "chat-queue-text", item.text), steer, remove);
+      this.#queue.append(row);
+    }
   }
 
   #submit(): void {
     const text = this.#input.value.trim();
-    if (!text || this.#running) return;
-    this.#setRunning(true);
+    if (!text) return;
+    // While the agent is busy Go queues the message; it is shown when it starts.
+    if (!this.#running) this.#setRunning(true);
     send("g", "send", text, this.#shareOn ? "1" : "0");
     this.#input.value = "";
     this.#resizeInput();
@@ -607,6 +668,7 @@ export class PhChat extends HTMLElement {
 
   #setRunning(on: boolean): void {
     this.#running = on;
+    if (on) this.#log.querySelectorAll(".chat-choices").forEach((p) => p.remove()); // answered or moved on
     this.#log.setAttribute("aria-busy", String(on));
     this.#chatHistory.dataset["running"] = String(on);
     this.#chatHistoryList.querySelectorAll<HTMLButtonElement>(".chat-history-item").forEach((button) => { button.disabled = on; });
@@ -698,7 +760,8 @@ export class PhChat extends HTMLElement {
         this.#who = "Agent";
         this.#titled = false;
         this.#setTitle("");
-        for (const message of ev.messages ?? []) {
+        const restored = ev.messages ?? [];
+        for (const [at, message] of restored.entries()) {
           if (message.role === "user") {
             if (!this.#titled) {
               this.#titled = true;
@@ -713,6 +776,7 @@ export class PhChat extends HTMLElement {
             m.append(message.content);
             m.flush();
             m.meta.title = who;
+            if (at === restored.length - 1) m.showChoices(); // still waiting for the answer
           }
         }
         this.#setRunning(false);
@@ -733,11 +797,15 @@ export class PhChat extends HTMLElement {
         this.#setRunning(true);
         break;
       }
+      case "queue":
+        this.#renderQueue(ev.queue ?? [], ev.text);
+        break;
       case "processing": {
         if (!ev.text) {
           this.#processing.hidden = true;
           break;
         }
+        if (!this.#running) this.#setRunning(true); // a queued message or a summary step started it
         this.#processingText.textContent = ev.text;
         this.#processing.hidden = false;
         this.#log.append(this.#processing);
@@ -841,9 +909,10 @@ export class PhChat extends HTMLElement {
           delete c.box.dataset["streaming"];
           // One short line; the model name and exact token counts are in the tooltip.
           const tokens = (ev.in ?? 0) + (ev.out ?? 0);
-          const bits = [ev.ms ? `${(ev.ms / 1000).toFixed(1)} s` : "", tokens ? `${tokens >= 1000 ? `${(tokens / 1000).toFixed(1)}k` : tokens} tokens` : "", ev.cost ? `$${ev.cost.toFixed(3)}` : ""];
+          const bits = [ev.ms ? `${(ev.ms / 1000).toFixed(1)} s` : "", tokens ? `${tokens >= 1000 ? `${(tokens / 1000).toFixed(1)}k` : tokens} tokens` : "", ev.cost ? `$${ev.cost.toFixed(3)}` : "", contextLabel(ev.ctx)];
           c.meta.textContent = bits.filter(Boolean).join(" · ");
           c.meta.title = [c.who, ev.out ? `${ev.in ?? 0} in, ${ev.out} out` : ""].filter(Boolean).join(" · ");
+          c.showChoices();
         }
         this.#current = null;
         this.#setRunning(false);

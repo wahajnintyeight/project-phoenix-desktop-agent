@@ -17,9 +17,11 @@ import (
 )
 
 const (
-	maxSnapshotNodes = 250
+	// Every tool result is replayed to the model on every later step of the run, so a smaller
+	// snapshot is the biggest speed-up there is. A busy page is searched with query, not listed.
+	maxSnapshotNodes = 150
 	maxBrowserTabs   = 30
-	maxBrowserText   = 24 << 10
+	maxBrowserText   = 16 << 10
 )
 
 type browserPermission struct {
@@ -33,6 +35,7 @@ type browserRef struct {
 	NodeID        int
 	Role          string
 	Name          string
+	Checked       bool
 }
 
 type browserSnapshot struct {
@@ -44,6 +47,7 @@ type browserSnapshot struct {
 type browserSession struct {
 	opMu     sync.Mutex
 	snapshot browserSnapshot
+	extract  extractCache
 }
 
 var browserSessions = struct {
@@ -233,6 +237,12 @@ func browserCallMeta(ctx context.Context, call browser.Call) (browserPermission,
 	case browser.SelectArgs:
 		tabID = a.TabID
 		meta.Summary = "Choose an option in"
+	case browser.FormArgs:
+		tabID = a.TabID
+		meta.Summary = fmt.Sprintf("Fill %d form fields", len(a.Fields))
+	case browser.UploadArgs:
+		tabID = a.TabID
+		meta.Summary = "Upload " + approvalBrowserText(a.File, 80) + " to the page"
 	default:
 		return browserPermission{}, errors.New("unsupported browser operation")
 	}
@@ -387,8 +397,8 @@ func decodeBrowserCall(call browser.Call) (any, error) {
 		v, e := decode(&browser.SnapshotArgs{})
 		if e == nil {
 			a := v.(browser.SnapshotArgs)
-			if !validTabID(a.TabID) || a.Depth < 0 || a.Depth > 12 {
-				e = errors.New("invalid tab id or snapshot depth")
+			if !validTabID(a.TabID) || a.Depth < 0 || a.Depth > 12 || len(a.Query) > 200 {
+				e = errors.New("invalid tab id, snapshot depth or query")
 			}
 		}
 		return v, e
@@ -411,6 +421,24 @@ func decodeBrowserCall(call browser.Call) (any, error) {
 		v, e := decode(&browser.RefArgs{})
 		if e == nil && (!validTabID(v.(browser.RefArgs).TabID) || !validBrowserRef(v.(browser.RefArgs).Ref)) {
 			e = errors.New("invalid tab id or page ref")
+		}
+		return v, e
+	case "browser_extract":
+		v, e := decode(&browser.ExtractArgs{})
+		if e == nil {
+			a := v.(browser.ExtractArgs)
+			if !validTabID(a.TabID) || len(a.Query) > 200 || a.Offset < 0 || a.Limit < 0 || a.Limit > 100000 {
+				e = errors.New("invalid extract request")
+			}
+		}
+		return v, e
+	case "browser_click_text":
+		v, e := decode(&browser.ClickTextArgs{})
+		if e == nil {
+			a := v.(browser.ClickTextArgs)
+			if !validTabID(a.TabID) || strings.TrimSpace(a.Text) == "" || len(a.Text) > 200 {
+				e = errors.New("click_text needs a tab and the label to click")
+			}
 		}
 		return v, e
 	case "browser_drag":
@@ -464,6 +492,29 @@ func decodeBrowserCall(call browser.Call) (any, error) {
 			a := v.(browser.SelectArgs)
 			if !validTabID(a.TabID) || !validBrowserRef(a.Ref) || len(a.Value) > 512 {
 				e = errors.New("invalid select request")
+			}
+		}
+		return v, e
+	case "browser_fill_form":
+		v, e := decode(&browser.FormArgs{})
+		if e == nil {
+			a := v.(browser.FormArgs)
+			if !validTabID(a.TabID) || len(a.Fields) == 0 || len(a.Fields) > maxFormFields {
+				e = errors.New("fill_form needs a tab and 1 to 40 fields")
+			}
+			for _, f := range a.Fields {
+				if e == nil && (!validBrowserRef(f.Ref) || len([]rune(f.Value)) > 4000 || strings.ContainsRune(f.Value, 0)) {
+					e = errors.New("invalid field ref or value")
+				}
+			}
+		}
+		return v, e
+	case "browser_upload":
+		v, e := decode(&browser.UploadArgs{})
+		if e == nil {
+			a := v.(browser.UploadArgs)
+			if !validTabID(a.TabID) || strings.TrimSpace(a.File) == "" || len(a.File) > 300 || !validOptionalRef(a.Ref) {
+				e = errors.New("upload needs a tab and a library file")
 			}
 		}
 		return v, e
@@ -532,6 +583,10 @@ func browserArgumentValue(v any) any {
 		return *a
 	case *browser.RefArgs:
 		return *a
+	case *browser.ClickTextArgs:
+		return *a
+	case *browser.ExtractArgs:
+		return *a
 	case *browser.DragArgs:
 		return *a
 	case *browser.TextArgs:
@@ -545,6 +600,10 @@ func browserArgumentValue(v any) any {
 	case *browser.SelectArgs:
 		return *a
 	case *browser.OpenTabArgs:
+		return *a
+	case *browser.FormArgs:
+		return *a
+	case *browser.UploadArgs:
 		return *a
 	default:
 		return v

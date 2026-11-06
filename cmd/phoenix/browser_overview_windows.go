@@ -311,6 +311,7 @@ func withPageFeedback(ctx context.Context, before browserTabState, out browser.O
 			fmt.Fprintf(&b, "\nPage title is now %q.", clipBrowser(s.Title, 120))
 		}
 	}
+	b.WriteString(newTabsSince(ctx))
 	b.WriteString("\nVerify the result with browser_read or browser_snapshot before the next step.")
 	out.Text = b.String()
 	return out

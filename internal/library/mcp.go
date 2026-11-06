@@ -175,6 +175,7 @@ func NewServer(s *Store, origin string) *sdk.Server {
 		}
 		return t, nil
 	})
+	registerApplicationTools(srv, s)
 	return srv
 }
 

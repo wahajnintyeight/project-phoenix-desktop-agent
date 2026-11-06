@@ -86,7 +86,7 @@ The UI accepts only a fixed property and attribute allowlist. There is no operat
 The agent reaches Phoenix's actual open tabs through a built-in MCP server named `phoenix-browser`. The exposed tools are:
 
 - Observe: `browser_tabs`, `browser_read`, `browser_snapshot`, `browser_screenshot`, `browser_wait`.
-- Page interaction: `browser_click`, `browser_drag`, `browser_type`, `browser_fill`, `browser_press`, `browser_scroll`, `browser_select`, `browser_copy`, `browser_paste`.
+- Page interaction: `browser_click`, `browser_extract` (the whole page's text and optionally links in one call, with `query` filtering, paging by offset, and `scroll` to collect lazy-loaded or virtualised lists; the result is cached per tab so the next page is instant), `browser_click_text` (find a button or link by its label and click it in one call), `browser_fill_form` (many fields in one call), `browser_upload` (attach a library file to a file field), `browser_drag`, `browser_type`, `browser_fill`, `browser_press`, `browser_scroll`, `browser_select`, `browser_copy`, `browser_paste`.
 - Tabs and navigation: `browser_open_tab`, `browser_close_tab`, `browser_switch_tab`, `browser_navigate`, `browser_back`, `browser_forward`, `browser_reload`.
 
 The MCP child never receives a WebView2 or CDP handle. It sends a bounded request to a loopback-only Go bridge with a random per-run bearer token. Go validates the method and arguments, resolves the requested tab, and executes a named operation. Per-tab operations are serialized. CDP is called on demand; release builds do not expose a remote-debugging port.
@@ -99,7 +99,7 @@ The shared-page feature is separate from browser tools: when enabled, Go runs a 
 
 ### Current limits
 
-There is no arbitrary script tool, file upload/download tool, coordinate-only canvas tool, multi-action batch, or cross-engine browser driver. Screenshots cover one tab's visible area and depend on the selected model accepting images. Site controls that do not expose useful accessibility information may require screenshot-based reasoning; canvas-heavy sites remain limited.
+Every tool result is replayed to the model on each later step, so results are kept small: a snapshot lists at most 150 controls and 16 KiB of text, and a busy page is searched with `browser_snapshot query=…` or `browser_click_text`, not listed. There is no arbitrary script tool, file download tool, coordinate-only canvas tool, or cross-engine browser driver. Screenshots cover one tab's visible area and depend on the selected model accepting images. Site controls that do not expose useful accessibility information may require screenshot-based reasoning; canvas-heavy sites remain limited.
 
 ## 5. Providers and chat runs
 
@@ -110,13 +110,23 @@ The provider hub normalizes settings and run events across seven providers:
 
 A chat run replays bounded transcript history because CLI sessions are not persisted by Phoenix's providers. It starts one cancellable run at a time, streams text and tool events to the panel, and records provider usage when available. The Stop control cancels the provider and tool contexts; the per-run token becomes invalid when the run ends.
 
+### Message queue, steering and the context window
+
+`cmd/phoenix/chat_queue_windows.go`. A message sent while the agent is busy is queued (up to 20), shown above the composer, and runs when the turn ends; a failed turn stops the line. **Steer** on a queued message interrupts the running turn (what the agent had said stays in the history) and runs that message next. **Stop** cancels the turn and clears the queue; new chat and clear history clear it too. UI → Go: `g send` (queues when busy), `g steer <id>`, `g unqueue <id>`; Go → UI: chat event `queue`.
+
+A conversation has a 256k-token window. Phoenix estimates it (characters / 4, plus 8k for instructions, tools, profile and memory) and, before a turn that would pass 230k, asks the model for a handoff summary (the digest in `condenseHistory` if that fails), opens a new session that starts from the summary and the last exchange, and sends the message there. The old session stays in the session list. The reply shows `context Nk/256k` once a chat passes 64k. History replay and the saved transcript were raised to match (400 messages, about 1M characters per session). `PHOENIX_COMPACT_TOKENS` lowers the threshold for tests.
+
 ### Function calls and tool loop
 
 Every implemented provider path can expose the MCP tools it supports: Claude/Codex use their CLI MCP integration through an authenticated Phoenix proxy, while OpenAI-compatible providers receive generated function schemas and return function calls to Phoenix's loop. The HTTP loop preserves assistant/tool messages across requests and combines usage. It currently bounds a turn to 32 tool rounds, 96 calls, 100 definitions, 64 KiB arguments, 32 KiB per tool reply and 128 KiB of tool-result text. Image output is bounded before it is passed back to a vision-capable model.
 
 Function names sent to APIs are generated aliases; Phoenix maps them to the exact server/tool pair. Arguments must be valid JSON objects. Unknown functions, invalid schemas, oversized data and unsupported call types are rejected or returned as tool errors. Tool events are streamed into the chat and summarized separately in Activity.
 
-Tool availability is provider-level today, not fully classified per model. A provider/model endpoint that does not implement function calls or image inputs may reject those requests; Phoenix reports the provider error. Per-model capability discovery remains open.
+Tool availability is provider-level, not classified per model. If an API model rejects the first request because it does not support tools (HTTP 400, 404 or 422 mentioning tools or functions), the OpenAI-compatible driver retries once without tools and tells the user in the reply, instead of failing the message. Image-input support is not probed.
+
+Runs continue while Phoenix is minimized, covered or hidden in the tray: page WebView2s start with `--disable-features=CalculateNativeWinOcclusion`, `--disable-backgrounding-occluded-windows`, `--disable-renderer-backgrounding` and `--disable-background-timer-throttling`, so a page keeps its timers and frames (verified minimized: timers and animation frames kept running, `visibilityState` stayed visible). A non-active tab is hidden by `place()`; `browser_screenshot` brings such a tab forward first because a hidden tab has no surface to capture.
+
+When a run that took more than 8 seconds ends (or an approval is requested) while Phoenix is in the background, the taskbar button flashes.
 
 ### Enabled tools run automatically
 
@@ -197,7 +207,8 @@ There is no migration system beyond the library's `user_version`, résumé facts
 - **Files:** the SQLite file library (`internal/library`, MCP server `phoenix-files`, started as `phoenix.exe mcp-files`) and the Files explorer in the UI exist. Document indexing beyond file text and Drive integration are not implemented.
 - **Product data:** no résumé profile store, application tracker, library backup/export flow, setup wizard, native notification center, updater or signed release pipeline.
 - **Tool capabilities:** provider support is detected at the provider level, not consistently per model. Models without function-call support can fail when tools are offered.
-- **Browser:** no arbitrary script, file upload/download, batch, trace/replay or robust coordinate interaction for canvas-only applications. Iframes and canvas are not represented by the accessibility snapshot.
+- **Browser:** no arbitrary script, file download, trace/replay or robust coordinate interaction for canvas-only applications. Canvas is not represented by the accessibility snapshot. Not yet measured: tokens and time per step on real sites after the snapshot size cut.
+- **Notifications:** only a taskbar flash; no Windows toast (needs an app identity the unpackaged exe does not have).
 - **Desktop interaction:** different DPI/multi-monitor coverage and elevated windows (UIPI) need more validation; computer-use commands are Win32-specific.
 - **Window/runtime:** Windows 11 snap-layout flyout, per-monitor DPI transitions, production installer/package and profile-path migration need completion.
 - **Performance:** there is no current multi-tab memory/startup/latency baseline.

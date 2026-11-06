@@ -20,10 +20,10 @@ import (
 )
 
 const (
-	chatStoreFileMaxBytes = 32 << 20
+	chatStoreFileMaxBytes = 96 << 20
 	chatStoreMaxChats     = 40
-	chatStoreMaxMessages  = 64
-	chatStoreMaxChars     = 120_000
+	chatStoreMaxMessages  = 400
+	chatStoreMaxChars     = 1_200_000 // a full 256k-token session (content and context are both counted)
 	chatStoreMaxMessage   = 50_000
 	chatStoreTitleRunes   = 96
 	activityStoreMaxItems = 500

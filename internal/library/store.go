@@ -92,7 +92,18 @@ CREATE TABLE IF NOT EXISTS settings (
   value      TEXT NOT NULL,
   updated_at INTEGER NOT NULL
 );
-PRAGMA user_version = 2;
+CREATE TABLE IF NOT EXISTS memories (
+  id         INTEGER PRIMARY KEY,
+  kind       TEXT    NOT NULL,
+  topic      TEXT    NOT NULL,
+  key        TEXT    NOT NULL DEFAULT '',
+  value      TEXT    NOT NULL,
+  uses       INTEGER NOT NULL DEFAULT 1,
+  created_at INTEGER NOT NULL,
+  updated_at INTEGER NOT NULL
+);
+CREATE INDEX IF NOT EXISTS memories_lookup ON memories(kind, topic COLLATE NOCASE, key COLLATE NOCASE);
+PRAGMA user_version = 3;
 `
 
 // Open opens (creating if needed) the library database at dbPath.

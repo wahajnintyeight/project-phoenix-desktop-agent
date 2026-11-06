@@ -17,8 +17,12 @@ func openBrowserTab(ctx context.Context, args browser.OpenTabArgs) (any, error) 
 				return nil, errors.New("could not create the browser tab")
 			}
 		}
+		if args.URL != "" {
+			markAgentTab(t)
+		}
 		tabs = append(tabs, t)
 		activate(t.id)
+		enforceTabCap()
 		if args.URL != "" {
 			t.cv.Navigate(args.URL)
 		}

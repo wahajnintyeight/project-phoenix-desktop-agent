@@ -138,16 +138,22 @@ func handleMCPOp(f []string) {
 			pushMCP(err.Error(), false)
 			return
 		}
-		if len(cands) != 1 || cands[0].Name != name {
+		if len(cands) != 1 {
 			mcpStaged = nil
 			mcpStagedUpdate = ""
-			pushMCP("Edit one server at a time, keeping its current name.", false)
+			pushMCP("Edit one server at a time.", false)
 			return
 		}
 		if !containsMCPServer(name) {
 			mcpStaged = nil
 			mcpStagedUpdate = ""
 			pushMCP("That server is no longer installed.", false)
+			return
+		}
+		if cands[0].Name != name && containsMCPServer(cands[0].Name) { // a rename must not take another server's name
+			mcpStaged = nil
+			mcpStagedUpdate = ""
+			pushMCP("A server named "+cands[0].Name+" is already installed. Choose another name.", false)
 			return
 		}
 		mcpStaged = cands
@@ -163,12 +169,12 @@ func handleMCPOp(f []string) {
 		mcpStaged = nil
 		mcpStagedUpdate = ""
 		if updating != "" {
-			if len(staged) != 1 || staged[0].Name != updating {
+			if len(staged) != 1 {
 				pushMCP("The staged server changes are no longer valid.", false)
 				return
 			}
 			c := staged[0]
-			if err := hub.MCPUpdate(c.Server, c.EnvValues, c.HeaderValues); err != nil {
+			if err := hub.MCPUpdate(updating, c.Server, c.EnvValues, c.HeaderValues); err != nil {
 				logf("mcp update %s: %v", c.Name, err)
 				pushMCP("Could not update "+c.Name+": "+err.Error(), false)
 				return

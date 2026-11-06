@@ -83,7 +83,16 @@ func (p OpenAICompat) Run(ctx context.Context, s Settings, req Request, emit fun
 	)
 	for round := 0; ; round++ {
 		body.Messages = messages
+		// A model that cannot call functions rejects the very first request. Hold that error back:
+		// if it is one, say so once and carry on without tools instead of failing the message.
+		probing := round == 0 && len(body.Tools) > 0
+		var held *Event
 		result, calls, err := p.completion(ctx, s, body, func(ev Event) {
+			if probing && ev.Kind == EvError {
+				e := ev
+				held = &e
+				return
+			}
 			if ev.Kind == EvStart {
 				if started {
 					return
@@ -94,6 +103,17 @@ func (p OpenAICompat) Run(ctx context.Context, s Settings, req Request, emit fun
 				emit(ev)
 			}
 		})
+		if err != nil && probing && toolsRejected(err) {
+			body.Tools = nil
+			note := "_This model does not support tools, so I can't use the browser or files with it. Switch to another model for that._\n\n"
+			text.WriteString(note)
+			emit(Event{Kind: EvTextDelta, Text: note})
+			round--
+			continue
+		}
+		if held != nil {
+			emit(*held)
+		}
 		if err != nil {
 			return result, err
 		}
@@ -325,6 +345,16 @@ func addUsage(a, b Usage) Usage {
 	a.CachedTokens += b.CachedTokens
 	a.CostUSD += b.CostUSD
 	return a
+}
+
+// toolsRejected reports whether a provider error says the model does not accept tools (a 400,
+// 404 or 422 that talks about tools or functions), as opposed to a bad key or a rate limit.
+func toolsRejected(err error) bool {
+	m := strings.ToLower(err.Error())
+	if !strings.Contains(m, "(http 400)") && !strings.Contains(m, "(http 404)") && !strings.Contains(m, "(http 422)") {
+		return false
+	}
+	return strings.Contains(m, "tool") || strings.Contains(m, "function")
 }
 
 func isJSONObject(b []byte) bool {

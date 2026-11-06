@@ -73,14 +73,14 @@ func TestBrowserSnapshotCapsRefsAndText(t *testing.T) {
 		}
 	}
 	session := &browserSession{}
-	out, err := formatBrowserSnapshot(browserTabState{ID: 4, Host: "example.com"}, 8, nodes, session, nil)
+	out, err := formatBrowserSnapshot(browserTabState{ID: 4, Host: "example.com"}, "", nodes, session, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
 	if len(session.snapshot.refs) != maxSnapshotNodes {
 		t.Fatalf("got %d refs, want %d", len(session.snapshot.refs), maxSnapshotNodes)
 	}
-	if len(out.Text) > maxBrowserText || !strings.Contains(out.Text, "capped at 250 nodes") {
+	if len(out.Text) > maxBrowserText || !strings.Contains(out.Text, "more controls not listed") {
 		t.Fatalf("snapshot was not bounded: len=%d", len(out.Text))
 	}
 }
@@ -126,5 +126,20 @@ func TestEveryPublishedBrowserToolIsHandledByTheHost(t *testing.T) {
 		if _, err := decodeBrowserCall(browser.Call{Tool: tool.Name, Arguments: []byte(`{}`)}); err != nil && err.Error() == "unknown browser operation" {
 			t.Errorf("%s has no argument decoder", tool.Name)
 		}
+	}
+}
+
+// A control buried deep in a busy page (a job's Apply link behind hundreds of other controls)
+// must still be findable.
+func TestBrowserSnapshotQueryFindsControlPastTheCap(t *testing.T) {
+	nodes := make([]axNode, 0, maxSnapshotNodes+100)
+	for i := 0; i < maxSnapshotNodes+50; i++ {
+		nodes = append(nodes, axNode{NodeID: strconv.Itoa(i + 1), Role: axValue{Value: "link"}, Name: axValue{Value: "Job " + strconv.Itoa(i)}, BackendNodeID: i + 1})
+	}
+	nodes = append(nodes, axNode{NodeID: "9999", Role: axValue{Value: "link"}, Name: axValue{Value: "Apply"}, BackendNodeID: 9999})
+	session := &browserSession{}
+	out, err := formatBrowserSnapshot(browserTabState{ID: 4, Host: "example.com"}, "apply", nodes, session, nil)
+	if err != nil || !strings.Contains(out.Text, `link "Apply" ref=`) || len(session.snapshot.refs) != 1 {
+		t.Fatalf("query did not find Apply: %v\n%s", err, out.Text)
 	}
 }

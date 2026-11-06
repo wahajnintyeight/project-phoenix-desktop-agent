@@ -117,7 +117,7 @@ func TestValidation(t *testing.T) {
 func TestStatusesAreInDisplayOrderAndSettingsPersist(t *testing.T) {
 	h, _, _, path := newHub(t)
 	sts := h.Statuses(context.Background())
-	if len(sts) != 7 || sts[0].ID != provider.Claude || sts[1].ID != provider.Codex || sts[2].ID != provider.Gemini {
+	if len(sts) != 8 || sts[0].ID != provider.Claude || sts[1].ID != provider.Codex || sts[2].ID != provider.Gemini {
 		t.Fatalf("%+v", sts)
 	}
 	if err := h.SetDefault(provider.Codex); err != nil {
@@ -256,7 +256,7 @@ func TestModelCacheForgetsWhenKeyOrBaseChanges(t *testing.T) {
 func TestAllProvidersAreListed(t *testing.T) {
 	h, _ := newHTTPHub(t)
 	ids := h.IDs()
-	if len(ids) != 7 || ids[0] != provider.Claude || ids[6] != provider.Grok {
+	if len(ids) != 8 || ids[0] != provider.Claude || ids[6] != provider.Grok || ids[7] != provider.DeepSeek {
 		t.Errorf("%v", ids)
 	}
 	if err := h.SetDefault(provider.Grok); err == nil {

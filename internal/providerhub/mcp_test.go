@@ -68,6 +68,63 @@ func TestMCPLifecycle(t *testing.T) {
 	}
 }
 
+// A server can be renamed and can change from a program to a web address (and back); its
+// credentials follow the change and nothing is left behind in the vault.
+func TestMCPUpdateRenamesAndSwitchesType(t *testing.T) {
+	h, _, _, path := newHub(t)
+	if err := h.MCPAdd(mcp.Server{Name: "files", Transport: mcp.Stdio, Command: "npx", Args: []string{"srv"}},
+		map[string]string{"TOKEN": "env-secret"}, nil); err != nil {
+		t.Fatal(err)
+	}
+	if err := h.MCPSetEnabled("files", true); err != nil {
+		t.Fatal(err)
+	}
+	if err := h.MCPAdd(mcp.Server{Name: "other", Transport: mcp.Stdio, Command: "x"}, nil, nil); err != nil {
+		t.Fatal(err)
+	}
+
+	// Rename only: the credential is kept (blank value), the enabled state is kept.
+	err := h.MCPUpdate("files", mcp.Server{Name: "docs", Transport: mcp.Stdio, Command: "npx", Args: []string{"srv"}},
+		map[string]string{"TOKEN": ""}, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	got := h.MCPServers()
+	names := map[string]mcp.Server{}
+	for _, s := range got {
+		names[s.Name] = s
+	}
+	if _, old := names["files"]; old || !names["docs"].Enabled || names["docs"].Env["TOKEN"] == "" {
+		t.Fatalf("rename should move the server, keep it on and keep its credential: %+v", got)
+	}
+	if err := h.MCPUpdate("docs", mcp.Server{Name: "other", Transport: mcp.Stdio, Command: "npx"}, nil, nil); err == nil {
+		t.Fatal("a rename must not take another server's name")
+	}
+
+	// Program -> web address: the environment credential is dropped, headers are stored.
+	err = h.MCPUpdate("docs", mcp.Server{Name: "docs", Transport: mcp.HTTP, URL: "https://example.com/mcp"},
+		nil, map[string]string{"Authorization": "Bearer header-secret"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	var docs mcp.Server
+	for _, s := range h.MCPServers() {
+		if s.Name == "docs" {
+			docs = s
+		}
+	}
+	if docs.Transport != mcp.HTTP || docs.Command != "" || len(docs.Env) != 0 || docs.Headers["Authorization"] == "" || !docs.Enabled {
+		t.Fatalf("type switch left the wrong fields: %+v", docs)
+	}
+	raw, _ := os.ReadFile(path)
+	if strings.Contains(string(raw), "env-secret") || strings.Contains(string(raw), "header-secret") {
+		t.Fatalf("config must hold references only:\n%s", raw)
+	}
+	if h.vault.Has("mcp-files-e0") {
+		t.Fatal("the old environment credential should have been deleted")
+	}
+}
+
 func TestClaudeProxyConfigIsPrivateAndRemoved(t *testing.T) {
 	proxy := &codexToolProxy{url: "http://127.0.0.1:1234/mcp", token: "test-token"}
 	req := provider.Request{}
