@@ -13,6 +13,7 @@ import { resolveSlashCommand, searchSlashCommands, type SlashCommandDefinition }
 export interface ChatEvent {
   k: "user" | "note" | "processing" | "tool" | "tool-result" | "approve" | "approved" | "start" | "delta" | "done" | "error" | "stopped" | "reset" | "restore" | "queue";
   text?: string;
+  at?: number;
   queue?: { id: number; text: string }[];
   ctx?: number;
   provider?: string;
@@ -36,6 +37,7 @@ export interface ChatEvent {
 interface ChatTranscriptMessage {
   role: "user" | "assistant";
   content: string;
+  at?: number;
   provider?: string;
   model?: string;
 }
@@ -66,6 +68,7 @@ class Msg {
   readonly box: HTMLElement;
   readonly text = el("div", "chat-text");
   readonly meta = el("p", "chat-meta");
+  readonly time = document.createElement("time");
   readonly copy = el("button", "chat-copy");
   readonly who: string;
   #raw = "";
@@ -73,7 +76,7 @@ class Msg {
   #frame = 0;
   #copyTimer = 0;
 
-  constructor(who: string, cls: string, markdown: boolean) {
+  constructor(who: string, cls: string, markdown: boolean, at: number) {
     this.who = who;
     this.box = el("article", `chat-msg ${cls}`);
     const footer = el("div", "chat-msg-footer");
@@ -84,10 +87,23 @@ class Msg {
     // Icon only; the label is for screen readers and tells them when the copy worked.
     this.copy.append(icon("copy", 14), icon("check", 14), el("span", "sr-only", "Copy"));
     this.copy.addEventListener("click", () => this.#copyText(), { passive: true });
-    footer.append(this.meta, this.copy);
+    this.time.className = "chat-time";
+    this.setTime(at);
+    footer.append(this.meta, this.time, this.copy);
     // The name is for screen readers; sighted users read it in the footer line.
     this.box.append(el("h3", cls.includes("chat-error") ? "chat-who" : "sr-only", who), this.text, footer);
     if (markdown) this.#md = new MarkdownView(this.text);
+  }
+
+  setTime(at: number): void {
+    const date = new Date(at);
+    if (!at || Number.isNaN(date.valueOf())) {
+      this.time.removeAttribute("datetime");
+      this.time.textContent = "Date unavailable";
+      return;
+    }
+    this.time.dateTime = date.toISOString();
+    this.time.textContent = new Intl.DateTimeFormat(undefined, { dateStyle: "medium", timeStyle: "short" }).format(date);
   }
 
   get empty(): boolean {
@@ -674,10 +690,10 @@ export class PhChat extends HTMLElement {
     this.#title.textContent = t ? (t.length > 60 ? `${t.slice(0, 59)}…` : t) : "New chat";
   }
 
-  #message(who: string, cls: string, markdown = false): Msg {
+  #message(who: string, cls: string, markdown = false, at = Date.now()): Msg {
     this.#empty.hidden = true;
     this.#newChat.disabled = false;
-    const m = new Msg(who, cls, markdown);
+    const m = new Msg(who, cls, markdown, at);
     this.#log.append(m.box);
     return m;
   }
@@ -759,12 +775,12 @@ export class PhChat extends HTMLElement {
               this.#titled = true;
               this.#setTitle(message.content);
             }
-            const m = this.#message("You", "chat-user");
+            const m = this.#message("You", "chat-user", false, message.at ?? 0);
             m.set(message.content);
             this.#lastUser = m.meta;
           } else if (message.role === "assistant") {
             const who = [message.provider, message.model].filter(Boolean).join(" · ") || "Agent";
-            const m = this.#message(who, "chat-ai", true);
+            const m = this.#message(who, "chat-ai", true, message.at ?? 0);
             m.append(message.content);
             m.flush();
             m.meta.title = who;
@@ -782,7 +798,7 @@ export class PhChat extends HTMLElement {
           this.#titled = true;
           this.#setTitle(ev.text ?? "");
         }
-        const m = this.#message("You", "chat-user");
+        const m = this.#message("You", "chat-user", false, ev.at ?? Date.now());
         m.set(ev.text ?? "");
         this.#lastUser = m.meta;
         this.#current = null;
@@ -898,6 +914,7 @@ export class PhChat extends HTMLElement {
         const c = this.#current;
         if (c) {
           c.flush();
+          if (ev.at) c.setTime(ev.at);
           delete c.box.dataset["streaming"];
           // One short line; the model name and exact token counts are in the tooltip.
           const tokens = (ev.in ?? 0) + (ev.out ?? 0);
@@ -916,6 +933,7 @@ export class PhChat extends HTMLElement {
         this.#expireCards();
         if (this.#current) {
           this.#current.flush();
+          if (ev.at) this.#current.setTime(ev.at);
           delete this.#current.box.dataset["streaming"];
           this.#current.meta.textContent = `${this.#current.who} · Stopped`;
         }

@@ -34,6 +34,7 @@ const (
 type chatTranscriptMessage struct {
 	Role      string `json:"role"`
 	Content   string `json:"content"`
+	At        int64  `json:"at,omitempty"`
 	Context   string `json:"context,omitempty"`
 	InContext bool   `json:"inContext,omitempty"`
 	Provider  string `json:"provider,omitempty"`
@@ -43,6 +44,7 @@ type chatTranscriptMessage struct {
 type chatDisplayMessage struct {
 	Role     string `json:"role"`
 	Content  string `json:"content"`
+	At       int64  `json:"at,omitempty"`
 	Provider string `json:"provider,omitempty"`
 	Model    string `json:"model,omitempty"`
 }
@@ -271,7 +273,7 @@ func newSavedChat() savedChat {
 	return savedChat{ID: "chat-" + hex.EncodeToString(idBytes[:]), CreatedAt: now, UpdatedAt: now}
 }
 
-func saveUserMessage(chatID string, display, contextText string) (string, int) {
+func saveUserMessage(chatID string, display, contextText string) (string, int, int64) {
 	promoteSavedChat(chatID)
 	c := findSavedChat(chatID)
 	if c == nil {
@@ -287,7 +289,7 @@ func saveUserMessage(chatID string, display, contextText string) (string, int) {
 	if c.Title == "" || c.Title == "Saved chat" {
 		c.Title = clippedText(content, chatStoreTitleRunes)
 	}
-	m := chatTranscriptMessage{Role: "user", Content: content}
+	m := chatTranscriptMessage{Role: "user", Content: content, At: time.Now().UnixMilli()}
 	if contextText != content {
 		m.Context = contextText
 	}
@@ -298,13 +300,13 @@ func saveUserMessage(chatID string, display, contextText string) (string, int) {
 	index := len(c.Messages) - 1
 	persistSavedChats()
 	pushSavedChatsFor(id)
-	return id, index
+	return id, index, m.At
 }
 
-func commitSavedTurn(chatID string, userIndex int, answer, providerName, model string) {
+func commitSavedTurn(chatID string, userIndex int, answer, providerName, model string) int64 {
 	c := findSavedChat(chatID)
 	if c == nil || userIndex < 0 || userIndex >= len(c.Messages) || c.Messages[userIndex].Role != "user" {
-		return
+		return 0
 	}
 	u := &c.Messages[userIndex]
 	u.InContext = true
@@ -312,9 +314,10 @@ func commitSavedTurn(chatID string, userIndex int, answer, providerName, model s
 		u.Context = u.Content
 	}
 	answer = clippedUTF8(strings.ToValidUTF8(answer, "�"), chatStoreMaxMessage)
+	at := time.Now().UnixMilli()
 	if answer != "" {
 		c.Messages = append(c.Messages, chatTranscriptMessage{
-			Role: "assistant", Content: answer, InContext: true,
+			Role: "assistant", Content: answer, InContext: true, At: at,
 			Provider: clippedText(providerName, 48), Model: clippedText(model, 96),
 		})
 	}
@@ -322,6 +325,7 @@ func commitSavedTurn(chatID string, userIndex int, answer, providerName, model s
 	c.UpdatedAt = time.Now()
 	persistSavedChats()
 	pushSavedChats()
+	return at
 }
 
 func restoreSavedChat(id string) (*savedChat, bool) {
@@ -503,7 +507,7 @@ func activateSavedChat(c *savedChat) {
 	display := make([]chatDisplayMessage, 0, len(c.Messages))
 	for _, m := range c.Messages {
 		if m.Role == "user" || m.Role == "assistant" {
-			display = append(display, chatDisplayMessage{Role: m.Role, Content: m.Content, Provider: m.Provider, Model: m.Model})
+			display = append(display, chatDisplayMessage{Role: m.Role, Content: m.Content, At: m.At, Provider: m.Provider, Model: m.Model})
 		}
 		if !m.InContext || (m.Role != "user" && m.Role != "assistant") {
 			continue
