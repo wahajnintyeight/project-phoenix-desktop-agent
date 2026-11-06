@@ -97,6 +97,10 @@ The last command checks the built page against Impeccable's design rules and sho
 
 The interface is vanilla TypeScript custom elements styled with Tailwind CSS v4, compiled to plain CSS at build time and inlined into a single HTML page, so the app makes no network request for its own UI. [DESIGN.md](DESIGN.md) records the colour, type and component rules.
 
+## About the creator
+
+Phoenix is created and maintained by [Wahaj](https://github.com/wahajnintyeight). The project explores a desktop workspace where browsing, AI assistance, and user control live in the same place: models can work with open pages and apps while their actions stay visible in the interface.
+
 ## Project notes
 
 - [PRODUCT.md](PRODUCT.md) describes the product direction and current scope.
