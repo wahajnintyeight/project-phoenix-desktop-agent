@@ -45,6 +45,7 @@ interface FilesData {
   kinds: { kind: string; count: number }[];
   stats: { files: number; folders: number; bytes: number; trash: number };
   truncated?: boolean;
+  exporting?: boolean;
   message?: string;
   error?: boolean;
   undo?: string;
@@ -536,7 +537,7 @@ export class PhFiles extends HTMLElement {
     add("Cut", "scissors", () => this.#copy("cut"), { off: n === 0, hint: "Ctrl+X" });
     add("Paste", "paste", () => this.#paste(this.#target()), { off: !this.#clip || !inDir, hint: "Ctrl+V" });
     sep();
-    add("Save as", "download", () => send("f", "saveas", one), { off: !node || node.dir });
+    add(d?.exporting ? "Exporting…" : "Export…", "download", () => send("f", "export", ...this.#ids()), { off: n === 0 || d?.exporting === true });
     add("Delete", "trash", () => this.#trashSelected(), { off: n === 0, danger: true, hint: "Delete" });
   }
 
@@ -1019,7 +1020,7 @@ export class PhFiles extends HTMLElement {
     const noOpen = !n.dir && !!this.#preview?.noOpen;
     const items: Item[] = [
       { label: n.dir ? "Open folder" : "Open", icon: "open", run: () => this.#openNode(n), off: many || noOpen },
-      { label: "Save as…", icon: "download", run: () => send("f", "saveas", n.path), off: many || n.dir },
+      { label: "Export…", icon: "download", run: () => send("f", "export", ...this.#ids()), off: this.#data?.exporting === true },
       { sep: true },
       { label: "Rename", icon: "pen", hint: "F2", run: () => this.#startRename(n.path), off: many },
       { label: "Copy", icon: "copy", hint: "Ctrl+C", run: () => this.#copy("copy") },

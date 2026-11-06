@@ -24,7 +24,7 @@ import (
 //           f refresh
 //           f mkdir <path> | rename <path> <name> | move <dir> <path>... | copy <dir> <path>...
 //           f delete <path>... | restore <id>... | purge <id> | empty-trash
-//           f info <path> <kind> <note> | preview <path> | open <path> | saveas <path>
+//           f info <path> <kind> <note> | preview <path> | open <path> | export <path>...
 //           f upload <dir> | put <dir> <name> <seq> <last> <base64>
 // Go → UI:  u files-view data <json>  |  u files-view preview <json>
 
@@ -41,6 +41,7 @@ type filesData struct {
 	Kinds     []library.KindCount `json:"kinds"`
 	Stats     library.Stats       `json:"stats"`
 	Truncated bool                `json:"truncated,omitempty"`
+	Exporting bool                `json:"exporting,omitempty"`
 	Message   string              `json:"message,omitempty"`
 	Error     bool                `json:"error,omitempty"`
 	Undo      string              `json:"undo,omitempty"` // trash ids (comma separated) that restore what was just deleted
@@ -59,12 +60,13 @@ type filePreview struct {
 }
 
 var filesState struct {
-	loc     string
-	dir     string
-	kind    string
-	query   string
-	seq     int
-	uploads map[string]*bytes.Buffer
+	loc       string
+	dir       string
+	kind      string
+	query     string
+	seq       int
+	exporting bool
+	uploads   map[string]*bytes.Buffer
 }
 
 // openFiles shows the Files tab, creating it the first time.
@@ -89,7 +91,8 @@ func pushFiles(message string, isErr bool, undo string, sel []string) {
 	filesState.seq++
 	d := filesData{Loc: filesState.loc, Dir: filesState.dir, Kind: filesState.kind, Query: filesState.query,
 		Message: message, Error: isErr, Undo: undo, Select: sel, Seq: filesState.seq,
-		Entries: []library.Node{}, Folders: []string{}, Kinds: []library.KindCount{}}
+		Exporting: filesState.exporting,
+		Entries:   []library.Node{}, Folders: []string{}, Kinds: []library.KindCount{}}
 	if d.Loc == "" {
 		d.Loc = "dir"
 	}
@@ -304,8 +307,8 @@ func handleFilesOp(f []string) {
 		sendPreview(lib, arg(2))
 	case "open":
 		openFromLibrary(lib, arg(2))
-	case "saveas":
-		saveAs(lib, arg(2))
+	case "export", "saveas":
+		exportFromLibrary(lib, f[2:])
 	case "upload":
 		dir := arg(2)
 		go func() {
@@ -432,7 +435,7 @@ func openFromLibrary(lib *library.Store, p string) {
 		return
 	}
 	if library.Dangerous(n.Name) {
-		pushFiles("Phoenix will not launch programs or scripts. Use Save as to keep a copy.", true, "", nil)
+		pushFiles("Phoenix will not launch programs or scripts. Use Export to keep a copy.", true, "", nil)
 		return
 	}
 	dir := filepath.Join(openDir(), strconv.FormatInt(n.ID, 10)+"-"+strconv.FormatInt(time.Now().UnixNano()%1e6, 10))
@@ -447,28 +450,6 @@ func openFromLibrary(lib *library.Store, p string) {
 	}
 	// rundll32 hands the file to its default app and never runs a command line.
 	_ = exec.Command("rundll32.exe", "url.dll,FileProtocolHandler", tmp).Start()
-}
-
-func saveAs(lib *library.Store, p string) {
-	n, data, err := lib.Bytes(p)
-	if err != nil || n.Dir {
-		pushFiles("Could not save that", true, "", nil)
-		return
-	}
-	go func() {
-		dest, err := app.Dialog.SaveFile().SetFilename(library.SafeName(n.Name)).AttachToWindow(win).PromptForSingleSelection()
-		if err != nil || dest == "" {
-			return
-		}
-		werr := os.WriteFile(dest, data, 0o600)
-		runLater(func() {
-			if werr != nil {
-				pushFiles("Could not save: "+werr.Error(), true, "", nil)
-				return
-			}
-			pushFiles("Saved a copy to "+filepath.Base(dest), false, "", nil)
-		})
-	}()
 }
 
 // showBrowser returns to the most recent browser tab (or Home) from the Files or Settings views.

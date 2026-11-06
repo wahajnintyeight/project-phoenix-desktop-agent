@@ -1,7 +1,8 @@
 // Package library is Phoenix's file storage: a small virtual file system kept entirely inside
-// one SQLite database. Nothing here is a real file or folder on the disk, so nothing shows up in
+// one SQLite database. Stored nodes are not files or folders on disk, so nothing shows up in
 // Explorer; the files are visible in Phoenix's Files view, to the agent through its file tools,
 // and to anyone who opens the database with a SQLite viewer.
+// The user-only Export operation can copy nodes to a chosen directory on disk.
 //
 // Paths are slash-separated and relative to the library's top ("career/resume.pdf"). Every path
 // is validated here, in the process that touches the data, so a confused or hostile model cannot
@@ -43,7 +44,8 @@ const (
 
 // Store is an open library.
 type Store struct {
-	db *sql.DB
+	db  *sql.DB
+	dsn string
 }
 
 // Node is a file or folder.
@@ -124,7 +126,7 @@ func Open(dbPath string) (*Store, error) {
 		db.Close()
 		return nil, fmt.Errorf("could not prepare the library database: %w", err)
 	}
-	return &Store{db: db}, nil
+	return &Store{db: db, dsn: dsn}, nil
 }
 
 // Close releases the database.
