@@ -1,27 +1,46 @@
-// <ph-tasks>: saved automations. Go owns the data and runs the tasks; this element lists them,
-// edits them and sends Run / Stop. Text is only ever placed with .value or textContent.
+// <ph-tasks>: the Tasks page. Tasks are saved automations the agent runs on its own, each in a
+// session of its own. Go owns the data and the runs; this element lists, edits and starts them.
+// Everything the user or the agent wrote reaches the page through .value or textContent only.
 import { el } from "./dom";
 import { send } from "./protocol";
+
+type Kind = "manual" | "interval" | "daily" | "weekdays";
+type Status = "ok" | "blocked" | "failed" | "stopped";
+
+interface Run {
+  at: number;
+  status: Status;
+  result?: string | undefined;
+  ms?: number | undefined;
+  chat?: string | undefined;
+}
 
 interface Task {
   id: string;
   name: string;
   prompt: string;
-  kind: "manual" | "interval" | "daily" | "weekdays";
-  every?: number;
+  extra?: string | undefined;
+  icon?: string | undefined;
+  kind: Kind;
+  every?: number | undefined;
   at?: string | undefined;
   enabled: boolean;
-  schedule: string;
-  next?: number;
-  lastRun?: number;
-  lastStatus?: "ok" | "blocked" | "failed" | "stopped";
-  lastResult?: string;
-  lastMs?: number;
-  runs?: number;
+  limit?: boolean | undefined;
+  tools?: string[] | undefined;
+  notify?: boolean | undefined;
+  schedule?: string | undefined;
+  next?: number | undefined;
+  lastRun?: number | undefined;
+  lastStatus?: Status | undefined;
+  lastResult?: string | undefined;
+  runs?: number | undefined;
+  history?: Run[] | undefined;
 }
 
 interface Data {
   tasks: Task[];
+  servers?: string[] | undefined;
+  desktop?: boolean | undefined;
   running?: string | undefined;
   waiting?: string | undefined;
 }
@@ -32,15 +51,39 @@ interface Outcome {
   error?: string;
 }
 
-/** Starting points: each fills the editor, and the user adjusts the wording and the schedule. */
-const STARTERS: { name: string; prompt: string; kind: Task["kind"]; at?: string | undefined }[] = [
-  { name: "Morning job sweep", kind: "weekdays", at: "09:00",
-    prompt: "Open my saved job searches and job alerts, find new listings that match my profile since the last run, and apply to the best matches. Skip any I already applied to." },
-  { name: "Inbox check", kind: "daily", at: "08:30",
-    prompt: "Open my email in the browser, read what arrived since yesterday, and report in one line how many need a reply and from whom." },
-  { name: "Watch a page", kind: "manual",
-    prompt: "Open the page I name here, read it, and report what changed since the last run: " },
+interface Idea {
+  icon: string;
+  name: string;
+  blurb: string;
+  prompt: string;
+  kind: Kind;
+  at?: string;
+  tools?: string[];
+}
+
+/** Starting points. Each fills the editor; the user adjusts the wording, schedule and tools. */
+const IDEAS: Idea[] = [
+  { icon: "💼", name: "Morning job sweep", blurb: "Find new matching listings and apply to the best ones.", kind: "weekdays", at: "09:00", tools: ["browser", "files"],
+    prompt: "Open my saved job searches and job alerts, find listings that match my profile and are new since the last run, and apply to the best matches. Skip any I already applied to." },
+  { icon: "📬", name: "Inbox triage", blurb: "Read what arrived overnight and tell me what needs a reply.", kind: "daily", at: "08:30", tools: ["browser"],
+    prompt: "Open my email in the browser, read what arrived since yesterday, and report how many messages need a reply and from whom. Do not send or delete anything." },
+  { icon: "📰", name: "Morning brief", blurb: "Five headlines that matter to me, saved as a note.", kind: "weekdays", at: "07:30", tools: ["browser", "files"],
+    prompt: "Open three reputable news sites in my field, pick the five stories that matter most to me, and save a short brief in the file library under briefs/ named with today's date." },
+  { icon: "📈", name: "Price watch", blurb: "Check a product page and report any price change.", kind: "daily", at: "12:00", tools: ["browser"],
+    prompt: "Open the product page I name below, read the current price and stock, and report whether it changed since the last run.\n\nPage: " },
+  { icon: "🔎", name: "Research to a note", blurb: "Read several sources on a topic and save a brief.", kind: "manual", tools: ["browser", "files"],
+    prompt: "Research the topic below across at least five good sources, then save a one-page brief with the key facts and links in the file library under research/.\n\nTopic: " },
+  { icon: "📅", name: "Application tracker", blurb: "Check where my job applications stand.", kind: "daily", at: "18:00", tools: ["browser", "files"],
+    prompt: "List the applications recorded so far, open the status page or email for each one that is still open, and report any that moved (interview, rejection, offer)." },
+  { icon: "🧾", name: "Fill a form for me", blurb: "Complete a web form with my saved details.", kind: "manual", tools: ["browser", "files"],
+    prompt: "Open the form below, fill every field from my profile and memory, attach what it needs from my files, and submit it.\n\nForm: " },
+  { icon: "🗂️", name: "Summarize my open tabs", blurb: "Turn the tabs I left open into one tidy note.", kind: "manual", tools: ["browser", "files"],
+    prompt: "Look at all my open tabs, summarize each in one line, group them by theme, and save the result as a note in the file library under notes/." },
 ];
+
+const ICONS = ["⚡", "💼", "📬", "📰", "📈", "🔎", "📅", "🧾", "🗂️", "🛒", "✈️", "🏠", "🎓", "💡", "🔔", "🧹", "📊", "🤖"];
+
+const STATUS_TEXT: Record<string, string> = { ok: "Done", blocked: "Blocked", failed: "Failed", stopped: "Stopped" };
 
 export function ago(unix: number, now = Date.now()): string {
   const s = Math.max(0, Math.round((now - unix * 1000) / 1000));
@@ -53,227 +96,538 @@ export function ago(unix: number, now = Date.now()): string {
 function when(unix: number): string {
   const d = new Date(unix * 1000);
   const today = new Date();
-  const same = d.toDateString() === today.toDateString();
-  const tomorrow = new Date(today.getTime() + 86400000).toDateString() === d.toDateString();
+  const tomorrow = new Date(today.getTime() + 86400000);
   const time = new Intl.DateTimeFormat(undefined, { hour: "2-digit", minute: "2-digit" }).format(d);
-  if (same) return time;
-  if (tomorrow) return `tomorrow ${time}`;
+  if (d.toDateString() === today.toDateString()) return `today ${time}`;
+  if (d.toDateString() === tomorrow.toDateString()) return `tomorrow ${time}`;
   return `${new Intl.DateTimeFormat(undefined, { weekday: "short" }).format(d)} ${time}`;
 }
 
-const STATUS_TEXT: Record<string, string> = { ok: "Done", blocked: "Blocked", failed: "Failed", stopped: "Stopped" };
+function seconds(ms: number): string {
+  const s = Math.round(ms / 1000);
+  return s < 60 ? `${s} s` : `${Math.floor(s / 60)} min ${s % 60} s`;
+}
+
+function greeting(): string {
+  const h = new Date().getHours();
+  return h < 5 ? "Burning the midnight oil" : h < 12 ? "Good morning" : h < 18 ? "Good afternoon" : "Good evening";
+}
+
+/** Hue for a task's tile, stable per task so a card keeps its colour. */
+function hue(s: string): number {
+  let h = 0;
+  for (const c of s) h = (h * 31 + c.codePointAt(0)!) % 360;
+  return h;
+}
+
+const TOOL_LABEL: Record<string, string> = { browser: "🌐 Browser", files: "📁 Files", desktop: "🖥️ Computer use" };
+
+function toolChips(t: Task): string[] {
+  if (!t.limit) return ["Everything on"];
+  const names = (t.tools ?? []).map((id) => TOOL_LABEL[id] ?? (id.startsWith("mcp:") ? `🔌 ${id.slice(4)}` : id));
+  return names.length ? names : ["No tools"];
+}
+
+type Filter = "all" | "scheduled" | "manual" | "attention";
 
 class PhTasks extends HTMLElement {
   #data: Data = { tasks: [] };
-  #editing: Task | null = null; // the task in the editor; id "" for a new one
-  #confirmDelete = "";
-  readonly #list = el("div", "tk-list");
-  readonly #form = el("form", "tk-form");
+  #filter: Filter = "all";
+  #query = "";
+  #open = ""; // task shown in the details drawer
+  #confirm = ""; // a delete waiting for its second click
+  #editing: Task | null = null;
+  #icon = "⚡";
+
+  readonly #head = el("header", "tp-head");
+  readonly #bar = el("div", "tp-bar");
+  readonly #body = el("div", "tp-body");
+  readonly #drawer = el("aside", "tp-drawer");
+  readonly #dialog = el("dialog", "tp-dialog");
+  readonly #form = el("form", "tp-form");
+
+  // editor fields
   readonly #name = el("input", "field field-wide");
-  readonly #prompt = el("textarea", "tk-text");
-  readonly #kind = el("select", "field");
+  readonly #prompt = el("textarea", "tp-text");
+  readonly #extra = el("textarea", "tp-text tp-text-sm");
+  readonly #kind = el("div", "tp-seg");
   readonly #every = el("input", "field");
   readonly #unit = el("select", "field");
   readonly #at = el("input", "field");
+  readonly #all = el("input");
+  readonly #picks = el("div", "tp-picks");
+  readonly #notify = el("input");
+  readonly #icons = el("div", "tp-icons");
+  readonly #ideas = el("div", "tp-ideas");
   readonly #err = el("p", "msg");
-  readonly #newBtn = el("button", "btn btn-primary btn-sm", "New task");
+  #kindValue: Kind = "manual";
 
   connectedCallback(): void {
     if (this.childElementCount > 0) return;
-    const head = el("div", "activity-head");
-    this.#newBtn.type = "button";
-    head.append(el("h2", undefined, "Tasks"), this.#newBtn);
-
-    this.#name.placeholder = "Name";
-    this.#name.setAttribute("aria-label", "Task name");
-    this.#name.maxLength = 60;
-    this.#prompt.placeholder = "What should the agent do? Say where to go, what to do and what counts as finished. It will not ask questions while it runs.";
-    this.#prompt.setAttribute("aria-label", "Instructions");
-    this.#prompt.rows = 6;
-    for (const [v, l] of [["manual", "Only when I press Run"], ["interval", "Repeat every…"], ["daily", "Every day at…"], ["weekdays", "Weekdays at…"]] as const) {
-      const o = el("option", undefined, l);
-      o.value = v;
-      this.#kind.append(o);
-    }
-    this.#kind.setAttribute("aria-label", "When");
-    this.#every.type = "number";
-    this.#every.min = "1";
-    this.#every.value = "1";
-    this.#every.setAttribute("aria-label", "Interval");
-    for (const [v, l] of [["60", "hours"], ["1", "minutes"]] as const) {
-      const o = el("option", undefined, l);
-      o.value = v;
-      this.#unit.append(o);
-    }
-    this.#unit.setAttribute("aria-label", "Interval unit");
-    this.#at.type = "time";
-    this.#at.value = "09:00";
-    this.#at.setAttribute("aria-label", "Time of day");
-    this.#err.setAttribute("aria-live", "polite");
-    const save = el("button", "btn btn-primary btn-sm", "Save");
-    save.type = "submit";
-    const cancel = el("button", "btn btn-quiet btn-sm", "Cancel");
-    cancel.type = "button";
-    const when_ = el("div", "tk-when");
-    when_.append(this.#kind, this.#every, this.#unit, this.#at);
-    const actions = el("div", "tk-actions");
-    actions.append(save, cancel);
-    this.#form.append(this.#name, this.#prompt, when_, this.#err, actions);
-    this.#form.hidden = true;
-
-    this.append(head, this.#list, this.#form);
-
-    this.#kind.addEventListener("change", () => this.#syncWhen(), { passive: true });
-    this.#newBtn.addEventListener("click", () => this.#open({ id: "", name: "", prompt: "", kind: "manual", enabled: false, schedule: "" }), { passive: true });
-    cancel.addEventListener("click", () => this.#close(), { passive: true });
-    this.#form.addEventListener("submit", (e) => { e.preventDefault(); this.#save(); });
-    this.#list.addEventListener("click", (e) => this.#click(e), { passive: true });
+    this.#buildEditor();
+    this.#drawer.hidden = true;
+    this.append(this.#head, this.#bar, this.#body, this.#drawer, this.#dialog);
+    this.#body.addEventListener("click", (e) => this.#click(e), { passive: true });
+    this.#head.addEventListener("click", (e) => this.#click(e), { passive: true });
+    this.#drawer.addEventListener("click", (e) => this.#click(e), { passive: true });
+    this.#dialog.addEventListener("click", (e) => this.#click(e), { passive: true });
+    this.#dialog.addEventListener("close", () => { this.#editing = null; });
+    this.addEventListener("keydown", (e) => { if (e.key === "Escape" && !this.#drawer.hidden && !this.#dialog.open) this.#closeDrawer(); });
     this.#render();
   }
 
   set data(d: Data) {
-    this.#data = { tasks: Array.isArray(d?.tasks) ? d.tasks : [], running: d?.running, waiting: d?.waiting };
+    this.#data = { tasks: Array.isArray(d?.tasks) ? d.tasks : [], servers: d?.servers ?? [], desktop: d?.desktop, running: d?.running, waiting: d?.waiting };
     this.#render();
   }
 
   set result(r: Outcome) {
     if (!this.#editing) return;
     if (r.error) { this.#err.textContent = r.error; return; }
-    this.#close();
+    this.#dialog.close();
   }
 
-  #syncWhen(): void {
-    const k = this.#kind.value;
-    this.#every.hidden = this.#unit.hidden = k !== "interval";
-    this.#at.hidden = k !== "daily" && k !== "weekdays";
+  // ── Editor ───────────────────────────────────────────────────────────────
+
+  #buildEditor(): void {
+    const section = (n: string, title: string, hint: string, ...kids: HTMLElement[]): HTMLElement => {
+      const s = el("section", "tp-sec");
+      const h = el("div", "tp-sec-head");
+      h.append(el("span", "tp-num", n), el("h3", undefined, title), el("p", undefined, hint));
+      s.append(h, ...kids);
+      return s;
+    };
+
+    this.#name.placeholder = "Give it a name";
+    this.#name.maxLength = 60;
+    this.#name.setAttribute("aria-label", "Task name");
+    this.#prompt.placeholder = "What should the agent do? Say where to go, what to do and what counts as finished. It will not ask questions while it runs.";
+    this.#prompt.setAttribute("aria-label", "Instructions");
+    this.#prompt.rows = 6;
+    this.#extra.placeholder = "Rules, preferences, things to avoid, how to word results…";
+    this.#extra.setAttribute("aria-label", "Additional instructions");
+    this.#extra.rows = 3;
+    const extra = el("details", "tp-more");
+    extra.append(el("summary", undefined, "Add extra instructions (optional)"), this.#extra);
+
+    for (const ic of ICONS) {
+      const b = el("button", "tp-icon", ic);
+      b.type = "button";
+      b.dataset["op"] = "icon";
+      b.dataset["id"] = ic;
+      b.setAttribute("aria-label", `Icon ${ic}`);
+      this.#icons.append(b);
+    }
+    this.#ideas.append(el("span", "tp-ideas-label", "Start from an idea"));
+    IDEAS.forEach((idea, i) => {
+      const b = el("button", "tp-chip", `${idea.icon} ${idea.name}`);
+      b.type = "button";
+      b.dataset["op"] = "idea";
+      b.dataset["id"] = String(i);
+      this.#ideas.append(b);
+    });
+
+    const kinds: [Kind, string][] = [["manual", "On demand"], ["interval", "Repeat"], ["daily", "Daily"], ["weekdays", "Weekdays"]];
+    this.#kind.setAttribute("role", "radiogroup");
+    this.#kind.setAttribute("aria-label", "When");
+    for (const [v, l] of kinds) {
+      const b = el("button", "tp-seg-btn", l);
+      b.type = "button";
+      b.setAttribute("role", "radio");
+      b.dataset["op"] = "kind";
+      b.dataset["id"] = v;
+      this.#kind.append(b);
+    }
+    this.#every.type = "number";
+    this.#every.min = "1";
+    this.#every.setAttribute("aria-label", "Repeat every");
+    for (const [v, l] of [["60", "hours"], ["1", "minutes"]] as const) {
+      const o = el("option", undefined, l);
+      o.value = v;
+      this.#unit.append(o);
+    }
+    this.#unit.setAttribute("aria-label", "Unit");
+    this.#at.type = "time";
+    this.#at.setAttribute("aria-label", "Time of day");
+    const whenRow = el("div", "tp-when");
+    whenRow.append(el("span", "tp-when-every", "every"), this.#every, this.#unit, el("span", "tp-when-at", "at"), this.#at);
+
+    this.#all.type = "checkbox";
+    this.#all.id = "tp-all";
+    const allLabel = el("label", "tp-check");
+    allLabel.append(this.#all, el("span", undefined, "Everything I have switched on (recommended)"));
+    this.#all.addEventListener("change", () => { this.#picks.hidden = this.#all.checked; }, { passive: true });
+
+    this.#notify.type = "checkbox";
+    const notifyLabel = el("label", "tp-check");
+    notifyLabel.append(this.#notify, el("span", undefined, "Flash the taskbar when a run finishes"));
+
+    const save = el("button", "btn btn-primary", "Save");
+    save.type = "submit";
+    const saveRun = el("button", "btn", "Save and run");
+    saveRun.type = "button";
+    saveRun.dataset["op"] = "save-run";
+    const cancel = el("button", "btn btn-quiet", "Cancel");
+    cancel.type = "button";
+    cancel.dataset["op"] = "cancel";
+    const foot = el("div", "tp-foot");
+    foot.append(this.#err, cancel, saveRun, save);
+
+    const who = el("div", "tp-who");
+    who.append(this.#name);
+    this.#form.append(
+      this.#ideas,
+      section("1", "What should it do?", "Plain words are enough.", this.#icons, who, this.#prompt, extra),
+      section("2", "When?", "Run it yourself, or let it run by itself.", this.#kind, whenRow),
+      section("3", "Which tools may it use?", "Each run gets only what you pick.", allLabel, this.#picks),
+      section("4", "Finishing", "Every run ends with one line and is kept as its own session.", notifyLabel),
+      foot,
+    );
+    this.#form.addEventListener("submit", (e) => { e.preventDefault(); this.#save(false); });
+    this.#dialog.append(this.#form);
   }
 
-  #open(t: Task): void {
+  #openEditor(t: Task): void {
     this.#editing = t;
+    this.#icon = t.icon || "⚡";
     this.#name.value = t.name;
     this.#prompt.value = t.prompt;
-    this.#kind.value = t.kind;
+    this.#extra.value = t.extra ?? "";
+    (this.#extra.parentElement as HTMLDetailsElement).open = !!t.extra;
+    this.#setKind(t.kind);
     const mins = t.every ?? 60;
     const hours = mins % 60 === 0;
     this.#unit.value = hours ? "60" : "1";
     this.#every.value = String(hours ? mins / 60 : mins);
     this.#at.value = t.at || "09:00";
+    this.#all.checked = !t.limit;
+    this.#fillPicks(new Set(t.tools ?? ["browser", "files"]));
+    this.#picks.hidden = this.#all.checked;
+    this.#notify.checked = t.notify ?? true;
+    this.#ideas.hidden = t.id !== "";
     this.#err.textContent = "";
-    this.#syncWhen();
-    this.#form.hidden = false;
-    this.#list.hidden = true;
-    this.#newBtn.hidden = true;
+    this.#markIcons();
+    this.#dialog.showModal();
     (t.prompt ? this.#prompt : this.#name).focus();
   }
 
-  #close(): void {
-    this.#editing = null;
-    this.#form.hidden = true;
-    this.#list.hidden = false;
-    this.#newBtn.hidden = false;
-    this.#render();
+  #fillPicks(on: Set<string>): void {
+    this.#picks.replaceChildren();
+    const row = (id: string, label: string, note = "", disabled = false): void => {
+      const l = el("label", "tp-check");
+      const c = el("input");
+      c.type = "checkbox";
+      c.value = id;
+      c.checked = on.has(id) && !disabled;
+      c.disabled = disabled;
+      l.append(c, el("span", undefined, label));
+      if (note) l.append(el("em", undefined, note));
+      this.#picks.append(l);
+    };
+    row("browser", "🌐 Browser: open pages, click, fill forms");
+    row("files", "📁 Files: read and save in the library");
+    row("desktop", "🖥️ Computer use: control other apps", this.#data.desktop ? "" : "switch it on in Settings", !this.#data.desktop);
+    for (const s of this.#data.servers ?? []) row(`mcp:${s}`, `🔌 ${s}`);
+    if ((this.#data.servers ?? []).length === 0) this.#picks.append(el("p", "tp-note", "No MCP servers are switched on. Add some under Settings → Tools."));
   }
 
-  #save(): void {
-    const t = this.#editing;
-    if (!t) return;
-    if (!this.#prompt.value.trim()) { this.#err.textContent = "Say what the task should do."; return; }
-    const kind = this.#kind.value;
-    const every = kind === "interval" ? String(Math.round(Number(this.#every.value) * Number(this.#unit.value))) : "0";
-    this.#err.textContent = "";
-    send("k", "save", t.id, this.#name.value, this.#prompt.value, kind, every, kind === "daily" || kind === "weekdays" ? this.#at.value : "");
+  #setKind(k: Kind): void {
+    this.#kindValue = k;
+    this.#kind.querySelectorAll<HTMLElement>(".tp-seg-btn").forEach((b) => b.setAttribute("aria-checked", String(b.dataset["id"] === k)));
+    this.#every.hidden = this.#unit.hidden = k !== "interval";
+    this.#at.hidden = k !== "daily" && k !== "weekdays";
+    this.#form.querySelector<HTMLElement>(".tp-when-every")!.hidden = k !== "interval";
+    this.#form.querySelector<HTMLElement>(".tp-when-at")!.hidden = this.#at.hidden;
+    this.#form.querySelector<HTMLElement>(".tp-when")!.hidden = k === "manual";
   }
+
+  #markIcons(): void {
+    this.#icons.querySelectorAll<HTMLElement>(".tp-icon").forEach((b) => b.setAttribute("aria-pressed", String(b.dataset["id"] === this.#icon)));
+  }
+
+  #save(run: boolean): void {
+    const base = this.#editing;
+    if (!base) return;
+    if (!this.#prompt.value.trim()) { this.#err.textContent = "Say what the task should do."; this.#prompt.focus(); return; }
+    const k = this.#kindValue;
+    const tools = [...this.#picks.querySelectorAll<HTMLInputElement>("input:checked")].map((c) => c.value);
+    const task: Partial<Task> = {
+      id: base.id,
+      name: this.#name.value,
+      prompt: this.#prompt.value,
+      extra: this.#extra.value,
+      icon: this.#icon,
+      kind: k,
+      every: k === "interval" ? Math.round(Number(this.#every.value) * Number(this.#unit.value)) : 0,
+      at: k === "daily" || k === "weekdays" ? this.#at.value : "",
+      limit: !this.#all.checked,
+      tools: this.#all.checked ? [] : tools,
+      notify: this.#notify.checked,
+    };
+    this.#err.textContent = "";
+    if (!this.#all.checked && tools.length === 0 && !window.confirm("No tools are selected, so the agent can only think and answer. Save anyway?")) return;
+    send("k", "save", JSON.stringify(task), run ? "1" : "0");
+  }
+
+  // ── Actions ──────────────────────────────────────────────────────────────
 
   #click(e: Event): void {
     const b = (e.target as Element | null)?.closest<HTMLElement>("[data-op]");
     if (!b) return;
     const id = b.dataset["id"] ?? "";
     const task = this.#data.tasks.find((t) => t.id === id);
+    const blank: Task = { id: "", name: "", prompt: "", kind: "manual", enabled: false };
     switch (b.dataset["op"]) {
-      case "run":
-        send("k", "run", id);
-        document.querySelector<HTMLElement>('[data-pane-btn="chat"]')?.click(); // watch it work
+      case "new": this.#openEditor(blank); break;
+      case "surprise": {
+        const i = IDEAS[Math.floor(Math.random() * IDEAS.length)]!;
+        this.#openEditor({ ...blank, name: i.name, prompt: i.prompt, icon: i.icon, kind: i.kind, at: i.at, limit: !!i.tools, tools: i.tools ?? [] });
         break;
+      }
+      case "idea": {
+        const i = IDEAS[Number(id)];
+        if (!i) break;
+        this.#name.value = i.name;
+        this.#prompt.value = i.prompt;
+        this.#icon = i.icon;
+        this.#markIcons();
+        this.#setKind(i.kind);
+        if (i.at) this.#at.value = i.at;
+        this.#all.checked = !i.tools;
+        this.#fillPicks(new Set(i.tools ?? []));
+        this.#picks.hidden = this.#all.checked;
+        this.#prompt.focus();
+        break;
+      }
+      case "icon": this.#icon = id; this.#markIcons(); break;
+      case "kind": this.#setKind(id as Kind); break;
+      case "cancel": this.#dialog.close(); break;
+      case "save-run": this.#save(true); break;
+      case "open": this.#open = id; this.#renderDrawer(); break;
+      case "close": this.#closeDrawer(); break;
+      case "filter": this.#filter = id as Filter; this.#render(); break;
+      case "run": send("k", "run", id); break;
       case "stop": send("k", "stop"); break;
-      case "watch": document.querySelector<HTMLElement>('[data-pane-btn="chat"]')?.click(); break;
       case "toggle": if (task) send("k", "enable", id, task.enabled ? "0" : "1"); break;
-      case "edit": if (task) this.#open(task); break;
+      case "edit": if (task) this.#openEditor(task); break;
+      case "duplicate": send("k", "duplicate", id); break;
+      case "session": send("k", "session", id); break;
       case "delete":
-        if (this.#confirmDelete !== id) {
-          this.#confirmDelete = id;
-          this.#render();
-          setTimeout(() => { if (this.#confirmDelete === id) { this.#confirmDelete = ""; this.#render(); } }, 4000);
+        if (this.#confirm !== id) {
+          this.#confirm = id;
+          this.#renderDrawer();
+          setTimeout(() => { if (this.#confirm === id) { this.#confirm = ""; this.#renderDrawer(); } }, 4000);
         } else {
-          this.#confirmDelete = "";
+          this.#confirm = "";
+          this.#closeDrawer();
           send("k", "delete", id);
         }
         break;
-      case "starter": {
-        const s = STARTERS[Number(id)];
-        if (s) this.#open({ id: "", name: s.name, prompt: s.prompt, kind: s.kind, at: s.at, enabled: false, schedule: "" });
-        break;
-      }
     }
+  }
+
+  #closeDrawer(): void {
+    this.#open = "";
+    this.#drawer.hidden = true;
+    this.dataset["drawer"] = "off";
+  }
+
+  // ── Drawing ──────────────────────────────────────────────────────────────
+
+  #button(op: string, label: string, id: string, cls = "btn btn-quiet btn-sm"): HTMLButtonElement {
+    const b = el("button", cls, label);
+    b.type = "button";
+    b.dataset["op"] = op;
+    b.dataset["id"] = id;
+    return b;
   }
 
   #render(): void {
-    if (!this.isConnected && this.childElementCount === 0) return;
+    if (this.childElementCount === 0) return;
     const { tasks, running, waiting } = this.#data;
-    this.#list.replaceChildren();
-    if (tasks.length === 0) {
-      const empty = el("div", "tk-empty");
-      empty.append(
-        el("h3", undefined, "Hand off work that repeats"),
-        el("p", undefined, "A task is an instruction the agent carries out on its own, on a schedule or when you press Run. It decides, acts and reports in one line."),
-      );
-      const row = el("div", "tk-starters");
-      STARTERS.forEach((s, i) => {
-        const b = el("button", "btn btn-sm", s.name);
-        b.type = "button";
-        b.dataset["op"] = "starter";
-        b.dataset["id"] = String(i);
-        row.append(b);
-      });
-      empty.append(row, el("p", "tk-hint", "You can also tell the chat: \"every weekday at 9 do this\"."));
-      this.#list.append(empty);
-      return;
+    this.#renderHead();
+    this.#renderBar();
+    this.#body.replaceChildren();
+    if (tasks.length === 0) { this.#body.append(this.#gallery()); this.#renderDrawer(); return; }
+    const q = this.#query.trim().toLowerCase();
+    const shown = tasks.filter((t) => {
+      if (q && !`${t.name} ${t.prompt}`.toLowerCase().includes(q)) return false;
+      switch (this.#filter) {
+        case "scheduled": return t.kind !== "manual";
+        case "manual": return t.kind === "manual";
+        case "attention": return t.lastStatus === "blocked" || t.lastStatus === "failed";
+        default: return true;
+      }
+    });
+    if (shown.length === 0) {
+      this.#body.append(el("p", "tp-none", "Nothing here. Try another filter."));
+    } else {
+      const grid = el("div", "tp-grid");
+      for (const t of shown) grid.append(this.#card(t, running === t.id, waiting === t.id));
+      this.#body.append(grid);
     }
-    for (const t of tasks) this.#list.append(this.#card(t, running === t.id, waiting === t.id));
+    this.#renderDrawer();
+  }
+
+  #renderHead(): void {
+    const { tasks, running } = this.#data;
+    this.#head.replaceChildren();
+    const live = tasks.filter((t) => t.enabled && t.kind !== "manual").length;
+    const runs = tasks.reduce((n, t) => n + (t.runs ?? 0), 0);
+    const hist = tasks.flatMap((t) => t.history ?? []);
+    const rate = hist.length ? Math.round((hist.filter((r) => r.status === "ok").length / hist.length) * 100) : 0;
+    const next = tasks.map((t) => t.next ?? 0).filter((n) => n > 0).sort((a, b) => a - b)[0];
+
+    const title = el("div", "tp-title");
+    title.append(
+      el("h1", undefined, "Tasks"),
+      el("p", undefined, tasks.length === 0
+        ? `${greeting()}. Hand the agent a job once and it keeps doing it.`
+        : running ? "Working on a task right now…" : `${greeting()}. ${live} on a schedule${next ? `, next ${when(next)}` : ""}.`),
+    );
+    const stats = el("div", "tp-stats");
+    if (tasks.length > 0) {
+      for (const [n, l] of [[String(tasks.length), "tasks"], [String(runs), "runs"], [hist.length ? `${rate}%` : "–", "went well"]] as const) {
+        const s = el("div", "tp-stat");
+        s.append(el("strong", undefined, n), el("span", undefined, l));
+        stats.append(s);
+      }
+    }
+    const acts = el("div", "tp-acts");
+    acts.append(this.#button("surprise", "🎲 Surprise me", "", "btn"), this.#button("new", "New task", "", "btn btn-primary"));
+    this.#head.append(title, stats, acts);
+  }
+
+  #renderBar(): void {
+    this.#bar.hidden = this.#data.tasks.length === 0;
+    if (this.#bar.childElementCount === 0) {
+      const pills = el("div", "tp-pills");
+      pills.setAttribute("role", "group");
+      for (const [v, l] of [["all", "All"], ["scheduled", "Scheduled"], ["manual", "On demand"], ["attention", "Needs attention"]] as const) {
+        pills.append(this.#button("filter", l, v, "tp-pill"));
+      }
+      const search = el("input", "field");
+      search.type = "search";
+      search.placeholder = "Search tasks";
+      search.setAttribute("aria-label", "Search tasks");
+      search.addEventListener("input", () => { this.#query = search.value; this.#render(); }, { passive: true });
+      this.#bar.append(pills, search);
+    }
+    this.#bar.querySelectorAll<HTMLElement>(".tp-pill").forEach((p) => p.setAttribute("aria-pressed", String(p.dataset["id"] === this.#filter)));
+  }
+
+  #gallery(): HTMLElement {
+    const g = el("div", "tp-gallery");
+    g.append(el("h2", undefined, "Start with an idea"), el("p", undefined, "Pick one, tweak the words, choose when it runs. You can also tell the chat: \"every weekday at 9 do this\"."));
+    const grid = el("div", "tp-grid");
+    IDEAS.forEach((i, n) => {
+      const c = el("button", "tp-idea");
+      c.type = "button";
+      c.dataset["op"] = "gallery";
+      c.addEventListener("click", () => this.#openEditor({ id: "", name: i.name, prompt: i.prompt, icon: i.icon, kind: i.kind, at: i.at, enabled: false, limit: !!i.tools, tools: i.tools ?? [] }), { passive: true });
+      const tile = el("span", "tp-tile", i.icon);
+      tile.style.setProperty("--h", String(hue(i.name)));
+      const copy = el("span", "tp-idea-copy");
+      copy.append(el("strong", undefined, i.name), el("span", undefined, i.blurb), el("em", undefined, i.kind === "manual" ? "On demand" : i.kind === "daily" ? `Daily ${i.at}` : `Weekdays ${i.at}`));
+      c.append(tile, copy);
+      c.style.animationDelay = `${n * 40}ms`;
+      grid.append(c);
+    });
+    g.append(grid);
+    return g;
   }
 
   #card(t: Task, running: boolean, waiting: boolean): HTMLElement {
-    const card = el("article", "tk-card");
+    const card = el("article", "tp-card");
     card.dataset["state"] = running ? "running" : waiting ? "waiting" : (t.lastStatus ?? "new");
-    const top = el("div", "tk-top");
-    top.append(el("span", "tk-dot"), el("h3", "tk-name", t.name));
-    const sched = el("p", "tk-sched");
-    sched.textContent = t.kind === "manual"
-      ? "Manual"
-      : `${t.schedule}${t.enabled ? (t.next ? ` · next ${when(t.next)}` : "") : " · off"}`;
-    card.append(top, sched);
+    card.dataset["op"] = "open";
+    card.dataset["id"] = t.id;
+    card.tabIndex = 0;
+    card.addEventListener("keydown", (e) => { if (e.key === "Enter" && e.target === card) card.click(); });
 
-    const line = el("p", "tk-result");
-    if (running) line.textContent = "Running now…";
-    else if (waiting) line.textContent = "Waiting for the agent to be free…";
-    else if (t.lastRun) line.textContent = `${STATUS_TEXT[t.lastStatus ?? "ok"] ?? ""} ${ago(t.lastRun)}${t.lastResult ? ": " + t.lastResult : ""}`;
-    else line.textContent = "Not run yet.";
-    card.append(line);
+    const tile = el("span", "tp-tile", t.icon || "⚡");
+    tile.style.setProperty("--h", String(hue(t.id || t.name)));
+    const top = el("div", "tp-card-top");
+    const names = el("div", "tp-card-names");
+    names.append(el("h3", undefined, t.name), el("p", "tp-sched", t.kind === "manual" ? "On demand" : `${t.schedule ?? ""}${t.enabled ? (t.next ? ` · next ${when(t.next)}` : "") : " · paused"}`));
+    top.append(tile, names, el("span", "tp-dot"));
 
-    const acts = el("div", "tk-actions");
-    const btn = (op: string, label: string, cls = "btn btn-quiet btn-sm"): HTMLButtonElement => {
-      const b = el("button", cls, label);
-      b.type = "button";
-      b.dataset["op"] = op;
-      b.dataset["id"] = t.id;
-      return b;
-    };
-    if (running) acts.append(btn("stop", "Stop", "btn btn-sm"), btn("watch", "Watch"));
-    else acts.append(btn("run", waiting ? "Waiting" : "Run", "btn btn-primary btn-sm"));
-    if (t.kind !== "manual" && !running) acts.append(btn("toggle", t.enabled ? "Turn off" : "Turn on"));
-    if (!running) acts.append(btn("edit", "Edit"), btn("delete", this.#confirmDelete === t.id ? "Click again to delete" : "Delete"));
-    if (waiting) (acts.firstElementChild as HTMLButtonElement).disabled = true;
-    card.append(acts);
+    const result = el("p", "tp-result");
+    if (running) result.textContent = "Running now…";
+    else if (waiting) result.textContent = "Waiting for the agent to be free…";
+    else if (t.lastRun) result.textContent = `${STATUS_TEXT[t.lastStatus ?? "ok"] ?? ""} ${ago(t.lastRun)}${t.lastResult ? ": " + t.lastResult : ""}`;
+    else result.textContent = "Not run yet.";
+
+    const chips = el("div", "tp-chips");
+    for (const c of toolChips(t).slice(0, 3)) chips.append(el("span", "tp-tag", c));
+
+    const foot = el("div", "tp-card-foot");
+    if (running) foot.append(this.#button("stop", "Stop", t.id, "btn btn-sm"));
+    else {
+      const run = this.#button("run", waiting ? "Waiting…" : "▶ Run", t.id, "btn btn-primary btn-sm");
+      run.disabled = waiting;
+      foot.append(run);
+    }
+    foot.append(chips);
+    card.append(top, result, foot);
     return card;
+  }
+
+  #renderDrawer(): void {
+    const t = this.#data.tasks.find((x) => x.id === this.#open);
+    if (!t) { this.#closeDrawer(); return; }
+    this.#drawer.hidden = false;
+    this.dataset["drawer"] = "on";
+    const running = this.#data.running === t.id;
+    const waiting = this.#data.waiting === t.id;
+    const d = this.#drawer;
+    d.replaceChildren();
+
+    const head = el("div", "tp-d-head");
+    const tile = el("span", "tp-tile", t.icon || "⚡");
+    tile.style.setProperty("--h", String(hue(t.id || t.name)));
+    const names = el("div", "tp-card-names");
+    names.append(el("h2", undefined, t.name), el("p", "tp-sched", t.kind === "manual" ? "On demand" : `${t.schedule ?? ""}${t.enabled ? (t.next ? ` · next ${when(t.next)}` : "") : " · paused"}`));
+    const close = this.#button("close", "✕", "", "btn btn-quiet btn-sm");
+    close.setAttribute("aria-label", "Close details");
+    head.append(tile, names, close);
+
+    const acts = el("div", "tp-d-acts");
+    if (running) acts.append(this.#button("stop", "Stop", t.id, "btn"));
+    else {
+      const run = this.#button("run", waiting ? "Waiting…" : "▶ Run now", t.id, "btn btn-primary");
+      run.disabled = waiting;
+      acts.append(run);
+    }
+    if (t.kind !== "manual") acts.append(this.#button("toggle", t.enabled ? "Pause" : "Resume", t.id, "btn"));
+    if (!running) acts.append(this.#button("edit", "Edit", t.id, "btn"), this.#button("duplicate", "Duplicate", t.id, "btn"),
+      this.#button("delete", this.#confirm === t.id ? "Click again to delete" : "Delete", t.id, "btn btn-quiet"));
+
+    const sec = (title: string, ...kids: (HTMLElement | string)[]): HTMLElement => {
+      const s = el("section", "tp-d-sec");
+      s.append(el("h4", undefined, title));
+      for (const k of kids) s.append(typeof k === "string" ? el("p", "tp-pre", k) : k);
+      return s;
+    };
+    const chips = el("div", "tp-chips");
+    for (const c of toolChips(t)) chips.append(el("span", "tp-tag", c));
+
+    d.append(head, acts, sec("Instructions", t.prompt));
+    if (t.extra) d.append(sec("Extra instructions", t.extra));
+    d.append(sec("Tools", chips));
+
+    const hist = el("ol", "tp-hist");
+    for (const r of t.history ?? []) {
+      const li = el("li", "tp-run");
+      li.dataset["status"] = r.status;
+      const line = el("div", "tp-run-line");
+      line.append(el("span", "tp-dot"), el("strong", undefined, STATUS_TEXT[r.status] ?? r.status), el("span", "tp-when-ago", `${ago(r.at)}${r.ms ? ` · ${seconds(r.ms)}` : ""}`));
+      if (r.chat) line.append(this.#button("session", "Open session", r.chat, "btn btn-quiet btn-sm"));
+      li.append(line);
+      if (r.result) li.append(el("p", undefined, r.result));
+      hist.append(li);
+    }
+    d.append(sec(`History${t.runs ? ` (${t.runs} run${t.runs === 1 ? "" : "s"})` : ""}`, (t.history ?? []).length ? hist : "No runs yet. Press Run now to try it."));
   }
 }
 
