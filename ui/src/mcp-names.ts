@@ -39,5 +39,6 @@ export function suggestName(kind: Kind, url: string, commandLine: string): strin
   const runner = RUNNERS.has(exe.toLowerCase());
   const target = runner ? words.slice(1).find((w) => !w.startsWith("-") && !RUNNERS.has(w.toLowerCase())) ?? "" : exe;
   const name = base(target).replace(/@[^@]*$/, "").replace(/\.(m?js|ts|py)$/i, "");
-  return normalizeName(name.replace(/^(server|mcp)[-_]/i, "").replace(/[-_](server|mcp)$/i, ""));
+  // "mcp-server-fetch" and "fetch-mcp-server" are both just "fetch".
+  return normalizeName(name.replace(/^((server|mcp)[-_])+/i, "").replace(/([-_](server|mcp))+$/i, ""));
 }

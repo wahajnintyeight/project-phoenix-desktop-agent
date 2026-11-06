@@ -198,6 +198,11 @@ func onMessage(message string) {
 		if len(f) > 1 {
 			logf("msg g %s", f[1])
 		}
+	case "k":
+		// Task instructions are private: log the operation only.
+		if len(f) > 1 {
+			logf("msg k %s", f[1])
+		}
 	case "f":
 		// File uploads carry file contents: log the operation only.
 		if len(f) > 1 {
@@ -232,6 +237,8 @@ func onMessage(message string) {
 		handleFilesOp(f)
 	case "g": // chat with the agent
 		handleChatOp(f)
+	case "k": // saved tasks
+		handleTaskOp(f)
 	case "m": // menu popover state
 		if len(f) > 1 {
 			switch f[1] {
@@ -274,6 +281,7 @@ func uiReady() {
 		initAgentPersistence()
 		initProviders()
 		startDevScript()
+		startTaskScheduler()
 		startAppInit() // library, approvals, saved MCP servers, desktop thread: all in the background
 	}
 	ready = true
@@ -292,6 +300,7 @@ func uiReady() {
 	pushHistory()
 	pushSavedChats()
 	pushAgentActivity()
+	go func() { runLater(pushTasks) }()
 	if restoreChat {
 		restoreLatestSavedChat()
 	}

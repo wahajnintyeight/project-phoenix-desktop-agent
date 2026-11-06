@@ -753,7 +753,33 @@
   .agent[data-pane="approvals"] .empty[data-pane="approvals"] { display: flex; }
   ph-chat { display: none; }
   .agent[data-pane="chat"] ph-chat { @apply flex min-h-0 flex-1 flex-col; }
-  ph-activity { display: none; }
+  ph-activity, ph-tasks { display: none; }
+  .agent[data-pane="tasks"] ph-tasks { @apply flex min-h-0 flex-1 flex-col overflow-hidden; }
+  /* ── tasks ───────────────────────────────────────────────────────── */
+  .tk-list { @apply scroll flex min-h-0 flex-1 flex-col gap-2 overflow-y-auto p-3; }
+  .tk-list[hidden], .tk-form[hidden] { display: none; }
+  .tk-card { @apply flex flex-col gap-1.5 rounded-xl border p-3; background: var(--card); border-color: var(--card-edge); }
+  .tk-top { @apply flex items-center gap-2; }
+  .tk-name { @apply min-w-0 flex-1 truncate text-sm font-semibold; }
+  .tk-dot { @apply size-2 shrink-0 rounded-full bg-fg-subtle; }
+  .tk-card[data-state="ok"] .tk-dot { @apply bg-ok; }
+  .tk-card[data-state="failed"] .tk-dot, .tk-card[data-state="blocked"] .tk-dot { @apply bg-danger; }
+  .tk-card[data-state="running"] .tk-dot { @apply bg-accent; animation: tk-pulse 1.2s ease-in-out infinite; }
+  .tk-card[data-state="waiting"] .tk-dot { background: var(--color-warn); }
+  @keyframes tk-pulse { 50% { opacity: 0.3; } }
+  .tk-sched { @apply text-xs text-fg-subtle; }
+  .tk-result { @apply text-sm text-fg-muted; display: -webkit-box; -webkit-line-clamp: 3; -webkit-box-orient: vertical; overflow: hidden; }
+  .tk-actions { @apply mt-1 flex flex-wrap items-center gap-1.5; }
+  .tk-form { @apply scroll flex min-h-0 flex-1 flex-col gap-3 overflow-y-auto p-3; }
+  .tk-text { @apply w-full resize-y rounded-lg border border-line-strong bg-transparent p-2.5 text-sm text-fg; min-height: 7rem; }
+  .tk-when { @apply flex flex-wrap items-center gap-2; }
+  .tk-when [hidden] { display: none; }
+  .tk-when input[type="number"] { width: 4.5rem; }
+  .tk-empty { @apply flex flex-col gap-3 px-2 py-4; }
+  .tk-empty h3 { @apply text-base font-semibold; }
+  .tk-empty p { @apply max-w-[38ch] text-sm text-fg-muted; }
+  .tk-starters { @apply flex flex-col items-start gap-2; }
+  .tk-hint { @apply text-xs; color: var(--color-fg-subtle); }
   .agent[data-pane="activity"] ph-activity { @apply flex min-h-0 flex-1 flex-col overflow-hidden; }
   /* ── persisted activity ──────────────────────────────────────────── */
   .activity-head { @apply flex items-center justify-between gap-2 border-b border-line px-4 py-3; }

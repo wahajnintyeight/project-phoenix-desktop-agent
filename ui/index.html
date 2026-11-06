@@ -298,11 +298,13 @@
     <aside class="agent" id="agent-panel" data-pane="chat" aria-label="Agent panel">
       <div class="agent-tabs" role="tablist" aria-label="Agent panel sections">
         <button class="agent-tab" role="tab" data-pane-btn="chat" aria-selected="true">Chat</button>
+        <button class="agent-tab" role="tab" data-pane-btn="tasks" aria-selected="false">Tasks</button>
         <button class="agent-tab" role="tab" data-pane-btn="activity" aria-selected="false">Activity</button>
       </div>
 
       <div class="agent-body">
         <ph-chat id="chat" role="tabpanel"></ph-chat>
+        <ph-tasks id="tasks" role="tabpanel"></ph-tasks>
         <ph-activity id="agent-activity" data-pane="activity" role="tabpanel"></ph-activity>
       </div>
     </aside>

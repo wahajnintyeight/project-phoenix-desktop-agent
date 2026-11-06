@@ -163,6 +163,7 @@ export class PhMcp extends HTMLElement {
   #selected = "";
   #editing = ""; // the server being edited, "" when adding
   #submittedName = ""; // the name last sent for review, to open its details after saving
+  #lastStaged: string[] = []; // the names on the review screen, for a pasted definition
   #tests = new Map<string, TestResult>();
   #busy = new Set<string>();
   #removing = "";
@@ -235,7 +236,8 @@ export class PhMcp extends HTMLElement {
     this.#data = value;
     if (value.installed) {
       const was = this.#editing;
-      const saved = this.#submittedName;
+      // A pasted definition has no name of its own here; one server means open that one.
+      const saved = this.#submittedName || (this.#lastStaged.length === 1 ? this.#lastStaged[0] ?? "" : "");
       const isNew = (n: string) => !previous.servers.some((s) => s.name === n);
       if (was && saved && saved !== was) { // renamed: the old name's test and state no longer apply
         this.#tests.delete(was);
@@ -267,6 +269,10 @@ export class PhMcp extends HTMLElement {
       this.#view = "list";
     }
     if (this.#removing && !value.servers.some((s) => s.name === this.#removing)) this.#removing = "";
+    // An error belongs to the data push that carried it: show it once, and clear it when the
+    // next push has none, not on every redraw (so it cannot linger into the next form).
+    if (value.error) this.#say(value.error, true);
+    else if (!value.installed && (this.#notice.classList.contains("is-error") || this.#formNotice.classList.contains("is-error"))) this.#say("", false);
     if (this.isConnected) this.#render();
   }
 
@@ -478,10 +484,9 @@ export class PhMcp extends HTMLElement {
   }
 
   #render(): void {
-    const { servers, pending, error } = this.#data;
-    if (error) this.#say(error, true);
-    else if (this.#notice.classList.contains("is-error") || this.#formNotice.classList.contains("is-error")) this.#say("", false);
+    const { servers, pending } = this.#data;
     const staged = pending ?? [];
+    if (staged.length) this.#lastStaged = staged.map((s) => s.name);
     const reviewing = staged.length > 0;
     this.#review.hidden = !reviewing;
     this.#overview.hidden = reviewing || this.#view !== "list";

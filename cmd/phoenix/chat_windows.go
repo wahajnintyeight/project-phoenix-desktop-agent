@@ -151,6 +151,7 @@ func handleChatOp(f []string) {
 			}
 		}
 	case "new":
+		finishTask("stopped", "Stopped before it finished.", 0)
 		wasBusy := chat.busy
 		clearQueue()
 		stopChat()
@@ -173,6 +174,7 @@ func handleChatOp(f []string) {
 			}
 		}
 	case "clear-history":
+		finishTask("stopped", "Stopped before it finished.", 0)
 		clearQueue()
 		if chat.busy {
 			stopChat()
@@ -484,6 +486,7 @@ func startChatRun(ctx context.Context, cancel context.CancelFunc, id provider.ID
 				addAgentActivity("turn", "Agent stopped", "stopped", time.Since(started).Milliseconds())
 				postChat(chatEvent{K: "stopped"})
 				setAgentState("idle", "Agent idle", false)
+				finishTask("stopped", firstText(answer, "Stopped before it finished."), time.Since(started).Milliseconds())
 			case err != nil || res.IsError:
 				msg := ""
 				if err != nil {
@@ -495,12 +498,17 @@ func startChatRun(ctx context.Context, cancel context.CancelFunc, id provider.ID
 				addAgentActivity("turn", "Agent run failed", "failed", time.Since(started).Milliseconds())
 				postChat(chatEvent{K: "error", Text: msg})
 				setAgentState("error", "Agent error", false)
+				finishTask("failed", msg, time.Since(started).Milliseconds())
 			default:
 				chat.history = append(chat.history, provider.Message{Role: "user", Content: text}, provider.Message{Role: "assistant", Content: answer})
 				commitSavedTurn(chatID, userIndex, answer, providerName(id), model)
 				addAgentActivity("turn", "Agent completed", "completed", time.Since(started).Milliseconds())
 				postChat(chatEvent{K: "done", Model: model, Millis: time.Since(started).Milliseconds(), In: usage.InputTokens, Out: usage.OutputTokens, Cost: usage.CostUSD, Ctx: historyTokens(chat.history) + chatSystemTokens})
 				setAgentState("idle", "Agent idle", false)
+				if taskRun.id != "" {
+					status, report := taskOutcome(answer)
+					finishTask(status, report, time.Since(started).Milliseconds())
+				}
 			}
 			// The user is usually in another window while the agent works: flash the taskbar
 			// button when a run that took a while ends (not for Stop, which they just pressed).

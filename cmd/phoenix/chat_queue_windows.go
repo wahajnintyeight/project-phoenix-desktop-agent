@@ -40,6 +40,7 @@ type queuedTurn struct {
 	display string
 	text    string
 	share   bool
+	task    string // id of the saved task this turn runs, if any
 }
 
 type chatQueueItem struct {
@@ -80,6 +81,16 @@ func enqueueTurn(display, text string, share bool) {
 	}
 	chatQueue.next++
 	chatQueue.items = append(chatQueue.items, queuedTurn{id: chatQueue.next, display: display, text: text, share: share})
+	postQueue()
+}
+
+// enqueueTask queues a manual task run behind the turn in progress.
+func enqueueTask(display, text, taskID string) {
+	if len(chatQueue.items) >= chatQueueMax {
+		return
+	}
+	chatQueue.next++
+	chatQueue.items = append(chatQueue.items, queuedTurn{id: chatQueue.next, display: display, text: text, task: taskID})
 	postQueue()
 }
 
@@ -128,6 +139,11 @@ func steerQueued(id int) {
 	}
 	if !chat.busy {
 		postQueue()
+		if m.task != "" {
+			chatQueue.items = append([]queuedTurn{m}, chatQueue.items...)
+			drainQueue()
+			return
+		}
 		sendTurn(m.display, m.text, m.share)
 		return
 	}
@@ -147,6 +163,17 @@ func drainQueue() {
 	chatQueue.items = chatQueue.items[1:]
 	chatQueue.steer = false
 	postQueue()
+	if m.task != "" {
+		if lib, err := openLibrary(); err == nil {
+			if t, ok := lib.Task(m.task); ok {
+				beginTask(t, m.display, m.text)
+				return
+			}
+		}
+		pushTasks() // the task was deleted while it waited
+		drainQueue()
+		return
+	}
 	sendTurn(m.display, m.text, m.share)
 }
 
