@@ -515,6 +515,7 @@ func activateSavedChat(c *savedChat) {
 		chat.history = append(chat.history, provider.Message{Role: m.Role, Content: content})
 	}
 	postChat(chatEvent{K: "restore", Messages: display})
+	pushContext()
 }
 
 func persistSavedChats() {

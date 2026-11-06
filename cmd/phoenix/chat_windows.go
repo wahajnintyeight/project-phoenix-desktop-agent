@@ -166,6 +166,7 @@ func handleChatOp(f []string) {
 		setAgentState("idle", "Agent idle", false)
 		pushSavedChats()
 		postChat(chatEvent{K: "reset"})
+		pushContext()
 	case "restore":
 		if len(f) > 2 && !chat.busy {
 			if c, ok := restoreSavedChat(f[2]); ok {
@@ -187,6 +188,7 @@ func handleChatOp(f []string) {
 		chat.history = nil
 		clearAgentPersistence()
 		postChat(chatEvent{K: "reset"})
+		pushContext()
 	}
 }
 
@@ -516,6 +518,7 @@ func startChatRun(ctx context.Context, cancel context.CancelFunc, id provider.ID
 			if win != nil && !errors.Is(err, context.Canceled) && time.Since(started) > 8*time.Second && !win.IsFocused() {
 				win.Flash(true)
 			}
+			pushContext()
 			go pushMemory() // the agent may have remembered something this run
 			closeFinishedAgentTabs() // pages the agent opened for this run free their memory
 			// Queued messages run next. A failed turn stops the line so one bad message does not

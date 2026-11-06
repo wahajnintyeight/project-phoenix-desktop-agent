@@ -64,6 +64,15 @@ var chatCompactTokens = func() int {
 	return chatCompactAt
 }()
 
+// pushContext tells the meter at the top of the agent panel how much of the window is used.
+func pushContext() {
+	used := 0
+	if len(chat.history) > 0 {
+		used = historyTokens(chat.history) + chatSystemTokens
+	}
+	post("u" + fs + "ctx-meter" + fs + "data" + fs + jsonString(map[string]int{"used": used, "window": chatContextTokens, "compact": chatCompactTokens}))
+}
+
 func estTokens(s string) int { return (len(s) + 3) / 4 }
 
 func historyTokens(h []provider.Message) int {
@@ -225,6 +234,7 @@ func startNewSession() {
 	chat.pendingMessageIndex = -1
 	pushSavedChats()
 	postChat(chatEvent{K: "reset"})
+	pushContext()
 }
 
 const summarySystem = "You write handoff notes. Reply with the note only, in plain text, with no preamble."

@@ -17,6 +17,7 @@ import "./chat";
 import type { PhChat } from "./chat";
 import "./activity";
 import "./tasks";
+import "./context-meter";
 import "./quick-actions";
 import { initPanelResize } from "./panel-resize";
 

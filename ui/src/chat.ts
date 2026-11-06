@@ -226,14 +226,6 @@ const IDEAS: readonly [string, IconName][] = [
   ["Draft a short reply to this", "pen"],
 ];
 
-const CONTEXT_WINDOW = 256_000;
-
-/** "context 87k/256k", shown once a conversation is long enough for the window to matter. */
-function contextLabel(tokens: number | undefined): string {
-  if (!tokens || tokens < CONTEXT_WINDOW / 4) return "";
-  return `context ${Math.round(tokens / 1000)}k/${CONTEXT_WINDOW / 1000}k`;
-}
-
 export class PhChat extends HTMLElement {
   readonly #logWrap = el("div", "chat-log-wrap");
   readonly #log = el("div", "chat-log");
@@ -909,7 +901,7 @@ export class PhChat extends HTMLElement {
           delete c.box.dataset["streaming"];
           // One short line; the model name and exact token counts are in the tooltip.
           const tokens = (ev.in ?? 0) + (ev.out ?? 0);
-          const bits = [ev.ms ? `${(ev.ms / 1000).toFixed(1)} s` : "", tokens ? `${tokens >= 1000 ? `${(tokens / 1000).toFixed(1)}k` : tokens} tokens` : "", ev.cost ? `$${ev.cost.toFixed(3)}` : "", contextLabel(ev.ctx)];
+          const bits = [ev.ms ? `${(ev.ms / 1000).toFixed(1)} s` : "", tokens ? `${tokens >= 1000 ? `${(tokens / 1000).toFixed(1)}k` : tokens} tokens` : "", ev.cost ? `$${ev.cost.toFixed(3)}` : ""]; // the context window has its own meter at the top of the panel
           c.meta.textContent = bits.filter(Boolean).join(" · ");
           c.meta.title = [c.who, ev.out ? `${ev.in ?? 0} in, ${ev.out} out` : ""].filter(Boolean).join(" · ");
           c.showChoices();
