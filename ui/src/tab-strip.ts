@@ -7,7 +7,7 @@ export interface TabInfo {
   id: number;
   title: string;
   url: string;
-  kind: "home" | "web" | "settings" | "files";
+  kind: "home" | "web" | "settings" | "files" | "tasks";
   active: boolean;
   loading: boolean;
 }

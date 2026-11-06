@@ -357,6 +357,10 @@ func (h *Hub) Run(ctx context.Context, id provider.ID, req provider.Request, emi
 	if (provider.IsHTTP(id) || id == provider.Codex || (id == provider.Claude && req.MCPConfig == "")) && (req.UseMCP || len(req.MCPServers) > 0) {
 		var startingNames []string
 		pooled, unavailable := h.resolveEnabledMCP()
+		if req.LimitMCP {
+			pooled = onlyServers(pooled, req.OnlyMCP)
+			unavailable = onlyNames(unavailable, req.OnlyMCP)
+		}
 		if len(pooled)+len(req.MCPServers) > 0 {
 			started := time.Now()
 			runtime, missing, starting, err := h.pool.OpenRun(ctx, pooled, req.MCPServers, runMCPWait)
@@ -441,4 +445,31 @@ func (h *Hub) Run(ctx context.Context, id provider.ID, req provider.Request, emi
 // Test sends a one-word prompt to prove the provider works end to end in its current mode.
 func (h *Hub) Test(ctx context.Context, id provider.ID) (provider.Result, error) {
 	return h.Run(ctx, id, provider.Request{Prompt: "Reply with exactly the word: ok"}, func(provider.Event) {})
+}
+
+// onlyServers keeps the resolved servers whose name is in keep.
+func onlyServers(in []mcp.Resolved, keep []string) []mcp.Resolved {
+	var out []mcp.Resolved
+	for _, s := range in {
+		for _, k := range keep {
+			if s.Server.Name == k {
+				out = append(out, s)
+				break
+			}
+		}
+	}
+	return out
+}
+
+func onlyNames(in, keep []string) []string {
+	var out []string
+	for _, n := range in {
+		for _, k := range keep {
+			if n == k {
+				out = append(out, n)
+				break
+			}
+		}
+	}
+	return out
 }

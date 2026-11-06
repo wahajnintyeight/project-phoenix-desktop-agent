@@ -177,17 +177,11 @@ $("freeze")?.addEventListener("load", (e) => {
 
 // The rail shows which section is open: the view name is on #app, set by Go.
 const appRoot = $("app");
-const agentPane = (): string => document.querySelector<HTMLElement>(".agent")?.dataset["pane"] ?? "chat";
-// The Tasks button opens the agent panel's Tasks section; pressing it again returns to the chat.
-document.querySelector<HTMLElement>('[data-rail="tasks"]')?.addEventListener("click", () => {
-  document.querySelector<HTMLElement>(`[data-pane-btn="${agentPane() === "tasks" ? "chat" : "tasks"}"]`)?.click();
-}, { passive: true });
 if (appRoot) {
   const syncRail = (): void => {
     const view = appRoot.dataset["view"] ?? "home";
     document.querySelectorAll<HTMLElement>("[data-rail]").forEach((b) => {
-      if (b.dataset["rail"] === "tasks") { b.setAttribute("aria-pressed", String(agentPane() === "tasks")); return; }
-      const on = b.dataset["rail"] === "files" ? view === "files" : b.dataset["rail"] === "browser" ? view === "home" || view === "web" : false;
+      const on = b.dataset["rail"] === "files" ? view === "files" : b.dataset["rail"] === "tasks" ? view === "tasks" : b.dataset["rail"] === "browser" ? view === "home" || view === "web" : false;
       b.setAttribute("aria-pressed", String(on));
     });
   };
@@ -203,7 +197,6 @@ document.querySelector(".agent-tabs")?.addEventListener("click", (e) => {
   if (!b || !name || !agent) return;
   agent.dataset["pane"] = name;
   document.querySelectorAll<HTMLElement>("[data-pane-btn]").forEach((t) => t.setAttribute("aria-selected", String(t === b)));
-  document.querySelector<HTMLElement>('[data-rail="tasks"]')?.setAttribute("aria-pressed", String(name === "tasks"));
   if (name === "chat") document.querySelector<PhChat>("#chat")?.scrollToLatest();
 }, { passive: true });
 

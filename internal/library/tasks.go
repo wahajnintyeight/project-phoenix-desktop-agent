@@ -29,21 +29,40 @@ const (
 
 // Task is one automation.
 type Task struct {
-	ID      string `json:"id"`
-	Name    string `json:"name"`
-	Prompt  string `json:"prompt"`
-	Kind    string `json:"kind"`
-	Every   int    `json:"every,omitempty"` // minutes, for interval
-	At      string `json:"at,omitempty"`    // HH:MM local time, for daily and weekdays
-	Enabled bool   `json:"enabled"`         // a disabled task never runs by itself
-	Created int64  `json:"created"`         // when the task or its schedule was set
+	ID     string `json:"id"`
+	Name   string `json:"name"`
+	Prompt string `json:"prompt"`
+	Kind   string `json:"kind"`
+	Every  int    `json:"every,omitempty"` // minutes, for interval
+	At     string `json:"at,omitempty"`    // HH:MM local time, for daily and weekdays
+	Icon   string `json:"icon,omitempty"`  // an emoji for the card
+	Extra  string `json:"extra,omitempty"` // additional instructions, kept apart from the main one
+	// Limit true restricts a run to the Tools listed ("browser", "files", "desktop" and
+	// "mcp:<server>"); false gives it everything the user has switched on.
+	Limit   bool     `json:"limit,omitempty"`
+	Tools   []string `json:"tools,omitempty"`
+	Notify  bool     `json:"notify,omitempty"` // flash the taskbar when a run ends
+	Enabled bool     `json:"enabled"`          // a disabled task never runs by itself
+	Created int64    `json:"created"`          // when the task or its schedule was set
 
-	LastRun    int64  `json:"lastRun,omitempty"`
-	LastStatus string `json:"lastStatus,omitempty"` // ok | blocked | failed | stopped
-	LastResult string `json:"lastResult,omitempty"` // the agent's one-line report
-	LastMs     int64  `json:"lastMs,omitempty"`
-	Runs       int    `json:"runs,omitempty"`
+	LastRun    int64     `json:"lastRun,omitempty"`
+	LastStatus string    `json:"lastStatus,omitempty"` // ok | blocked | failed | stopped
+	LastResult string    `json:"lastResult,omitempty"` // the agent's one-line report
+	LastMs     int64     `json:"lastMs,omitempty"`
+	Runs       int       `json:"runs,omitempty"`
+	History    []TaskRun `json:"history,omitempty"` // newest first
 }
+
+// TaskRun is one finished run.
+type TaskRun struct {
+	At     int64  `json:"at"`
+	Status string `json:"status"`
+	Result string `json:"result,omitempty"`
+	Ms     int64  `json:"ms,omitempty"`
+	Chat   string `json:"chat,omitempty"` // the saved session the run happened in
+}
+
+const maxTaskHistory = 15
 
 var tasksMu sync.Mutex
 
@@ -59,6 +78,18 @@ func clipRunesN(s string, n int) string {
 func (t *Task) Normalize() error {
 	t.Name = clipRunesN(strings.Join(strings.Fields(t.Name), " "), 60)
 	t.Prompt = clipRunesN(strings.TrimSpace(t.Prompt), 4000)
+	t.Extra = clipRunesN(strings.TrimSpace(t.Extra), 2000)
+	t.Icon = clipRunesN(strings.TrimSpace(t.Icon), 8)
+	seen := map[string]bool{}
+	tools := t.Tools[:0:0]
+	for _, id := range t.Tools {
+		id = strings.TrimSpace(id)
+		if id != "" && len(id) <= 80 && !seen[id] && len(tools) < 50 {
+			seen[id] = true
+			tools = append(tools, id)
+		}
+	}
+	t.Tools = tools
 	if t.Prompt == "" {
 		return fmt.Errorf("say what the task should do")
 	}
@@ -201,7 +232,7 @@ func (s *Store) SaveTask(t Task) (Task, error) {
 		for i := range list {
 			if list[i].ID == t.ID {
 				old := list[i]
-				t.Created, t.LastRun, t.LastStatus, t.LastResult, t.LastMs, t.Runs = old.Created, old.LastRun, old.LastStatus, old.LastResult, old.LastMs, old.Runs
+				t.Created, t.LastRun, t.LastStatus, t.LastResult, t.LastMs, t.Runs, t.History = old.Created, old.LastRun, old.LastStatus, old.LastResult, old.LastMs, old.Runs, old.History
 				if t.Kind != old.Kind || t.Every != old.Every || t.At != old.At {
 					t.Created = time.Now().Unix() // a new schedule counts from now, so it does not fire for the past
 				}
@@ -252,7 +283,7 @@ func (s *Store) SetTaskEnabled(id string, on bool) error {
 }
 
 // RecordTaskRun stores how a run ended. at is when it started.
-func (s *Store) RecordTaskRun(id string, at time.Time, status, result string, ms int64) {
+func (s *Store) RecordTaskRun(id string, at time.Time, status, result string, ms int64, chat string) {
 	tasksMu.Lock()
 	defer tasksMu.Unlock()
 	list := loadTasks(s)
@@ -261,6 +292,11 @@ func (s *Store) RecordTaskRun(id string, at time.Time, status, result string, ms
 			list[i].LastRun, list[i].LastStatus, list[i].LastMs = at.Unix(), status, ms
 			list[i].LastResult = clipRunesN(strings.TrimSpace(result), 400)
 			list[i].Runs++
+			run := TaskRun{At: at.Unix(), Status: status, Result: list[i].LastResult, Ms: ms, Chat: chat}
+			list[i].History = append([]TaskRun{run}, list[i].History...)
+			if len(list[i].History) > maxTaskHistory {
+				list[i].History = list[i].History[:maxTaskHistory]
+			}
 			_ = saveTasks(s, list)
 			return
 		}

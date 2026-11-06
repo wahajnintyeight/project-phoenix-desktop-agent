@@ -69,10 +69,10 @@ func TestTaskStore(t *testing.T) {
 	if err != nil || saved.ID == "" || saved.Name == "" {
 		t.Fatalf("save: %+v %v", saved, err)
 	}
-	st.RecordTaskRun(saved.ID, time.Now(), "ok", "3 new replies", 4000)
+	st.RecordTaskRun(saved.ID, time.Now(), "ok", "3 new replies", 4000, "chat1")
 	saved.Prompt = "Check my inbox and star replies"
 	again, err := st.SaveTask(saved)
-	if err != nil || again.Runs != 1 || again.LastResult != "3 new replies" {
+	if err != nil || again.Runs != 1 || len(again.History) != 1 || again.History[0].Chat != "chat1" || again.LastResult != "3 new replies" {
 		t.Fatalf("edit keeps history: %+v %v", again, err)
 	}
 	if err := st.SetTaskEnabled(saved.ID, false); err != nil {

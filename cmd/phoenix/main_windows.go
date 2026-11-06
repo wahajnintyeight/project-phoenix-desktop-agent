@@ -343,6 +343,8 @@ func handleAction(action, id string) {
 		runLater(openSettings)
 	case "menu.files":
 		runLater(openFiles)
+	case "menu.tasks":
+		runLater(openTasks)
 	case "menu.browser":
 		runLater(showBrowser)
 	case "tab.select", "tab.close":

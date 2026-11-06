@@ -28,6 +28,7 @@ const (
 	kindWeb      = "web"
 	kindSettings = "settings" // UI content like home: no page window
 	kindFiles    = "files"    // the Files view: UI content too
+	kindTasks    = "tasks"    // the Tasks page: UI content too
 
 	captureJPEG = 1 // COREWEBVIEW2_CAPTURE_PREVIEW_IMAGE_FORMAT_JPEG
 )
@@ -401,7 +402,7 @@ func navigateActive(input string) {
 	}
 	t := activeTab()
 	adoptTab(t) // typing an address into an agent's tab makes it the user's
-	if t == nil || t.kind == kindSettings || t.kind == kindFiles {
+	if t == nil || t.kind == kindSettings || t.kind == kindFiles || t.kind == kindTasks {
 		runLater(func() { createWebTab(target) })
 		return
 	}

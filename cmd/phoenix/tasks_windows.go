@@ -1,8 +1,8 @@
 package main
 
 import (
+	"encoding/json"
 	"regexp"
-	"strconv"
 	"strings"
 	"time"
 
@@ -15,8 +15,8 @@ import (
 // stored on the task and shown in the Tasks pane. Scheduled tasks start from a timer on the UI
 // thread when the agent is idle; a manual run while the agent is busy waits in the message queue.
 //
-// UI → Go:  k refresh | save <id|""> <name> <prompt> <kind> <every> <at> | delete <id>
-//           k enable <id> <0|1> | run <id> | stop
+// UI → Go:  k refresh | save <task json> <run 0|1> | delete <id> | duplicate <id>
+//           k enable <id> <0|1> | run <id> | stop | session <chat id>
 // Go → UI:  u tasks data <json>   u tasks result <json>
 
 const tasksViewID = "tasks"
@@ -35,13 +35,20 @@ type taskView struct {
 }
 
 type tasksData struct {
+	Servers []string   `json:"servers"` // MCP servers a task can include
+	Desktop bool       `json:"desktop"` // computer use is switched on
 	Tasks   []taskView `json:"tasks"`
 	Running string     `json:"running,omitempty"`
 	Waiting string     `json:"waiting,omitempty"` // a manual run waiting for the agent
 }
 
 func pushTasks() {
-	d := tasksData{Tasks: []taskView{}, Running: taskRun.id}
+	d := tasksData{Tasks: []taskView{}, Running: taskRun.id, Servers: []string{}, Desktop: desktopEnabled()}
+	if hub != nil {
+		for _, m := range hub.MCPEnabled() {
+			d.Servers = append(d.Servers, m.Name)
+		}
+	}
 	if lib, err := openLibrary(); err == nil {
 		now := time.Now()
 		for _, t := range lib.Tasks() {
@@ -92,20 +99,38 @@ func handleTaskOp(f []string) {
 		return
 	}
 	switch f[1] {
-	case "save": // save <id> <name> <prompt> <kind> <every> <at>
-		every, _ := strconv.Atoi(arg(6))
-		t := library.Task{ID: arg(2), Name: arg(3), Prompt: arg(4), Kind: arg(5), Every: every, At: arg(7)}
+	case "save": // save <json> <run>
+		var t library.Task
+		if err := json.Unmarshal([]byte(arg(2)), &t); err != nil {
+			taskResult(false, "That task could not be read.")
+			return
+		}
 		scheduled := t.Kind != "" && t.Kind != library.TaskManual
 		t.Enabled = scheduled // a new or newly scheduled task starts on
 		if old, ok := lib.Task(t.ID); ok && old.Kind != library.TaskManual {
 			t.Enabled = scheduled && old.Enabled
 		}
-		if _, err := lib.SaveTask(t); err != nil {
+		saved, err := lib.SaveTask(t)
+		if err != nil {
 			taskResult(false, err.Error())
 			return
 		}
 		pushTasks()
 		taskResult(true, "Saved.")
+		if arg(3) == "1" {
+			runTask(saved)
+		}
+	case "duplicate":
+		if t, ok := lib.Task(arg(2)); ok {
+			t.ID, t.Name, t.Enabled = "", clippedText(t.Name, 52)+" copy", false
+			if _, err := lib.SaveTask(t); err == nil {
+				pushTasks()
+			}
+		}
+	case "session": // open the saved session a run happened in
+		if arg(2) != "" {
+			handleChatOp([]string{"g", "restore", arg(2)})
+		}
 	case "delete":
 		if arg(2) == taskRun.id && taskRun.id != "" {
 			taskResult(false, "That task is running. Stop it first.")
@@ -138,13 +163,16 @@ func taskBrief(t library.Task) string {
 	}
 	b.WriteString("Your final message is ONE line of at most 200 characters and nothing else: \"DONE: \" followed by the result with its key facts (counts, names, links), or \"BLOCKED: \" followed by the reason.\n\n")
 	b.WriteString("TASK:\n" + t.Prompt)
+	if t.Extra != "" {
+		b.WriteString("\n\nADDITIONAL INSTRUCTIONS FROM THE USER (follow them):\n" + t.Extra)
+	}
 	return b.String()
 }
 
 // runTask starts a task now, or queues it behind the current turn.
 func runTask(t library.Task) {
 	if hub == nil {
-		recordTaskEnd(t.ID, time.Now(), "failed", settingsUnavailable(), 0)
+		recordTaskEnd(t.ID, time.Now(), "failed", settingsUnavailable(), 0, "")
 		return
 	}
 	if taskRun.id == t.ID || queuedTask(t.ID) {
@@ -207,14 +235,19 @@ func finishTask(status, report string, ms int64) {
 	if taskRun.id == "" {
 		return
 	}
-	id, started := taskRun.id, taskRun.started
+	id, started, session := taskRun.id, taskRun.started, chat.currentID
 	taskRun.id, taskRun.name = "", ""
-	recordTaskEnd(id, started, status, report, ms)
+	recordTaskEnd(id, started, status, report, ms, session)
+	if lib, err := openLibrary(); err == nil && win != nil && !win.IsFocused() {
+		if t, ok := lib.Task(id); ok && t.Notify {
+			win.Flash(true)
+		}
+	}
 }
 
-func recordTaskEnd(id string, started time.Time, status, report string, ms int64) {
+func recordTaskEnd(id string, started time.Time, status, report string, ms int64, session string) {
 	if lib, err := openLibrary(); err == nil {
-		lib.RecordTaskRun(id, started, status, report, ms)
+		lib.RecordTaskRun(id, started, status, report, ms, session)
 	}
 	pushTasks()
 }
@@ -248,4 +281,56 @@ func checkSchedules() {
 			return
 		}
 	}
+}
+
+// taskScope is the tool selection of the task now running: limit false means everything.
+func taskScope() (limit bool, allows func(id string) bool) {
+	all := func(string) bool { return true }
+	if taskRun.id == "" {
+		return false, all
+	}
+	lib, err := openLibrary()
+	if err != nil {
+		return false, all
+	}
+	t, ok := lib.Task(taskRun.id)
+	if !ok || !t.Limit {
+		return false, all
+	}
+	set := map[string]bool{}
+	for _, id := range t.Tools {
+		set[id] = true
+	}
+	return true, func(id string) bool { return set[id] }
+}
+
+// taskMCPNames lists the user's MCP servers a limited task includes.
+func taskMCPNames() []string {
+	out := []string{}
+	if hub == nil {
+		return out
+	}
+	_, allows := taskScope()
+	for _, m := range hub.MCPEnabled() {
+		if allows("mcp:" + m.Name) {
+			out = append(out, m.Name)
+		}
+	}
+	return out
+}
+
+// openTasks shows the Tasks page, creating its tab the first time.
+func openTasks() {
+	for _, t := range tabs {
+		if t.kind == kindTasks {
+			activate(t.id)
+			pushTasks()
+			return
+		}
+	}
+	t := &tab{id: nextID, kind: kindTasks, title: "Tasks"}
+	nextID++
+	tabs = append(tabs, t)
+	activate(t.id)
+	pushTasks()
 }

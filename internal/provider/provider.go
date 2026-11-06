@@ -225,6 +225,9 @@ type Request struct {
 	// UseMCP asks the hub to attach the user's enabled MCP servers to this run (providers
 	// that support them; the others ignore it).
 	UseMCP bool
+	// LimitMCP narrows UseMCP to the servers named in OnlyMCP (an empty list means none).
+	LimitMCP bool
+	OnlyMCP  []string
 
 	// MCPConfig is the path of a JSON file of MCP servers (Phoenix's own tool server).
 	MCPConfig     string
