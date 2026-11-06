@@ -1,9 +1,13 @@
 package library
 
 import (
+	"context"
 	"path/filepath"
+	"strings"
 	"testing"
 	"time"
+
+	sdk "github.com/modelcontextprotocol/go-sdk/mcp"
 )
 
 func at(s string) time.Time {
@@ -83,5 +87,33 @@ func TestTaskStore(t *testing.T) {
 	}
 	if err := st.DeleteTask(saved.ID); err != nil || len(st.Tasks()) != 0 {
 		t.Fatal("delete")
+	}
+}
+
+func TestTaskToolsCreateAndList(t *testing.T) {
+	st, err := Open(filepath.Join(t.TempDir(), "l.db"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer st.Close()
+	a, b := sdk.NewInMemoryTransports()
+	srv := NewServer(st, "agent")
+	if _, err := srv.Connect(context.Background(), a, nil); err != nil {
+		t.Fatal(err)
+	}
+	cs, err := sdk.NewClient(&sdk.Implementation{Name: "t", Version: "1"}, nil).Connect(context.Background(), b, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer cs.Close()
+	out := callTool(t, cs, "tasks_create", map[string]any{"instructions": "Check the news", "schedule": "weekdays", "at": "09:00"})
+	if !strings.Contains(out, "weekdays at 09:00") {
+		t.Fatalf("create: %s", out)
+	}
+	if list := st.Tasks(); len(list) != 1 || !list[0].Enabled {
+		t.Fatalf("a scheduled task made by the agent starts on: %+v", list)
+	}
+	if !strings.Contains(callTool(t, cs, "tasks_list", map[string]any{}), "Check the news") {
+		t.Fatal("list")
 	}
 }

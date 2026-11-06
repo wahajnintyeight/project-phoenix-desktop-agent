@@ -2,6 +2,7 @@
 // session of its own. Go owns the data and the runs; this element lists, edits and starts them.
 // Everything the user or the agent wrote reaches the page through .value or textContent only.
 import { el } from "./dom";
+import { icon, isIcon, type IconName } from "./icons";
 import { send } from "./protocol";
 
 type Kind = "manual" | "interval" | "daily" | "weekdays";
@@ -63,25 +64,30 @@ interface Idea {
 
 /** Starting points. Each fills the editor; the user adjusts the wording, schedule and tools. */
 const IDEAS: Idea[] = [
-  { icon: "💼", name: "Morning job sweep", blurb: "Find new matching listings and apply to the best ones.", kind: "weekdays", at: "09:00", tools: ["browser", "files"],
+  { icon: "briefcase", name: "Morning job sweep", blurb: "Find new matching listings and apply to the best ones.", kind: "weekdays", at: "09:00", tools: ["browser", "files"],
     prompt: "Open my saved job searches and job alerts, find listings that match my profile and are new since the last run, and apply to the best matches. Skip any I already applied to." },
-  { icon: "📬", name: "Inbox triage", blurb: "Read what arrived overnight and tell me what needs a reply.", kind: "daily", at: "08:30", tools: ["browser"],
+  { icon: "mail", name: "Inbox triage", blurb: "Read what arrived overnight and tell me what needs a reply.", kind: "daily", at: "08:30", tools: ["browser"],
     prompt: "Open my email in the browser, read what arrived since yesterday, and report how many messages need a reply and from whom. Do not send or delete anything." },
-  { icon: "📰", name: "Morning brief", blurb: "Five headlines that matter to me, saved as a note.", kind: "weekdays", at: "07:30", tools: ["browser", "files"],
+  { icon: "news", name: "Morning brief", blurb: "Five headlines that matter to me, saved as a note.", kind: "weekdays", at: "07:30", tools: ["browser", "files"],
     prompt: "Open three reputable news sites in my field, pick the five stories that matter most to me, and save a short brief in the file library under briefs/ named with today's date." },
-  { icon: "📈", name: "Price watch", blurb: "Check a product page and report any price change.", kind: "daily", at: "12:00", tools: ["browser"],
+  { icon: "trend", name: "Price watch", blurb: "Check a product page and report any price change.", kind: "daily", at: "12:00", tools: ["browser"],
     prompt: "Open the product page I name below, read the current price and stock, and report whether it changed since the last run.\n\nPage: " },
-  { icon: "🔎", name: "Research to a note", blurb: "Read several sources on a topic and save a brief.", kind: "manual", tools: ["browser", "files"],
+  { icon: "search", name: "Research to a note", blurb: "Read several sources on a topic and save a brief.", kind: "manual", tools: ["browser", "files"],
     prompt: "Research the topic below across at least five good sources, then save a one-page brief with the key facts and links in the file library under research/.\n\nTopic: " },
-  { icon: "📅", name: "Application tracker", blurb: "Check where my job applications stand.", kind: "daily", at: "18:00", tools: ["browser", "files"],
+  { icon: "calendar", name: "Application tracker", blurb: "Check where my job applications stand.", kind: "daily", at: "18:00", tools: ["browser", "files"],
     prompt: "List the applications recorded so far, open the status page or email for each one that is still open, and report any that moved (interview, rejection, offer)." },
-  { icon: "🧾", name: "Fill a form for me", blurb: "Complete a web form with my saved details.", kind: "manual", tools: ["browser", "files"],
+  { icon: "doc", name: "Fill a form for me", blurb: "Complete a web form with my saved details.", kind: "manual", tools: ["browser", "files"],
     prompt: "Open the form below, fill every field from my profile and memory, attach what it needs from my files, and submit it.\n\nForm: " },
-  { icon: "🗂️", name: "Summarize my open tabs", blurb: "Turn the tabs I left open into one tidy note.", kind: "manual", tools: ["browser", "files"],
+  { icon: "layers", name: "Summarize my open tabs", blurb: "Turn the tabs I left open into one tidy note.", kind: "manual", tools: ["browser", "files"],
     prompt: "Look at all my open tabs, summarize each in one line, group them by theme, and save the result as a note in the file library under notes/." },
 ];
 
-const ICONS = ["⚡", "💼", "📬", "📰", "📈", "🔎", "📅", "🧾", "🗂️", "🛒", "✈️", "🏠", "🎓", "💡", "🔔", "🧹", "📊", "🤖"];
+const ICONS: IconName[] = ["bolt", "briefcase", "mail", "news", "trend", "search", "calendar", "doc", "layers", "cart", "plane", "home", "cap", "bulb", "bell", "broom", "chart", "bot"];
+
+/** A task icon, falling back to the bolt for anything this set does not draw (older saved tasks). */
+function glyph(name: string | undefined, size = 16): SVGSVGElement {
+  return icon(isIcon(name) ? name : "bolt", size);
+}
 
 const STATUS_TEXT: Record<string, string> = { ok: "Done", blocked: "Blocked", failed: "Failed", stopped: "Stopped" };
 
@@ -108,11 +114,6 @@ function seconds(ms: number): string {
   return s < 60 ? `${s} s` : `${Math.floor(s / 60)} min ${s % 60} s`;
 }
 
-function greeting(): string {
-  const h = new Date().getHours();
-  return h < 5 ? "Burning the midnight oil" : h < 12 ? "Good morning" : h < 18 ? "Good afternoon" : "Good evening";
-}
-
 /** Hue for a task's tile, stable per task so a card keeps its colour. */
 function hue(s: string): number {
   let h = 0;
@@ -120,11 +121,11 @@ function hue(s: string): number {
   return h;
 }
 
-const TOOL_LABEL: Record<string, string> = { browser: "🌐 Browser", files: "📁 Files", desktop: "🖥️ Computer use" };
+const TOOL_LABEL: Record<string, string> = { browser: "Browser", files: "Files", desktop: "Computer use" };
 
 function toolChips(t: Task): string[] {
   if (!t.limit) return ["Everything on"];
-  const names = (t.tools ?? []).map((id) => TOOL_LABEL[id] ?? (id.startsWith("mcp:") ? `🔌 ${id.slice(4)}` : id));
+  const names = (t.tools ?? []).map((id) => TOOL_LABEL[id] ?? (id.startsWith("mcp:") ? id.slice(4) : id));
   return names.length ? names : ["No tools"];
 }
 
@@ -137,7 +138,7 @@ class PhTasks extends HTMLElement {
   #open = ""; // task shown in the details drawer
   #confirm = ""; // a delete waiting for its second click
   #editing: Task | null = null;
-  #icon = "⚡";
+  #icon: string = "bolt";
 
   readonly #head = el("header", "tp-head");
   readonly #bar = el("div", "tp-bar");
@@ -158,7 +159,9 @@ class PhTasks extends HTMLElement {
   readonly #picks = el("div", "tp-picks");
   readonly #notify = el("input");
   readonly #icons = el("div", "tp-icons");
-  readonly #ideas = el("div", "tp-ideas");
+  readonly #side = el("nav", "tp-side");
+  readonly #panes = el("div", "tp-panes");
+  readonly #stepVal: Record<string, HTMLElement> = {};
   readonly #err = el("p", "msg");
   #kindValue: Kind = "manual";
 
@@ -190,42 +193,38 @@ class PhTasks extends HTMLElement {
   // ── Editor ───────────────────────────────────────────────────────────────
 
   #buildEditor(): void {
-    const section = (n: string, title: string, hint: string, ...kids: HTMLElement[]): HTMLElement => {
-      const s = el("section", "tp-sec");
-      const h = el("div", "tp-sec-head");
-      h.append(el("span", "tp-num", n), el("h3", undefined, title), el("p", undefined, hint));
-      s.append(h, ...kids);
+    const field = (label: string, control: HTMLElement): HTMLElement => {
+      const f = el("div", "tp-field");
+      f.append(el("span", "tp-label", label), control);
+      return f;
+    };
+    const pane = (id: string, title: string, ...kids: HTMLElement[]): HTMLElement => {
+      const s = el("section", "tp-pane");
+      s.dataset["step"] = id;
+      s.append(el("h3", undefined, title), ...kids);
       return s;
     };
 
-    this.#name.placeholder = "Give it a name";
+    this.#name.placeholder = "Name this task";
     this.#name.maxLength = 60;
     this.#name.setAttribute("aria-label", "Task name");
-    this.#prompt.placeholder = "What should the agent do? Say where to go, what to do and what counts as finished. It will not ask questions while it runs.";
+    this.#prompt.placeholder = "Where to go, what to do, when it is done.";
     this.#prompt.setAttribute("aria-label", "Instructions");
-    this.#prompt.rows = 6;
-    this.#extra.placeholder = "Rules, preferences, things to avoid, how to word results…";
-    this.#extra.setAttribute("aria-label", "Additional instructions");
-    this.#extra.rows = 3;
-    const extra = el("details", "tp-more");
-    extra.append(el("summary", undefined, "Add extra instructions (optional)"), this.#extra);
+    this.#extra.placeholder = "Rules or things to avoid";
+    this.#extra.setAttribute("aria-label", "Extra rules");
 
     for (const ic of ICONS) {
-      const b = el("button", "tp-icon", ic);
+      const b = el("button", "tp-icon");
+      b.append(glyph(ic, 22));
       b.type = "button";
       b.dataset["op"] = "icon";
       b.dataset["id"] = ic;
       b.setAttribute("aria-label", `Icon ${ic}`);
       this.#icons.append(b);
     }
-    this.#ideas.append(el("span", "tp-ideas-label", "Start from an idea"));
-    IDEAS.forEach((idea, i) => {
-      const b = el("button", "tp-chip", `${idea.icon} ${idea.name}`);
-      b.type = "button";
-      b.dataset["op"] = "idea";
-      b.dataset["id"] = String(i);
-      this.#ideas.append(b);
-    });
+
+    const ideaGrid = el("div", "tp-grid");
+    IDEAS.forEach((idea, n) => ideaGrid.append(this.#ideaCard(idea, n, "idea")));
 
     const kinds: [Kind, string][] = [["manual", "On demand"], ["interval", "Repeat"], ["daily", "Daily"], ["weekdays", "Weekdays"]];
     this.#kind.setAttribute("role", "radiogroup");
@@ -253,14 +252,36 @@ class PhTasks extends HTMLElement {
     whenRow.append(el("span", "tp-when-every", "every"), this.#every, this.#unit, el("span", "tp-when-at", "at"), this.#at);
 
     this.#all.type = "checkbox";
-    this.#all.id = "tp-all";
     const allLabel = el("label", "tp-check");
-    allLabel.append(this.#all, el("span", undefined, "Everything I have switched on (recommended)"));
+    allLabel.append(this.#all, el("span", "tp-check-text", "Everything that is switched on"));
     this.#all.addEventListener("change", () => { this.#picks.hidden = this.#all.checked; }, { passive: true });
-
     this.#notify.type = "checkbox";
     const notifyLabel = el("label", "tp-check");
-    notifyLabel.append(this.#notify, el("span", undefined, "Flash the taskbar when a run finishes"));
+    notifyLabel.append(this.#notify, el("span", "tp-check-text", "Alert me when it finishes"));
+
+    this.#panes.append(
+      pane("ideas", "Ideas", ideaGrid),
+      pane("what", "What to do", field("Icon", this.#icons), field("Name", this.#name), field("Instructions", this.#prompt), field("Extra rules (optional)", this.#extra)),
+      pane("when", "When", this.#kind, whenRow),
+      pane("tools", "Tools", allLabel, this.#picks, notifyLabel),
+    );
+
+    const steps: [string, string, IconName][] = [["ideas", "Ideas", "bulb"], ["what", "What to do", "pen"], ["when", "When", "clock"], ["tools", "Tools", "layers"]];
+    this.#side.setAttribute("role", "tablist");
+    this.#side.setAttribute("aria-label", "Task settings");
+    for (const [id, label, g] of steps) {
+      const b = el("button", "tp-step");
+      b.type = "button";
+      b.setAttribute("role", "tab");
+      b.dataset["op"] = "step";
+      b.dataset["id"] = id;
+      const copy = el("span", "tp-step-copy");
+      const val = el("span", "tp-step-val");
+      this.#stepVal[id] = val;
+      copy.append(el("strong", undefined, label), val);
+      b.append(icon(g, 20), copy);
+      this.#side.append(b);
+    }
 
     const save = el("button", "btn btn-primary", "Save");
     save.type = "submit";
@@ -273,27 +294,52 @@ class PhTasks extends HTMLElement {
     const foot = el("div", "tp-foot");
     foot.append(this.#err, cancel, saveRun, save);
 
-    const who = el("div", "tp-who");
-    who.append(this.#name);
-    this.#form.append(
-      this.#ideas,
-      section("1", "What should it do?", "Plain words are enough.", this.#icons, who, this.#prompt, extra),
-      section("2", "When?", "Run it yourself, or let it run by itself.", this.#kind, whenRow),
-      section("3", "Which tools may it use?", "Each run gets only what you pick.", allLabel, this.#picks),
-      section("4", "Finishing", "Every run ends with one line and is kept as its own session.", notifyLabel),
-      foot,
-    );
+    const right = el("div", "tp-right");
+    right.append(this.#panes, foot);
+    this.#form.append(this.#side, right);
     this.#form.addEventListener("submit", (e) => { e.preventDefault(); this.#save(false); });
+    this.#form.addEventListener("input", () => this.#syncSide(), { passive: true });
+    this.#form.addEventListener("change", () => this.#syncSide(), { passive: true });
     this.#dialog.append(this.#form);
+  }
+
+  #ideaCard(i: Idea, n: number, op: string): HTMLElement {
+    const c = el("button", "tp-idea");
+    c.type = "button";
+    c.dataset["op"] = op;
+    c.dataset["id"] = String(n);
+    const tile = el("span", "tp-tile");
+    tile.append(glyph(i.icon, 24));
+    tile.style.setProperty("--h", String(hue(i.name)));
+    const copy = el("span", "tp-idea-copy");
+    copy.append(el("strong", undefined, i.name), el("span", undefined, i.blurb), el("em", undefined, i.kind === "manual" ? "On demand" : i.kind === "daily" ? `Daily ${i.at}` : `Weekdays ${i.at}`));
+    c.append(tile, copy);
+    c.style.animationDelay = `${n * 40}ms`;
+    return c;
+  }
+
+  #goStep(id: string): void {
+    this.#side.querySelectorAll<HTMLElement>(".tp-step").forEach((b) => b.setAttribute("aria-selected", String(b.dataset["id"] === id)));
+    this.#panes.querySelectorAll<HTMLElement>(".tp-pane").forEach((p) => { p.hidden = p.dataset["step"] !== id; });
+    this.#panes.scrollTop = 0;
+  }
+
+  /** The one-line value under each side item, so the user sees the state without opening it. */
+  #syncSide(): void {
+    const k = this.#kindValue;
+    const picked = this.#picks.querySelectorAll<HTMLInputElement>("input:checked").length;
+    this.#stepVal["what"]!.textContent = this.#name.value.trim() || "Untitled";
+    this.#stepVal["when"]!.textContent = k === "manual" ? "On demand" : k === "interval" ? `Every ${this.#every.value} ${this.#unit.selectedOptions[0]?.text ?? ""}` : `${k === "daily" ? "Daily" : "Weekdays"} ${this.#at.value}`;
+    this.#stepVal["tools"]!.textContent = this.#all.checked ? "Everything" : `${picked} picked`;
+    this.#stepVal["ideas"]!.textContent = "Start from one";
   }
 
   #openEditor(t: Task): void {
     this.#editing = t;
-    this.#icon = t.icon || "⚡";
+    this.#icon = isIcon(t.icon) ? t.icon : "bolt";
     this.#name.value = t.name;
     this.#prompt.value = t.prompt;
     this.#extra.value = t.extra ?? "";
-    (this.#extra.parentElement as HTMLDetailsElement).open = !!t.extra;
     this.#setKind(t.kind);
     const mins = t.every ?? 60;
     const hours = mins % 60 === 0;
@@ -304,31 +350,34 @@ class PhTasks extends HTMLElement {
     this.#fillPicks(new Set(t.tools ?? ["browser", "files"]));
     this.#picks.hidden = this.#all.checked;
     this.#notify.checked = t.notify ?? true;
-    this.#ideas.hidden = t.id !== "";
+    this.#side.querySelector<HTMLElement>('[data-id="ideas"]')!.hidden = t.id !== "" || t.prompt !== "";
     this.#err.textContent = "";
     this.#markIcons();
+    this.#goStep(t.id === "" && t.prompt === "" ? "ideas" : "what");
+    this.#syncSide();
     this.#dialog.showModal();
-    (t.prompt ? this.#prompt : this.#name).focus();
   }
 
   #fillPicks(on: Set<string>): void {
     this.#picks.replaceChildren();
-    const row = (id: string, label: string, note = "", disabled = false): void => {
+    const row = (id: string, label: string, glyphName: IconName, note = "", disabled = false): void => {
       const l = el("label", "tp-check");
       const c = el("input");
       c.type = "checkbox";
       c.value = id;
       c.checked = on.has(id) && !disabled;
       c.disabled = disabled;
-      l.append(c, el("span", undefined, label));
+      const text = el("span", "tp-check-text");
+      text.append(icon(glyphName, 16), label);
+      l.append(c, text);
       if (note) l.append(el("em", undefined, note));
       this.#picks.append(l);
     };
-    row("browser", "🌐 Browser: open pages, click, fill forms");
-    row("files", "📁 Files: read and save in the library");
-    row("desktop", "🖥️ Computer use: control other apps", this.#data.desktop ? "" : "switch it on in Settings", !this.#data.desktop);
-    for (const s of this.#data.servers ?? []) row(`mcp:${s}`, `🔌 ${s}`);
-    if ((this.#data.servers ?? []).length === 0) this.#picks.append(el("p", "tp-note", "No MCP servers are switched on. Add some under Settings → Tools."));
+    row("browser", "Browser", "globe");
+    row("files", "Files", "folder");
+    row("desktop", "Computer use", "monitor", this.#data.desktop ? "" : "off in Settings", !this.#data.desktop);
+    for (const s of this.#data.servers ?? []) row(`mcp:${s}`, s, "plug");
+    if ((this.#data.servers ?? []).length === 0) this.#picks.append(el("p", "tp-note", "No MCP servers on."));
   }
 
   #setKind(k: Kind): void {
@@ -348,9 +397,9 @@ class PhTasks extends HTMLElement {
   #save(run: boolean): void {
     const base = this.#editing;
     if (!base) return;
-    if (!this.#prompt.value.trim()) { this.#err.textContent = "Say what the task should do."; this.#prompt.focus(); return; }
+    if (!this.#prompt.value.trim()) { this.#err.textContent = "Describe the job first."; this.#prompt.focus(); return; }
     const k = this.#kindValue;
-    const tools = [...this.#picks.querySelectorAll<HTMLInputElement>("input:checked")].map((c) => c.value);
+    const tools = Array.from(this.#picks.querySelectorAll<HTMLInputElement>("input:checked"), (c) => c.value);
     const task: Partial<Task> = {
       id: base.id,
       name: this.#name.value,
@@ -365,7 +414,7 @@ class PhTasks extends HTMLElement {
       notify: this.#notify.checked,
     };
     this.#err.textContent = "";
-    if (!this.#all.checked && tools.length === 0 && !window.confirm("No tools are selected, so the agent can only think and answer. Save anyway?")) return;
+    if (!this.#all.checked && tools.length === 0 && !window.confirm("No tools picked. Save anyway?")) return;
     send("k", "save", JSON.stringify(task), run ? "1" : "0");
   }
 
@@ -376,7 +425,7 @@ class PhTasks extends HTMLElement {
     if (!b) return;
     const id = b.dataset["id"] ?? "";
     const task = this.#data.tasks.find((t) => t.id === id);
-    const blank: Task = { id: "", name: "", prompt: "", kind: "manual", enabled: false };
+    const blank: Task = { id: "", name: "", prompt: "", kind: "manual", enabled: false, icon: "bolt" };
     switch (b.dataset["op"]) {
       case "new": this.#openEditor(blank); break;
       case "surprise": {
@@ -396,9 +445,19 @@ class PhTasks extends HTMLElement {
         this.#all.checked = !i.tools;
         this.#fillPicks(new Set(i.tools ?? []));
         this.#picks.hidden = this.#all.checked;
+        this.#extra.value = "";
+        this.#syncSide();
+        this.#side.querySelector<HTMLElement>('[data-id="ideas"]')!.hidden = false;
+        this.#goStep("what");
         this.#prompt.focus();
         break;
       }
+      case "idea-new": {
+        const i = IDEAS[Number(id)];
+        if (i) this.#openEditor({ ...blank, name: i.name, prompt: i.prompt, icon: i.icon, kind: i.kind, at: i.at, limit: !!i.tools, tools: i.tools ?? [] });
+        break;
+      }
+      case "step": this.#goStep(id); break;
       case "icon": this.#icon = id; this.#markIcons(); break;
       case "kind": this.#setKind(id as Kind); break;
       case "cancel": this.#dialog.close(); break;
@@ -434,8 +493,10 @@ class PhTasks extends HTMLElement {
 
   // ── Drawing ──────────────────────────────────────────────────────────────
 
-  #button(op: string, label: string, id: string, cls = "btn btn-quiet btn-sm"): HTMLButtonElement {
-    const b = el("button", cls, label);
+  #button(op: string, label: string, id: string, cls = "btn btn-quiet", glyphName?: IconName): HTMLButtonElement {
+    const b = el("button", cls);
+    if (glyphName) b.append(icon(glyphName, 16));
+    if (label) b.append(label);
     b.type = "button";
     b.dataset["op"] = op;
     b.dataset["id"] = id;
@@ -482,8 +543,8 @@ class PhTasks extends HTMLElement {
     title.append(
       el("h1", undefined, "Tasks"),
       el("p", undefined, tasks.length === 0
-        ? `${greeting()}. Hand the agent a job once and it keeps doing it.`
-        : running ? "Working on a task right now…" : `${greeting()}. ${live} on a schedule${next ? `, next ${when(next)}` : ""}.`),
+        ? "Jobs the agent does for you."
+        : running ? "Working…" : live ? `${live} scheduled${next ? ` · next ${when(next)}` : ""}` : "Nothing scheduled"),
     );
     const stats = el("div", "tp-stats");
     if (tasks.length > 0) {
@@ -494,7 +555,7 @@ class PhTasks extends HTMLElement {
       }
     }
     const acts = el("div", "tp-acts");
-    acts.append(this.#button("surprise", "🎲 Surprise me", "", "btn"), this.#button("new", "New task", "", "btn btn-primary"));
+    acts.append(this.#button("surprise", "Surprise me", "", "btn", "shuffle"), this.#button("new", "New task", "", "btn btn-primary", "plus"));
     this.#head.append(title, stats, acts);
   }
 
@@ -518,21 +579,9 @@ class PhTasks extends HTMLElement {
 
   #gallery(): HTMLElement {
     const g = el("div", "tp-gallery");
-    g.append(el("h2", undefined, "Start with an idea"), el("p", undefined, "Pick one, tweak the words, choose when it runs. You can also tell the chat: \"every weekday at 9 do this\"."));
+    g.append(el("h2", undefined, "Pick an idea to start"));
     const grid = el("div", "tp-grid");
-    IDEAS.forEach((i, n) => {
-      const c = el("button", "tp-idea");
-      c.type = "button";
-      c.dataset["op"] = "gallery";
-      c.addEventListener("click", () => this.#openEditor({ id: "", name: i.name, prompt: i.prompt, icon: i.icon, kind: i.kind, at: i.at, enabled: false, limit: !!i.tools, tools: i.tools ?? [] }), { passive: true });
-      const tile = el("span", "tp-tile", i.icon);
-      tile.style.setProperty("--h", String(hue(i.name)));
-      const copy = el("span", "tp-idea-copy");
-      copy.append(el("strong", undefined, i.name), el("span", undefined, i.blurb), el("em", undefined, i.kind === "manual" ? "On demand" : i.kind === "daily" ? `Daily ${i.at}` : `Weekdays ${i.at}`));
-      c.append(tile, copy);
-      c.style.animationDelay = `${n * 40}ms`;
-      grid.append(c);
-    });
+    IDEAS.forEach((i, n) => grid.append(this.#ideaCard(i, n, "idea-new")));
     g.append(grid);
     return g;
   }
@@ -545,7 +594,8 @@ class PhTasks extends HTMLElement {
     card.tabIndex = 0;
     card.addEventListener("keydown", (e) => { if (e.key === "Enter" && e.target === card) card.click(); });
 
-    const tile = el("span", "tp-tile", t.icon || "⚡");
+    const tile = el("span", "tp-tile");
+    tile.append(glyph(t.icon, 24));
     tile.style.setProperty("--h", String(hue(t.id || t.name)));
     const top = el("div", "tp-card-top");
     const names = el("div", "tp-card-names");
@@ -562,9 +612,9 @@ class PhTasks extends HTMLElement {
     for (const c of toolChips(t).slice(0, 3)) chips.append(el("span", "tp-tag", c));
 
     const foot = el("div", "tp-card-foot");
-    if (running) foot.append(this.#button("stop", "Stop", t.id, "btn btn-sm"));
+    if (running) foot.append(this.#button("stop", "Stop", t.id, "btn", "stop"));
     else {
-      const run = this.#button("run", waiting ? "Waiting…" : "▶ Run", t.id, "btn btn-primary btn-sm");
+      const run = this.#button("run", waiting ? "Waiting…" : "Run", t.id, "btn btn-primary", waiting ? undefined : "play");
       run.disabled = waiting;
       foot.append(run);
     }
@@ -584,24 +634,25 @@ class PhTasks extends HTMLElement {
     d.replaceChildren();
 
     const head = el("div", "tp-d-head");
-    const tile = el("span", "tp-tile", t.icon || "⚡");
+    const tile = el("span", "tp-tile");
+    tile.append(glyph(t.icon, 24));
     tile.style.setProperty("--h", String(hue(t.id || t.name)));
     const names = el("div", "tp-card-names");
     names.append(el("h2", undefined, t.name), el("p", "tp-sched", t.kind === "manual" ? "On demand" : `${t.schedule ?? ""}${t.enabled ? (t.next ? ` · next ${when(t.next)}` : "") : " · paused"}`));
-    const close = this.#button("close", "✕", "", "btn btn-quiet btn-sm");
+    const close = this.#button("close", "", "", "btn btn-quiet", "close");
     close.setAttribute("aria-label", "Close details");
     head.append(tile, names, close);
 
     const acts = el("div", "tp-d-acts");
-    if (running) acts.append(this.#button("stop", "Stop", t.id, "btn"));
+    if (running) acts.append(this.#button("stop", "Stop", t.id, "btn", "stop"));
     else {
-      const run = this.#button("run", waiting ? "Waiting…" : "▶ Run now", t.id, "btn btn-primary");
+      const run = this.#button("run", waiting ? "Waiting…" : "Run now", t.id, "btn btn-primary", waiting ? undefined : "play");
       run.disabled = waiting;
       acts.append(run);
     }
-    if (t.kind !== "manual") acts.append(this.#button("toggle", t.enabled ? "Pause" : "Resume", t.id, "btn"));
-    if (!running) acts.append(this.#button("edit", "Edit", t.id, "btn"), this.#button("duplicate", "Duplicate", t.id, "btn"),
-      this.#button("delete", this.#confirm === t.id ? "Click again to delete" : "Delete", t.id, "btn btn-quiet"));
+    if (t.kind !== "manual") acts.append(this.#button("toggle", t.enabled ? "Pause" : "Resume", t.id, "btn", t.enabled ? "pause" : "play"));
+    if (!running) acts.append(this.#button("edit", "Edit", t.id, "btn", "pen"), this.#button("duplicate", "Duplicate", t.id, "btn", "copy"),
+      this.#button("delete", this.#confirm === t.id ? "Click again to delete" : "Delete", t.id, "btn btn-quiet", "trash"));
 
     const sec = (title: string, ...kids: (HTMLElement | string)[]): HTMLElement => {
       const s = el("section", "tp-d-sec");
@@ -622,12 +673,12 @@ class PhTasks extends HTMLElement {
       li.dataset["status"] = r.status;
       const line = el("div", "tp-run-line");
       line.append(el("span", "tp-dot"), el("strong", undefined, STATUS_TEXT[r.status] ?? r.status), el("span", "tp-when-ago", `${ago(r.at)}${r.ms ? ` · ${seconds(r.ms)}` : ""}`));
-      if (r.chat) line.append(this.#button("session", "Open session", r.chat, "btn btn-quiet btn-sm"));
+      if (r.chat) line.append(this.#button("session", "Open session", r.chat, "btn btn-quiet"));
       li.append(line);
       if (r.result) li.append(el("p", undefined, r.result));
       hist.append(li);
     }
-    d.append(sec(`History${t.runs ? ` (${t.runs} run${t.runs === 1 ? "" : "s"})` : ""}`, (t.history ?? []).length ? hist : "No runs yet. Press Run now to try it."));
+    d.append(sec(`History${t.runs ? ` (${t.runs} run${t.runs === 1 ? "" : "s"})` : ""}`, (t.history ?? []).length ? hist : "No runs yet."));
   }
 }
 
