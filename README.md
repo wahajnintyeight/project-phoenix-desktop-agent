@@ -24,15 +24,16 @@ Phoenix brings a multi-tab browser and AI provider controls into one native desk
 - Streaming chat with the selected model, with an optional **Share page** control to include the active page's readable text in your message.
 - Resize the assistant panel by dragging its left edge; the width is remembered. The divider also supports arrow keys, Shift for larger steps, and double-click to reset.
 - Saved chats and an activity timeline survive restarts. Phoenix restores the latest chat on launch; older conversations are available from the Chats menu. Activity records contain only tool labels, permission decisions and run outcomes.
-- **Built-in browser tools:** Claude, Codex, and OpenAI-compatible API providers can list tabs, read a bounded accessibility snapshot, capture a reduced-size screenshot, navigate, click, drag between elements, copy or paste, type into ordinary text fields, fill forms in batches, validate required fields, attach files from Phoenix's library, press supported keys, scroll, wait for page elements and use native select controls. Phoenix uses the same WebView2 profile as the visible browser, so user sign-ins carry over. Browser reads and actions run automatically when requested; no browser extension, external desktop agent, or remote-debugging port is required.
+- **Built-in browser tools:** Claude, Codex, and OpenAI-compatible API providers can list tabs, read a bounded accessibility snapshot, extract paged text and links from whole pages, capture a reduced-size screenshot, navigate, click a control by its visible label or snapshot reference, drag between elements, copy or paste, type into ordinary text fields, fill forms in batches, validate required fields, attach files from Phoenix's library, press supported keys, scroll, wait for page elements and use native select controls. Phoenix uses the same WebView2 profile as the visible browser, so user sign-ins carry over. Browser reads and actions run automatically when requested; no browser extension, external desktop agent, or remote-debugging port is required.
 - **Computer use** (enabled by default in new installations): native tools list and capture windows, discover controls, click, scroll, drag, type, copy, and paste. Supported providers can use them automatically while working on your request. Vision-capable models can also inspect screenshots. Actions are visible in Activity and can be stopped.
 - Replies are formatted: headings, lists, tables, code blocks with a Copy button.
 - **MCP servers:** install as many as you like (paste the JSON from a server's install instructions, or enter a program or web address), review the exact command before it is saved, test the connection and list its tools, then choose which servers the agent may use. OAuth-protected web servers open sign-in in the browser and keep refreshable tokens in the encrypted vault. Claude, Codex, and OpenAI-compatible API providers can use enabled servers; Enabled-server calls run automatically and appear in chat.
 - **Application tracking:** the agent can check and record job applications or other form submissions, and save user supplied answers in profile notes for future forms. Application records and remembered notes stay in Phoenix's local file library.
+- **Memory:** Phoenix remembers facts, answers, preferences, and choices you choose to save. Review, edit, or delete these entries under **Settings → Memory**; a bounded selection helps the agent avoid asking for the same information again.
 - Claude and OpenAI Codex through their command-line clients, plus API-key connections for Gemini, OpenRouter, Mistral, Z.ai, Grok, and DeepSeek. DeepSeek models are discovered from its API; add a key in Settings → AI providers.
 - API keys stored in a Windows DPAPI-encrypted vault; Phoenix does not put vault-backed keys in `config.yaml` or show them again in the UI.
 
-Page sharing remains opt-in. It includes the active page's readable text directly with your message; browser tools let supported providers inspect and operate tabs automatically. Passwords, payment details, and authentication codes are not entered by the browser agent. Browser uploads can attach files selected from Phoenix's library; downloading files from pages is not available yet.
+Page sharing remains opt-in. It includes the active page's readable text directly with your message; browser tools let supported providers inspect and operate tabs automatically. Passwords, payment details, and authentication codes are not entered by the browser agent. Browser uploads can attach files selected from Phoenix's library; downloading files from pages is not available yet. Tabs opened by the agent are cleaned up after it finishes unless you keep one active.
 
 ## Build and run
 
@@ -73,11 +74,13 @@ Provider API keys are encrypted with Windows DPAPI for the current Windows user.
 
 Phoenix stores its configuration at `%APPDATA%\Phoenix\config.yaml` and the encrypted key vault under `%LOCALAPPDATA%\Phoenix\vault`.
 
-### Chat and activity data
+### Local data and memory
 
 Visited-site history, saved chat transcripts and agent activity summaries are stored locally under `%APPDATA%\Phoenix`. Phoenix keeps up to 100 visited sites, 40 chats (up to 64 messages and 120,000 bytes of transcript text per chat), and 500 activity entries; the Activity tab shows the latest 100. Chat and activity files are each capped at 32 MiB. The Activity tab has a **Clear saved chats & activity** control. Browser history can be cleared separately from the History view.
 
 Transcript storage includes the messages you send and the assistant's replies. Text shared from a page is sent for that turn but is not saved as a transcript message; page details repeated in an assistant reply remain part of that reply. Activity summaries never save tool arguments, tool results, page contents, or approval descriptions. These files are local JSON, not encrypted; the folder is protected by the current Windows account's normal file permissions.
+
+Phoenix also stores files, application records, and Memory entries in its local library database. Memory is editable in Settings and can be deleted at any time.
 
 ## Development checks
 
