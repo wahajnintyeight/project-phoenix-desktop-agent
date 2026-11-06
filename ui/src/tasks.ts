@@ -129,6 +129,49 @@ function toolChips(t: Task): string[] {
   return names.length ? names : ["No tools"];
 }
 
+/** Hover text (the browser's title tooltip) for every control that is an icon or a short word. */
+const TIPS: Record<string, string> = {
+  surprise: "Open a random idea",
+  new: "Create a task from scratch",
+  "filter:all": "Show every task",
+  "filter:scheduled": "Show tasks that run by themselves",
+  "filter:manual": "Show tasks you start yourself",
+  "filter:attention": "Show tasks whose last run was blocked or failed",
+  run: "Run now, in a new session",
+  stop: "Stop this run",
+  watch: "Watch the run in the chat",
+  edit: "Change this task",
+  duplicate: "Make a copy of this task",
+  delete: "Delete this task for good",
+  close: "Close the details",
+  session: "Open the chat of that run",
+  "toggle:on": "Pause the schedule. Nothing runs until you resume it.",
+  "toggle:off": "Resume the schedule",
+  "step:ideas": "Start from a ready-made idea",
+  "step:what": "Name the task and say what to do",
+  "step:when": "Choose when it runs",
+  "step:tools": "Choose what the agent may use",
+  "kind:manual": "Runs only when you press Run",
+  "kind:interval": "Repeats every few minutes or hours",
+  "kind:daily": "Runs once a day at a time you pick",
+  "kind:weekdays": "Runs Monday to Friday at a time you pick",
+  "save-run": "Save the task and start it now",
+  cancel: "Close without saving",
+  save: "Save the task",
+};
+
+const TOOL_TIP: Record<string, string> = {
+  browser: "Open pages, click, type and read in your browser",
+  files: "Read and save files in your Phoenix library",
+  desktop: "Control other apps on your PC",
+};
+
+const ICON_TIP: Record<string, string> = {
+  bolt: "Bolt", briefcase: "Briefcase", mail: "Mail", news: "News", trend: "Trend", search: "Search", calendar: "Calendar",
+  doc: "Document", layers: "Layers", cart: "Shopping", plane: "Travel", home: "Home", cap: "Learning", bulb: "Idea",
+  bell: "Reminder", broom: "Cleanup", chart: "Chart", bot: "Robot",
+};
+
 type Filter = "all" | "scheduled" | "manual" | "attention";
 
 class PhTasks extends HTMLElement {
@@ -208,10 +251,13 @@ class PhTasks extends HTMLElement {
     this.#name.placeholder = "Name this task";
     this.#name.maxLength = 60;
     this.#name.setAttribute("aria-label", "Task name");
+    this.#name.title = "Shown on the task card";
     this.#prompt.placeholder = "Where to go, what to do, when it is done.";
     this.#prompt.setAttribute("aria-label", "Instructions");
+    this.#prompt.title = "What the agent should do. It will not ask questions while it runs.";
     this.#extra.placeholder = "Rules or things to avoid";
     this.#extra.setAttribute("aria-label", "Extra rules");
+    this.#extra.title = "Rules the agent must follow on every run";
 
     for (const ic of ICONS) {
       const b = el("button", "tp-icon");
@@ -219,7 +265,8 @@ class PhTasks extends HTMLElement {
       b.type = "button";
       b.dataset["op"] = "icon";
       b.dataset["id"] = ic;
-      b.setAttribute("aria-label", `Icon ${ic}`);
+      b.setAttribute("aria-label", `Icon: ${ICON_TIP[ic] ?? ic}`);
+      b.title = ICON_TIP[ic] ?? ic;
       this.#icons.append(b);
     }
 
@@ -235,11 +282,13 @@ class PhTasks extends HTMLElement {
       b.setAttribute("role", "radio");
       b.dataset["op"] = "kind";
       b.dataset["id"] = v;
+      b.title = TIPS[`kind:${v}`] ?? "";
       this.#kind.append(b);
     }
     this.#every.type = "number";
     this.#every.min = "1";
     this.#every.setAttribute("aria-label", "Repeat every");
+    this.#every.title = "How often it repeats";
     for (const [v, l] of [["60", "hours"], ["1", "minutes"]] as const) {
       const o = el("option", undefined, l);
       o.value = v;
@@ -248,16 +297,19 @@ class PhTasks extends HTMLElement {
     this.#unit.setAttribute("aria-label", "Unit");
     this.#at.type = "time";
     this.#at.setAttribute("aria-label", "Time of day");
+    this.#at.title = "Time of day, in your local time";
     const whenRow = el("div", "tp-when");
     whenRow.append(el("span", "tp-when-every", "every"), this.#every, this.#unit, el("span", "tp-when-at", "at"), this.#at);
 
     this.#all.type = "checkbox";
     const allLabel = el("label", "tp-check");
     allLabel.append(this.#all, el("span", "tp-check-text", "Everything that is switched on"));
+    allLabel.title = "Give the task every tool you have switched on";
     this.#all.addEventListener("change", () => { this.#picks.hidden = this.#all.checked; }, { passive: true });
     this.#notify.type = "checkbox";
     const notifyLabel = el("label", "tp-check");
     notifyLabel.append(this.#notify, el("span", "tp-check-text", "Alert me when it finishes"));
+    notifyLabel.title = "Flash the taskbar when a run ends, if Phoenix is not in front";
 
     this.#panes.append(
       pane("ideas", "Ideas", ideaGrid),
@@ -275,6 +327,7 @@ class PhTasks extends HTMLElement {
       b.setAttribute("role", "tab");
       b.dataset["op"] = "step";
       b.dataset["id"] = id;
+      b.title = TIPS[`step:${id}`] ?? "";
       const copy = el("span", "tp-step-copy");
       const val = el("span", "tp-step-val");
       this.#stepVal[id] = val;
@@ -285,12 +338,15 @@ class PhTasks extends HTMLElement {
 
     const save = el("button", "btn btn-primary", "Save");
     save.type = "submit";
+    save.title = TIPS["save"] ?? "";
     const saveRun = el("button", "btn", "Save and run");
     saveRun.type = "button";
     saveRun.dataset["op"] = "save-run";
+    saveRun.title = TIPS["save-run"] ?? "";
     const cancel = el("button", "btn btn-quiet", "Cancel");
     cancel.type = "button";
     cancel.dataset["op"] = "cancel";
+    cancel.title = TIPS["cancel"] ?? "";
     const foot = el("div", "tp-foot");
     foot.append(this.#err, cancel, saveRun, save);
 
@@ -367,6 +423,7 @@ class PhTasks extends HTMLElement {
       c.value = id;
       c.checked = on.has(id) && !disabled;
       c.disabled = disabled;
+      l.title = id.startsWith("mcp:") ? `Tools from the ${label} server` : (disabled ? "Switch computer use on in Settings first" : (TOOL_TIP[id] ?? label));
       const text = el("span", "tp-check-text");
       text.append(icon(glyphName, 16), label);
       l.append(c, text);
@@ -497,6 +554,9 @@ class PhTasks extends HTMLElement {
     const b = el("button", cls);
     if (glyphName) b.append(icon(glyphName, 16));
     if (label) b.append(label);
+    const tip = TIPS[`${op}:${id}`] ?? TIPS[op];
+    if (tip) b.title = tip;
+    if (!label) b.setAttribute("aria-label", tip ?? op);
     b.type = "button";
     b.dataset["op"] = op;
     b.dataset["id"] = id;
@@ -590,6 +650,7 @@ class PhTasks extends HTMLElement {
     const card = el("article", "tp-card");
     card.dataset["state"] = running ? "running" : waiting ? "waiting" : (t.lastStatus ?? "new");
     card.dataset["op"] = "open";
+    card.title = `${t.name}: open details`;
     card.dataset["id"] = t.id;
     card.tabIndex = 0;
     card.addEventListener("keydown", (e) => { if (e.key === "Enter" && e.target === card) card.click(); });
@@ -607,9 +668,10 @@ class PhTasks extends HTMLElement {
     else if (waiting) result.textContent = "Waiting for the agent to be free…";
     else if (t.lastRun) result.textContent = `${STATUS_TEXT[t.lastStatus ?? "ok"] ?? ""} ${ago(t.lastRun)}${t.lastResult ? ": " + t.lastResult : ""}`;
     else result.textContent = "Not run yet.";
+    result.title = result.textContent;
 
     const chips = el("div", "tp-chips");
-    for (const c of toolChips(t).slice(0, 3)) chips.append(el("span", "tp-tag", c));
+    for (const c of toolChips(t).slice(0, 3)) { const tag = el("span", "tp-tag", c); tag.title = `Tool: ${c}`; chips.append(tag); }
 
     const foot = el("div", "tp-card-foot");
     if (running) foot.append(this.#button("stop", "Stop", t.id, "btn", "stop"));
@@ -661,8 +723,10 @@ class PhTasks extends HTMLElement {
       return s;
     };
     const chips = el("div", "tp-chips");
-    for (const c of toolChips(t)) chips.append(el("span", "tp-tag", c));
+    for (const c of toolChips(t)) { const tag = el("span", "tp-tag", c); tag.title = `Tool: ${c}`; chips.append(tag); }
 
+    const tg = acts.querySelector<HTMLElement>('[data-op="toggle"]');
+    if (tg) tg.title = TIPS[t.enabled ? "toggle:on" : "toggle:off"] ?? "";
     d.append(head, acts, sec("Instructions", t.prompt));
     if (t.extra) d.append(sec("Extra instructions", t.extra));
     d.append(sec("Tools", chips));
