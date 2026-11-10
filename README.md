@@ -24,6 +24,7 @@ Phoenix brings a multi-tab browser and AI provider controls into one native desk
 - Streaming chat with the selected model, with an optional **Share page** control to include the active page's readable text in your message.
 - Resize the assistant panel by dragging its left edge; the width is remembered. The divider also supports arrow keys, Shift for larger steps, and double-click to reset.
 - Saved chats and an activity timeline survive restarts. Phoenix restores the latest chat on launch; older conversations are available from the Chats menu. Activity records contain only tool labels, permission decisions and run outcomes.
+- **Notifications:** review recent task outcomes, agent responses and approval requests in the Notifications panel. Choose which categories alert you; Windows notifications open the related task or chat when Phoenix is in the background. Notification text omits conversation and page content.
 - **Built-in browser tools:** Claude, Codex, and OpenAI-compatible API providers can list tabs, read a bounded accessibility snapshot, extract paged text and links from whole pages, capture a reduced-size screenshot, navigate, click a control by its visible label or snapshot reference, drag between elements, copy or paste, type into ordinary text fields, fill forms in batches, validate required fields, attach files from Phoenix's library, press supported keys, scroll, wait for page elements and use native select controls. Phoenix uses the same WebView2 profile as the visible browser, so user sign-ins carry over. Browser reads and actions run automatically when requested; no browser extension, external desktop agent, or remote-debugging port is required.
 - **Computer use** (enabled by default in new installations): native tools list and capture windows, discover controls, click, scroll, drag, type, copy, and paste. Supported providers can use them automatically while working on your request. Vision-capable models can also inspect screenshots. Actions are visible in Activity and can be stopped.
 - Replies are formatted: headings, lists, tables, code blocks with a Copy button.
@@ -82,6 +83,8 @@ Visited-site history, saved chat transcripts and agent activity summaries are st
 Transcript storage includes the messages you send and the assistant's replies. Text shared from a page is sent for that turn but is not saved as a transcript message; page details repeated in an assistant reply remain part of that reply. Activity summaries never save tool arguments, tool results, page contents, or approval descriptions. These files are local JSON, not encrypted; the folder is protected by the current Windows account's normal file permissions.
 
 Phoenix also stores files, application records, and Memory entries in its local library database. Memory is editable in Settings and can be deleted at any time.
+
+Notification settings and up to 200 recent notifications are stored locally. Scheduled tasks run while Phoenix is open or running in the system tray; quitting Phoenix stops the scheduler until it is started again.
 
 ## Development checks
 

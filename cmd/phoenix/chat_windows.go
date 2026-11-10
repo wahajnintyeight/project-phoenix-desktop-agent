@@ -42,7 +42,7 @@ const (
 		"When they say apply, send, submit, book, buy, post or fill something in, you do it with the browser tools, all the way to the final button. " +
 		"Phoenix itself asks the user to approve risky actions, so never refuse, hedge or say you \"can't\" click, submit or send: you can, and it is the point of this app. " +
 		"Use the user's profile and saved files for every field and upload; do not ask for what you already have or can read from the page. " +
-		"EVERY TURN, IN THIS ORDER: (1) LOOK: before you answer or ask anything, call browser_tabs and browser_snapshot to see the live browser; the page text in a message, earlier turns and your memory are stale and never count as looking. (2) UNDERSTAND: what the user wants (their shortest words, the page, WHAT YOU REMEMBER). (3) ACT with the browser tools, and report only what a tool result confirmed: never say you selected, clicked, opened, filled or applied anything unless a tool call this turn did it and its result shows it. Asking the user comes last, only for a real blocker. For \"select the posting\" or \"open it\", click it, then snapshot to verify. " +
+		"EVERY TURN, IN THIS ORDER: (1) LOOK: before you answer or ask anything, call browser_tabs to see the live browser; page text in a message, earlier turns and your memory are stale and never count as looking. If there is no usable page tab (kind=web), open one yourself with browser_open_tab. If the user gave a URL, open it there; otherwise navigate to a relevant search page or the site needed for the task. A Home tab is not a usable page until you navigate it. Never ask the user to open a tab for you. Then call browser_read and browser_snapshot on the page. (2) UNDERSTAND: what the user wants (their shortest words, the page, WHAT YOU REMEMBER). (3) ACT with the browser tools, and report only what a tool result confirmed: never say you selected, clicked, opened, filled or applied anything unless a tool call this turn did it and its result shows it. Asking the user comes last, only for a real blocker. For \"select the posting\" or \"open it\", click it, then snapshot to verify. " +
 		"METHOD: browser_tabs and browser_snapshot show the real open browser, always more than the shared page text; if a control seems missing, call browser_snapshot with a query (\"Apply\", \"Next\") and scroll before concluding it is not there; navigate, click, fill, scroll and verify with its tools, and use MCP and computer-use tools when they help. " +
 		"SPEED: every tool result is replayed on each later step, so fewer, smaller calls are faster. When you know what a button or link says, call browser_click_text once instead of snapshot then click; pass query to browser_snapshot instead of listing a busy page; fill forms with browser_fill_form; to read or collect page content (a whole posting, a list of jobs, anything below the fold) call browser_extract once, with query to filter and scroll true for infinite-scroll lists, instead of scrolling and reading by hand. " +
 		"Carry on through the whole workflow without stopping to narrate. After each action check the result; if a tool fails, inspect the state before retrying and never repeat an irreversible action blindly. " +
@@ -268,7 +268,13 @@ func sendTurn(display, text string, sharePage bool) {
 	chat.currentID, chat.pendingMessageIndex, messageAt = saveUserMessage(chat.currentID, display, text)
 	chatID, userIndex := chat.currentID, chat.pendingMessageIndex
 
-	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Minute)
+	var ctx context.Context
+	var cancel context.CancelFunc
+	if taskRun.goal {
+		ctx, cancel = context.WithCancel(context.Background())
+	} else {
+		ctx, cancel = context.WithTimeout(context.Background(), 10*time.Minute)
+	}
 	chat.cancel, chat.busy = cancel, true
 	progress := "Preparing your request…"
 	if sharePage {
@@ -307,6 +313,7 @@ func sendTurn(display, text string, sharePage bool) {
 // startChatRun runs one turn in the background. text is what the user typed (kept in the
 // history); prompt is what the model is sent this turn.
 func startChatRun(ctx context.Context, cancel context.CancelFunc, id provider.ID, gen int, chatID string, userIndex int, text, prompt string, history []provider.Message) {
+	goalRun := taskRun.goal
 	supportsMCP := id == provider.Claude || id == provider.Codex || provider.IsHTTP(id)
 	progress := "Preparing your response…"
 	if !essentialInitDone() {
@@ -417,65 +424,128 @@ func startChatRun(ctx context.Context, cancel context.CancelFunc, id provider.ID
 				return nil
 			}
 		}
-		res, err := hub.Run(ctx, id, req, func(ev provider.Event) {
-			switch ev.Kind {
-			case provider.EvToolUse:
-				// Show every tool call, so the user can see what the agent did.
-				line, server, tool, input := chatToolCallDetails(ev)
-				activityName := ev.ToolName
-				if server != "" && tool != "" {
-					activityName = "mcp__" + server + "__" + tool
+		runHistory, runPrompt := append([]provider.Message(nil), history...), prompt
+		var res provider.Result
+		var err error
+		previousAnswer := ""
+		for {
+			req.History, req.Prompt = runHistory, runPrompt
+			iterationUsedTool := false
+			iterationDenied := false
+			res, err = hub.Run(ctx, id, req, func(ev provider.Event) {
+				switch ev.Kind {
+				case provider.EvToolUse:
+					iterationUsedTool = true
+					// Show every tool call, so the user can see what the agent did.
+					line, server, tool, input := chatToolCallDetails(ev)
+					activityName := ev.ToolName
+					if server != "" && tool != "" {
+						activityName = "mcp__" + server + "__" + tool
+					}
+					summary := safeToolSummary(activityName)
+					if !goalRun {
+						flush()
+					}
+					runLater(func() {
+						if gen == chat.gen {
+							addAgentActivity("tool", summary, "", 0)
+							postChat(chatEvent{K: "tool", Text: line, ToolID: clippedUTF8(ev.ToolID, 128), Server: server, ToolName: tool, Input: input})
+						}
+					})
+				case provider.EvToolResult:
+					if ev.IsError && strings.Contains(strings.ToLower(ev.Text), "declined") {
+						iterationDenied = true
+					}
+					output := chatToolResultDetails(ev)
+					failed := chatToolResultFailed(ev)
+					runLater(func() {
+						if gen == chat.gen {
+							postChat(
+								chatEvent{K: "tool-result", ToolID: clippedUTF8(ev.ToolID, 128), Output: output, ToolError: failed},
+								chatEvent{K: "processing", Text: "Reviewing the results…"},
+							)
+						}
+					})
+				case provider.EvStart:
+					model = ev.Model
+					runLater(func() {
+						if gen == chat.gen {
+							postChat(
+								chatEvent{K: "processing", Text: "Thinking…"},
+								chatEvent{K: "start", Provider: providerName(id), Model: ev.Model},
+							)
+						}
+					})
+				case provider.EvTextDelta, provider.EvText:
+					t := ev.Text
+					mu.Lock()
+					if ev.Kind == provider.EvText && gotText {
+						t = "\n\n" + t // a second whole message, as Codex sends them
+					}
+					gotText = true
+					buf.WriteString(t)
+					mu.Unlock()
+					// Coalesce tiny deltas: the UI thread redraws at most about 20 times a second.
+					if !goalRun && time.Since(last) > 50*time.Millisecond {
+						last = time.Now()
+						flush()
+					}
+				case provider.EvUsage:
+					if ev.Usage != nil {
+						if goalRun {
+							usage.InputTokens += ev.Usage.InputTokens
+							usage.OutputTokens += ev.Usage.OutputTokens
+							usage.CachedTokens += ev.Usage.CachedTokens
+							usage.CostUSD += ev.Usage.CostUSD
+						} else {
+							usage = *ev.Usage
+						}
+					}
 				}
-				summary := safeToolSummary(activityName)
+			})
+			if err != nil || res.IsError || !goalRun {
 				flush()
-				runLater(func() {
-					if gen == chat.gen {
-						addAgentActivity("tool", summary, "", 0)
-						postChat(chatEvent{K: "tool", Text: line, ToolID: clippedUTF8(ev.ToolID, 128), Server: server, ToolName: tool, Input: input})
-					}
-				})
-			case provider.EvToolResult:
-				output := chatToolResultDetails(ev)
-				failed := chatToolResultFailed(ev)
-				runLater(func() {
-					if gen == chat.gen {
-						postChat(
-							chatEvent{K: "tool-result", ToolID: clippedUTF8(ev.ToolID, 128), Output: output, ToolError: failed},
-							chatEvent{K: "processing", Text: "Reviewing the results…"},
-						)
-					}
-				})
-			case provider.EvStart:
-				model = ev.Model
-				runLater(func() {
-					if gen == chat.gen {
-						postChat(
-							chatEvent{K: "processing", Text: "Thinking…"},
-							chatEvent{K: "start", Provider: providerName(id), Model: ev.Model},
-						)
-					}
-				})
-			case provider.EvTextDelta, provider.EvText:
-				t := ev.Text
-				mu.Lock()
-				if ev.Kind == provider.EvText && gotText {
-					t = "\n\n" + t // a second whole message, as Codex sends them
-				}
-				gotText = true
-				buf.WriteString(t)
-				mu.Unlock()
-				// Coalesce tiny deltas: the UI thread redraws at most about 20 times a second.
-				if time.Since(last) > 50*time.Millisecond {
-					last = time.Now()
-					flush()
-				}
-			case provider.EvUsage:
-				if ev.Usage != nil {
-					usage = *ev.Usage
-				}
+				break
 			}
-		})
-		flush()
+			if iterationDenied {
+				res.Text = "GOAL_BLOCKED: The user declined a required action."
+				mu.Lock()
+				buf.Reset()
+				buf.WriteString(res.Text)
+				mu.Unlock()
+				flush()
+				break
+			}
+			if _, _, complete := goalOutcome(res.Text); complete {
+				mu.Lock()
+				buf.Reset()
+				buf.WriteString(res.Text)
+				mu.Unlock()
+				flush()
+				break
+			}
+			if !iterationUsedTool && strings.TrimSpace(res.Text) == previousAnswer {
+				res.Text = "GOAL_BLOCKED: The agent repeated its previous response without a new action; inspect the goal and adjust its instructions or available tools."
+				mu.Lock()
+				buf.Reset()
+				buf.WriteString(res.Text)
+				mu.Unlock()
+				flush()
+				break
+			}
+			previousAnswer = strings.TrimSpace(res.Text)
+			runHistory = append(runHistory, provider.Message{Role: "user", Content: runPrompt}, provider.Message{Role: "assistant", Content: res.Text})
+			runHistory = trimHistory(runHistory)
+			runPrompt = "Continue working toward the goal. Reassess what remains, take the next useful action, and verify it. End only with GOAL_DONE: or GOAL_BLOCKED: when appropriate."
+			mu.Lock()
+			buf.Reset()
+			mu.Unlock()
+			runLater(func() {
+				if gen == chat.gen {
+					postChat(chatEvent{K: "processing", Text: "Checking remaining goal steps…"})
+				}
+			})
+		}
 		answer := strings.TrimSpace(res.Text)
 		runLater(func() {
 			if gen != chat.gen {
@@ -502,6 +572,9 @@ func startChatRun(ctx context.Context, cancel context.CancelFunc, id provider.ID
 				}
 				logf("chat %s: %s", id, msg)
 				addAgentActivity("turn", "Agent run failed", "failed", time.Since(started).Milliseconds())
+				if taskRun.id == "" {
+					notifyUser("chat", "Agent response failed", chatID, true)
+				}
 				postChat(chatEvent{K: "error", Text: msg})
 				setAgentState("error", "Agent error", false)
 				finishTask("failed", msg, time.Since(started).Milliseconds())
@@ -509,17 +582,18 @@ func startChatRun(ctx context.Context, cancel context.CancelFunc, id provider.ID
 				chat.history = append(chat.history, provider.Message{Role: "user", Content: text}, provider.Message{Role: "assistant", Content: answer})
 				at := commitSavedTurn(chatID, userIndex, answer, providerName(id), model)
 				addAgentActivity("turn", "Agent completed", "completed", time.Since(started).Milliseconds())
+				if taskRun.id == "" {
+					notifyUser("chat", "Agent response ready", chatID, true)
+				}
 				postChat(chatEvent{K: "done", At: at, Model: model, Millis: time.Since(started).Milliseconds(), In: usage.InputTokens, Out: usage.OutputTokens, Cost: usage.CostUSD, Ctx: historyTokens(chat.history) + chatSystemTokens})
 				setAgentState("idle", "Agent idle", false)
 				if taskRun.id != "" {
 					status, report := taskOutcome(answer)
+					if taskRun.goal {
+						status, report, _ = goalOutcome(answer)
+					}
 					finishTask(status, report, time.Since(started).Milliseconds())
 				}
-			}
-			// The user is usually in another window while the agent works: flash the taskbar
-			// button when a run that took a while ends (not for Stop, which they just pressed).
-			if win != nil && !errors.Is(err, context.Canceled) && time.Since(started) > 8*time.Second && !win.IsFocused() {
-				win.Flash(true)
 			}
 			pushContext()
 			go pushMemory()          // the agent may have remembered something this run

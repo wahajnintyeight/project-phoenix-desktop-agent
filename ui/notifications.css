@@ -1,0 +1,18 @@
+@layer components {
+  ph-notifications { display: none; }
+  .agent[data-pane="notifications"] ph-notifications { @apply flex min-h-0 flex-1 flex-col overflow-hidden; }
+  .notification-header { @apply flex items-center gap-2 border-b border-line px-4 py-3; }
+  .notification-header h2 { @apply mr-auto; }
+  .notification-settings { @apply border-b border-line px-4 py-2 text-sm text-fg-muted; }
+  .notification-settings summary { @apply cursor-pointer; }
+  .notification-option { @apply flex items-center gap-2 py-1; }
+  .notification-test { @apply mt-2 flex flex-wrap items-center gap-2; }
+  .notification-test-result { @apply text-xs text-fg-subtle; }
+  .notification-test-result[data-ok="false"] { @apply text-danger; }
+  .notification-list { @apply scroll min-h-0 flex-1 overflow-y-auto; }
+  .notification-empty { @apply px-4 py-5 text-sm text-fg-subtle; }
+  .notification-item { @apply flex w-full flex-col gap-1 border-b border-line px-4 py-3 text-left text-sm text-fg; }
+  .notification-item:hover { @apply bg-raised; }
+  .notification-item[data-read="false"] { @apply font-semibold; }
+  .notification-time { @apply text-xs font-normal text-fg-subtle; }
+}

@@ -7,8 +7,8 @@ import (
 	_ "embed"
 	"encoding/json"
 	"fmt"
-	"os/exec"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"strconv"
 	"strings"
@@ -16,6 +16,7 @@ import (
 	"github.com/wailsapp/go-webview2/webviewloader"
 	"github.com/wailsapp/wails/v3/pkg/application"
 	"github.com/wailsapp/wails/v3/pkg/events"
+	"github.com/wailsapp/wails/v3/pkg/services/notifications"
 
 	"phoenix/internal/ui"
 )
@@ -29,15 +30,15 @@ const (
 var trayIcon []byte
 
 var (
-	app      *application.App
-	win      *application.WebviewWindow
-	hwnd     uintptr   // the Wails window's HWND, known once the UI has loaded
-	uiViews  []uintptr // Wails's own webview windows: they must stay beneath the tab pages
-	ready    bool      // the UI has loaded and can receive messages
-	started  bool      // tabs and providers are initialised
-	quitting bool
+	app        *application.App
+	win        *application.WebviewWindow
+	hwnd       uintptr   // the Wails window's HWND, known once the UI has loaded
+	uiViews    []uintptr // Wails's own webview windows: they must stay beneath the tab pages
+	ready      bool      // the UI has loaded and can receive messages
+	started    bool      // tabs and providers are initialised
+	quitting   bool
 	restarting bool
-	logFile  *os.File
+	logFile    *os.File
 )
 
 // logf writes diagnostics to %TEMP%\phoenix.log when PHOENIX_LOG=1.
@@ -90,6 +91,7 @@ func main() {
 
 	app = application.New(application.Options{
 		Name:        "Phoenix",
+		Services:    []application.Service{application.NewService(&notificationLifecycle{})},
 		Description: "A desktop workspace where you and an AI agent browse and work together",
 		Assets:      application.AssetOptions{Handler: application.BundledAssetFileServer(ui.Assets())},
 		// The UI talks to Go with plain strings (see ui/src/protocol.ts), not bound methods.
@@ -106,6 +108,11 @@ func main() {
 			// Starting Phoenix again brings the running one forward.
 			OnSecondInstanceLaunch: func(application.SecondInstanceData) { runLater(showWindow) },
 		},
+	})
+	nativeNotifications.OnNotificationResponse(func(result notifications.NotificationResult) {
+		if result.Error == nil && result.Response.ID != "" {
+			runLater(func() { openNotification(result.Response.ID) })
+		}
 	})
 
 	win = app.Window.NewWithOptions(application.WebviewWindowOptions{
@@ -239,6 +246,8 @@ func onMessage(message string) {
 		handleChatOp(f)
 	case "k": // saved tasks
 		handleTaskOp(f)
+	case "j":
+		handleNotificationOp(f)
 	case "m": // menu popover state
 		if len(f) > 1 {
 			switch f[1] {
@@ -279,6 +288,7 @@ func uiReady() {
 		initTabs()
 		initHistory()
 		initAgentPersistence()
+		initNotifications()
 		initProviders()
 		startDevScript()
 		startTaskScheduler()
@@ -300,6 +310,12 @@ func uiReady() {
 	pushHistory()
 	pushSavedChats()
 	pushAgentActivity()
+	pushNotifications()
+	if pendingNotification != "" {
+		id := pendingNotification
+		pendingNotification = ""
+		openNotification(id)
+	}
 	go func() { runLater(pushTasks) }()
 	if restoreChat {
 		restoreLatestSavedChat()

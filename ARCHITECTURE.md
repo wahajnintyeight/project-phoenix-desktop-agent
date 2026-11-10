@@ -209,10 +209,10 @@ There is no migration system beyond the library's `user_version`, résumé facts
 ## 12. Current gaps and open work
 
 - **Files:** the SQLite file library (`internal/library`, MCP server `phoenix-files`, started as `phoenix.exe mcp-files`) and the Files explorer in the UI exist. Document indexing beyond file text and Drive integration are not implemented.
-- **Product data:** no résumé profile store, application tracker, full-library backup/restore flow, setup wizard, native notification center, updater or signed release pipeline.
+- **Product data:** full-library backup/restore, an updater, and a signed release pipeline remain open work.
 - **Tool capabilities:** provider support is detected at the provider level, not consistently per model. Models without function-call support can fail when tools are offered.
 - **Browser:** no arbitrary script, file download, trace/replay or robust coordinate interaction for canvas-only applications. Canvas is not represented by the accessibility snapshot. Not yet measured: tokens and time per step on real sites after the snapshot size cut.
-- **Notifications:** only a taskbar flash; no Windows toast (needs an app identity the unpackaged exe does not have).
+- **Notifications:** Wails delivers Windows notifications while Phoenix is running; history and preferences are bounded and stored locally. Toast activation and behavior across Windows versions need real-device validation.
 - **Desktop interaction:** different DPI/multi-monitor coverage and elevated windows (UIPI) need more validation; computer-use commands are Win32-specific.
 - **Window/runtime:** Windows 11 snap-layout flyout, per-monitor DPI transitions, production installer/package and profile-path migration need completion.
 - **Performance:** there is no current multi-tab memory/startup/latency baseline.

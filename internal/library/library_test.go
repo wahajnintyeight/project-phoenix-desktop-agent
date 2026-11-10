@@ -167,7 +167,7 @@ func TestTools(t *testing.T) {
 	}
 	defer cs.Close()
 	tools, err := cs.ListTools(ctx, nil)
-	if err != nil || len(tools.Tools) != 20 {
+	if err != nil || len(tools.Tools) != 22 {
 		t.Fatalf("tools: %d %v", len(tools.Tools), err)
 	}
 	call := func(name string, args map[string]any) (string, bool) {

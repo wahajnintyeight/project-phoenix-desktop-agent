@@ -8,7 +8,7 @@ import (
 	sdk "github.com/modelcontextprotocol/go-sdk/mcp"
 )
 
-const instructions = "Operate only the user's Phoenix browser tabs. Start with browser_tabs, then browser_read to understand what the page is " +
+const instructions = "Operate only the user's Phoenix browser tabs. Start with browser_tabs. If there is no usable page tab (kind=web), open one yourself with browser_open_tab; when given a URL, open that URL, otherwise navigate to a relevant search page or the site needed for the task. A Home tab is not usable until browser_navigate turns it into a page. Never ask the user to open a tab for you. Then use browser_read to understand what the page is " +
 	"(its purpose, state, dialogs, forms and what is on screen), then browser_snapshot to get refs for the controls you need. " +
 	"On a busy page, pass query to browser_snapshot (for example \"Apply\") to get the one control you need. Use refs from the latest snapshot; after navigation or a stale-ref error, take a fresh snapshot. " +
 	"Action results report URL changes, dialogs and loading; still verify the outcome before the next step, and use browser_screenshot when the outline is not enough (canvas, images, unlabeled controls). " +
@@ -23,7 +23,7 @@ type TabArgs struct {
 }
 
 type SnapshotArgs struct {
-	TabID int `json:"tab_id" jsonschema:"id from browser_tabs"`
+	TabID int    `json:"tab_id" jsonschema:"id from browser_tabs"`
 	Query string `json:"query,omitempty" jsonschema:"list only controls whose label contains this text, for example Apply, Submit or Next; use it on busy pages"`
 	Depth int    `json:"depth,omitempty" jsonschema:"ignored; kept for compatibility"`
 }
@@ -135,7 +135,7 @@ func NewMCPServer(client Invoker) *sdk.Server {
 	add(s, client, "browser_back", "Go back in the selected tab's history.", TabArgs{})
 	add(s, client, "browser_forward", "Go forward in the selected tab's history.", TabArgs{})
 	add(s, client, "browser_reload", "Reload the selected tab.", TabArgs{})
-	add(s, client, "browser_open_tab", "Open a new Phoenix browser tab, optionally at a URL.", OpenTabArgs{})
+	add(s, client, "browser_open_tab", "Open a new Phoenix browser tab, optionally at a URL. If no usable page tab is open, create one yourself; navigate a Home tab to a relevant page before reading it.", OpenTabArgs{})
 	add(s, client, "browser_close_tab", "Close a Phoenix browser tab.", TabArgs{})
 	add(s, client, "browser_switch_tab", "Make a Phoenix browser tab active.", TabArgs{})
 	return s

@@ -12,6 +12,7 @@
      Mono only for model IDs, paths and addresses. */
 
 @import "tailwindcss" source(none);
+@import "./notifications.css";
 @import "./tasks.css" layer(components);
 @source "./index.html";
 @source "./src";

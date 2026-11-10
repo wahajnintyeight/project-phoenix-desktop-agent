@@ -20,6 +20,7 @@ interface Task {
   id: string;
   name: string;
   prompt: string;
+  goal?: boolean | undefined;
   extra?: string | undefined;
   icon?: string | undefined;
   kind: Kind;
@@ -44,6 +45,9 @@ interface Data {
   desktop?: boolean | undefined;
   running?: string | undefined;
   waiting?: string | undefined;
+  instructionBudget?: number | undefined;
+  promptLimit?: number | undefined;
+  priorityRulesLimit?: number | undefined;
 }
 
 interface Outcome {
@@ -193,7 +197,9 @@ class PhTasks extends HTMLElement {
   // editor fields
   readonly #name = el("input", "field field-wide");
   readonly #prompt = el("textarea", "tp-text");
+  readonly #goal = el("input");
   readonly #extra = el("textarea", "tp-text tp-text-sm");
+  readonly #instructionBudget = el("p", "tp-note");
   readonly #kind = el("div", "tp-seg");
   readonly #every = el("input", "field");
   readonly #unit = el("select", "field");
@@ -216,6 +222,7 @@ class PhTasks extends HTMLElement {
     this.#body.addEventListener("click", (e) => this.#click(e), { passive: true });
     this.#head.addEventListener("click", (e) => this.#click(e), { passive: true });
     this.#drawer.addEventListener("click", (e) => this.#click(e), { passive: true });
+    this.addEventListener("notification-open", (e) => { this.#open = (e as CustomEvent<string>).detail; this.#renderDrawer(); });
     this.#dialog.addEventListener("click", (e) => this.#click(e), { passive: true });
     this.#dialog.addEventListener("close", () => { this.#editing = null; });
     this.addEventListener("keydown", (e) => { if (e.key === "Escape" && !this.#drawer.hidden && !this.#dialog.open) this.#closeDrawer(); });
@@ -224,6 +231,11 @@ class PhTasks extends HTMLElement {
 
   set data(d: Data) {
     this.#data = { tasks: Array.isArray(d?.tasks) ? d.tasks : [], servers: d?.servers ?? [], desktop: d?.desktop, running: d?.running, waiting: d?.waiting };
+    this.#data.instructionBudget = d?.instructionBudget ?? 1500;
+    this.#data.promptLimit = d?.promptLimit ?? 4000;
+    this.#data.priorityRulesLimit = d?.priorityRulesLimit ?? 2000;
+    this.#prompt.maxLength = this.#data.promptLimit;
+    this.#extra.maxLength = this.#data.priorityRulesLimit;
     this.#render();
   }
 
@@ -253,11 +265,19 @@ class PhTasks extends HTMLElement {
     this.#name.setAttribute("aria-label", "Task name");
     this.#name.title = "Shown on the task card";
     this.#prompt.placeholder = "Where to go, what to do, when it is done.";
+    this.#prompt.maxLength = this.#data.promptLimit ?? 4000;
     this.#prompt.setAttribute("aria-label", "Instructions");
     this.#prompt.title = "What the agent should do. It will not ask questions while it runs.";
-    this.#extra.placeholder = "Rules or things to avoid";
-    this.#extra.setAttribute("aria-label", "Extra rules");
-    this.#extra.title = "Rules the agent must follow on every run";
+    this.#goal.type = "checkbox";
+    this.#goal.title = "Keep the agent working across turns until it verifies the goal is complete";
+    this.#goal.addEventListener("change", () => this.#syncGoal(), { passive: true });
+    const goalLabel = el("label", "tp-check");
+    goalLabel.append(this.#goal, el("span", "tp-check-text", "Keep working until the goal is complete"));
+    this.#extra.placeholder = "Hard limits, exclusions, deadlines";
+    this.#extra.maxLength = this.#data.priorityRulesLimit ?? 2000;
+    this.#extra.setAttribute("aria-label", "Priority rules");
+    this.#extra.title = "Hard constraints that take priority over the task goal";
+    this.#instructionBudget.setAttribute("aria-live", "polite");
 
     for (const ic of ICONS) {
       const b = el("button", "tp-icon");
@@ -313,7 +333,7 @@ class PhTasks extends HTMLElement {
 
     this.#panes.append(
       pane("ideas", "Ideas", ideaGrid),
-      pane("what", "What to do", field("Icon", this.#icons), field("Name", this.#name), field("Instructions", this.#prompt), field("Extra rules (optional)", this.#extra)),
+      pane("what", "What to do", field("Icon", this.#icons), field("Name", this.#name), field("Task instructions", this.#prompt), goalLabel, field("Priority rules (optional)", this.#extra), this.#instructionBudget),
       pane("when", "When", this.#kind, whenRow),
       pane("tools", "Tools", allLabel, this.#picks, notifyLabel),
     );
@@ -354,8 +374,8 @@ class PhTasks extends HTMLElement {
     right.append(this.#panes, foot);
     this.#form.append(this.#side, right);
     this.#form.addEventListener("submit", (e) => { e.preventDefault(); this.#save(false); });
-    this.#form.addEventListener("input", () => this.#syncSide(), { passive: true });
-    this.#form.addEventListener("change", () => this.#syncSide(), { passive: true });
+    this.#form.addEventListener("input", () => { this.#syncSide(); this.#syncInstructionBudget(); }, { passive: true });
+    this.#form.addEventListener("change", () => { this.#syncSide(); this.#syncInstructionBudget(); }, { passive: true });
     this.#dialog.append(this.#form);
   }
 
@@ -390,13 +410,24 @@ class PhTasks extends HTMLElement {
     this.#stepVal["ideas"]!.textContent = "Start from one";
   }
 
+  /** A conservative shared estimate for the text that is sent on every task run. */
+  #syncInstructionBudget(): void {
+    const runes = (s: string): number => Array.from(s).length;
+    const tokens = Math.ceil(runes(this.#prompt.value) / 4) + Math.ceil(runes(this.#extra.value) / 4);
+    const limit = this.#data.instructionBudget ?? 1500;
+    this.#instructionBudget.textContent = `Your text: about ${tokens.toLocaleString()} / ${limit.toLocaleString()} tokens. Priority rules outrank the task goal; Phoenix rules and tool limits come first.`;
+    this.#instructionBudget.dataset["over"] = String(tokens > limit);
+  }
+
   #openEditor(t: Task): void {
     this.#editing = t;
     this.#icon = isIcon(t.icon) ? t.icon : "bolt";
     this.#name.value = t.name;
     this.#prompt.value = t.prompt;
+    this.#goal.checked = t.goal ?? false;
     this.#extra.value = t.extra ?? "";
     this.#setKind(t.kind);
+    this.#syncGoal();
     const mins = t.every ?? 60;
     const hours = mins % 60 === 0;
     this.#unit.value = hours ? "60" : "1";
@@ -408,9 +439,11 @@ class PhTasks extends HTMLElement {
     this.#notify.checked = t.notify ?? true;
     this.#side.querySelector<HTMLElement>('[data-id="ideas"]')!.hidden = t.id !== "" || t.prompt !== "";
     this.#err.textContent = "";
+    this.#syncInstructionBudget();
     this.#markIcons();
     this.#goStep(t.id === "" && t.prompt === "" ? "ideas" : "what");
     this.#syncSide();
+    this.#syncInstructionBudget();
     this.#dialog.showModal();
   }
 
@@ -447,6 +480,12 @@ class PhTasks extends HTMLElement {
     this.#form.querySelector<HTMLElement>(".tp-when")!.hidden = k === "manual";
   }
 
+  #syncGoal(): void {
+    if (this.#goal.checked) this.#setKind("manual");
+    this.#kind.hidden = this.#goal.checked;
+    this.#form.querySelector<HTMLElement>(".tp-when")!.hidden = this.#goal.checked || this.#kindValue === "manual";
+  }
+
   #markIcons(): void {
     this.#icons.querySelectorAll<HTMLElement>(".tp-icon").forEach((b) => b.setAttribute("aria-pressed", String(b.dataset["id"] === this.#icon)));
   }
@@ -455,12 +494,13 @@ class PhTasks extends HTMLElement {
     const base = this.#editing;
     if (!base) return;
     if (!this.#prompt.value.trim()) { this.#err.textContent = "Describe the job first."; this.#prompt.focus(); return; }
-    const k = this.#kindValue;
+    const k = this.#goal.checked ? "manual" : this.#kindValue;
     const tools = Array.from(this.#picks.querySelectorAll<HTMLInputElement>("input:checked"), (c) => c.value);
     const task: Partial<Task> = {
       id: base.id,
       name: this.#name.value,
       prompt: this.#prompt.value,
+      goal: this.#goal.checked,
       extra: this.#extra.value,
       icon: this.#icon,
       kind: k,
@@ -471,6 +511,11 @@ class PhTasks extends HTMLElement {
       notify: this.#notify.checked,
     };
     this.#err.textContent = "";
+    this.#syncInstructionBudget();
+    if (this.#instructionBudget.dataset["over"] === "true") {
+      this.#err.textContent = "Shorten the task text to about 1,500 tokens before saving.";
+      return;
+    }
     if (!this.#all.checked && tools.length === 0 && !window.confirm("No tools picked. Save anyway?")) return;
     send("k", "save", JSON.stringify(task), run ? "1" : "0");
   }
@@ -660,11 +705,11 @@ class PhTasks extends HTMLElement {
     tile.style.setProperty("--h", String(hue(t.id || t.name)));
     const top = el("div", "tp-card-top");
     const names = el("div", "tp-card-names");
-    names.append(el("h3", undefined, t.name), el("p", "tp-sched", t.kind === "manual" ? "On demand" : `${t.schedule ?? ""}${t.enabled ? (t.next ? ` · next ${when(t.next)}` : "") : " · paused"}`));
+    names.append(el("h3", undefined, t.name), el("p", "tp-sched", t.goal ? "Goal · runs until complete" : t.kind === "manual" ? "On demand" : `${t.schedule ?? ""}${t.enabled ? (t.next ? ` · next ${when(t.next)}` : "") : " · paused"}`));
     top.append(tile, names, el("span", "tp-dot"));
 
     const result = el("p", "tp-result");
-    if (running) result.textContent = "Running now…";
+    if (running) result.textContent = t.goal ? "Working toward the goal…" : "Running now…";
     else if (waiting) result.textContent = "Waiting for the agent to be free…";
     else if (t.lastRun) result.textContent = `${STATUS_TEXT[t.lastStatus ?? "ok"] ?? ""} ${ago(t.lastRun)}${t.lastResult ? ": " + t.lastResult : ""}`;
     else result.textContent = "Not run yet.";
@@ -700,7 +745,7 @@ class PhTasks extends HTMLElement {
     tile.append(glyph(t.icon, 24));
     tile.style.setProperty("--h", String(hue(t.id || t.name)));
     const names = el("div", "tp-card-names");
-    names.append(el("h2", undefined, t.name), el("p", "tp-sched", t.kind === "manual" ? "On demand" : `${t.schedule ?? ""}${t.enabled ? (t.next ? ` · next ${when(t.next)}` : "") : " · paused"}`));
+    names.append(el("h2", undefined, t.name), el("p", "tp-sched", t.goal ? "Goal · runs until complete" : t.kind === "manual" ? "On demand" : `${t.schedule ?? ""}${t.enabled ? (t.next ? ` · next ${when(t.next)}` : "") : " · paused"}`));
     const close = this.#button("close", "", "", "btn btn-quiet", "close");
     close.setAttribute("aria-label", "Close details");
     head.append(tile, names, close);
@@ -728,7 +773,7 @@ class PhTasks extends HTMLElement {
     const tg = acts.querySelector<HTMLElement>('[data-op="toggle"]');
     if (tg) tg.title = TIPS[t.enabled ? "toggle:on" : "toggle:off"] ?? "";
     d.append(head, acts, sec("Instructions", t.prompt));
-    if (t.extra) d.append(sec("Extra instructions", t.extra));
+    if (t.extra) d.append(sec("Priority rules", t.extra));
     d.append(sec("Tools", chips));
 
     const hist = el("ol", "tp-hist");

@@ -50,16 +50,24 @@ VIAddVersionKey "ProductName"     "${INFO_PRODUCTNAME}"
 ManifestDPIAware true
 
 !include "MUI.nsh"
+!include "nsDialogs.nsh"
 
 !define MUI_ICON "..\icon.ico"
 !define MUI_UNICON "..\icon.ico"
-# !define MUI_WELCOMEFINISHPAGE_BITMAP "resources\leftimage.bmp" #Include this to add a bitmap on the left side of the Welcome Page. Must be a size of 164x314
+!define MUI_WELCOMEFINISHPAGE_BITMAP "resources\sidebar.bmp"
+!define MUI_BGCOLOR "150E12"
+!define MUI_TEXTCOLOR "F5F0F3"
+!define MUI_WELCOMEPAGE_TITLE "Welcome to Phoenix"
+!define MUI_WELCOMEPAGE_TEXT "Your desktop workspace for browsing and working with an AI agent.$\r$\n$\r$\nChoose where to install Phoenix and where to add shortcuts."
+!define MUI_FINISHPAGE_TITLE "Phoenix is ready"
+!define MUI_FINISHPAGE_TEXT "Phoenix has been installed.$\r$\n$\r$\nOpen it from its installation folder or a shortcut you selected."
 !define MUI_FINISHPAGE_NOAUTOCLOSE # Wait on the INSTFILES page so the user can take a look into the details of the installation steps
 !define MUI_ABORTWARNING # This will warn the user if they exit from the installer.
 
 !insertmacro MUI_PAGE_WELCOME # Welcome to the installer page.
 # !insertmacro MUI_PAGE_LICENSE "resources\eula.txt" # Adds a EULA page to the installer
 !insertmacro MUI_PAGE_DIRECTORY # In which folder install page.
+Page custom ShortcutsPage ShortcutsLeave
 !insertmacro MUI_PAGE_INSTFILES # Installing page.
 !insertmacro MUI_PAGE_FINISH # Finished installation page.
 
@@ -80,8 +88,38 @@ OutFile "..\..\..\bin\${INFO_PROJECTNAME}-${ARCH}-installer.exe" # Name of the i
 !endif
 ShowInstDetails show # This will always show the installation details.
 
+Var StartMenuState
+Var DesktopState
+Var StartMenuCheckbox
+Var DesktopCheckbox
+
 Function .onInit
+   StrCpy $StartMenuState ${BST_CHECKED}
+   StrCpy $DesktopState ${BST_CHECKED}
    !insertmacro wails.checkArchitecture
+FunctionEnd
+
+Function ShortcutsPage
+    !insertmacro MUI_HEADER_TEXT "Shortcuts" "Choose where Phoenix appears."
+    nsDialogs::Create 1018
+    Pop $0
+    ${If} $0 == error
+        Abort
+    ${EndIf}
+    ${NSD_CreateLabel} 0 0 100% 25u "Choose the shortcuts you want to create."
+    Pop $0
+    ${NSD_CreateCheckbox} 0 32u 100% 12u "Start menu shortcut"
+    Pop $StartMenuCheckbox
+    ${NSD_SetState} $StartMenuCheckbox $StartMenuState
+    ${NSD_CreateCheckbox} 0 52u 100% 12u "Desktop shortcut"
+    Pop $DesktopCheckbox
+    ${NSD_SetState} $DesktopCheckbox $DesktopState
+    nsDialogs::Show
+FunctionEnd
+
+Function ShortcutsLeave
+    ${NSD_GetState} $StartMenuCheckbox $StartMenuState
+    ${NSD_GetState} $DesktopCheckbox $DesktopState
 FunctionEnd
 
 Section
@@ -93,8 +131,12 @@ Section
     
     !insertmacro wails.files
 
-    CreateShortcut "$SMPROGRAMS\${INFO_PRODUCTNAME}.lnk" "$INSTDIR\${PRODUCT_EXECUTABLE}"
-    CreateShortCut "$DESKTOP\${INFO_PRODUCTNAME}.lnk" "$INSTDIR\${PRODUCT_EXECUTABLE}"
+    ${If} $StartMenuState == ${BST_CHECKED}
+        CreateShortcut "$SMPROGRAMS\${INFO_PRODUCTNAME}.lnk" "$INSTDIR\${PRODUCT_EXECUTABLE}"
+    ${EndIf}
+    ${If} $DesktopState == ${BST_CHECKED}
+        CreateShortcut "$DESKTOP\${INFO_PRODUCTNAME}.lnk" "$INSTDIR\${PRODUCT_EXECUTABLE}"
+    ${EndIf}
 
     !insertmacro wails.associateFiles
     !insertmacro wails.associateCustomProtocols

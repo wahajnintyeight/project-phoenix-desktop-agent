@@ -59,9 +59,7 @@ func desktopServer(run *desktop.Run) (mcp.Resolved, error) {
 func onApprovalRequest(p desktop.Pending) {
 	addAgentActivity("approval", "Agent requested permission", "pending", 0)
 	postChat(chatEvent{K: "approve", ID: p.ID, Cls: string(p.Request.Class), Text: p.Request.Summary})
-	if win != nil && !win.IsFocused() {
-		win.Flash(true)
-	}
+	notifyUser("approval", "Agent needs your approval", chat.currentID, true)
 }
 
 // answerApproval is the UI's "g approve <id> <allow|all|deny>".

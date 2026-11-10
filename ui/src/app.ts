@@ -16,6 +16,7 @@ import "./files-view";
 import "./chat";
 import type { PhChat } from "./chat";
 import "./activity";
+import "./notifications";
 import "./tasks";
 import "./context-meter";
 import "./quick-actions";
@@ -41,6 +42,14 @@ const pending = new Map<number, () => void>();
 
 listen((op, f) => {
   switch (op) {
+    case "n":
+      if (f[0] === "chat") document.querySelector<HTMLButtonElement>('[data-pane-btn="chat"]')?.click();
+      if (f[0] === "task") document.querySelector<HTMLElement>("#tasks")?.dispatchEvent(new CustomEvent("notification-open", { detail: f[1] ?? "" }));
+      if (f[0] === "busy") {
+        document.querySelector<HTMLButtonElement>('[data-pane-btn="notifications"]')?.click();
+        document.querySelector<HTMLElement>("#notifications")?.dispatchEvent(new Event("notification-busy"));
+      }
+      break;
     case "t": { // set text: id, text
       const el = $(f[0] ?? "");
       if (el) el.textContent = f[1] ?? "";

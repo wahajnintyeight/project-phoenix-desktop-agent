@@ -106,6 +106,7 @@
   .tp-check { @apply flex cursor-pointer items-center gap-3; font-size: 1.0625rem; }
   .tp-check em { @apply not-italic text-fg-subtle; font-size: 0.9375rem; }
   .tp-note { @apply text-fg-subtle; font-size: 0.9375rem; }
+  .tp-note[data-over="true"] { color: var(--color-danger); }
   .tp-foot { @apply flex flex-wrap items-center justify-end gap-3 border-t border-line px-7 py-4; }
   .tp-foot .msg { @apply mr-auto; color: var(--color-danger); font-size: 1rem; }
   @media (max-width: 760px) {

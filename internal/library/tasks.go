@@ -19,6 +19,13 @@ import (
 const tasksKey = "tasks.json"
 const maxTasks = 100
 
+// Task instruction limits keep recurring prompts predictable in both storage and model context.
+const (
+	MaxTaskPromptRunes = 4000
+	MaxTaskExtraRunes  = 2000
+	MaxTaskTextTokens  = 1500 // rough estimate; model tokenizers differ
+)
+
 // Schedule kinds.
 const (
 	TaskManual   = "manual"   // only when the user presses Run
@@ -36,7 +43,8 @@ type Task struct {
 	Every  int    `json:"every,omitempty"` // minutes, for interval
 	At     string `json:"at,omitempty"`    // HH:MM local time, for daily and weekdays
 	Icon   string `json:"icon,omitempty"`  // an emoji for the card
-	Extra  string `json:"extra,omitempty"` // additional instructions, kept apart from the main one
+	Extra  string `json:"extra,omitempty"` // priority rules: constraints that govern the task goal
+	Goal   bool   `json:"goal,omitempty"`  // keep running until the agent verifies completion or a blocker
 	// Limit true restricts a run to the Tools listed ("browser", "files", "desktop" and
 	// "mcp:<server>"); false gives it everything the user has switched on.
 	Limit   bool     `json:"limit,omitempty"`
@@ -77,8 +85,17 @@ func clipRunesN(s string, n int) string {
 // task is, for the UI and for the agent's tools alike.
 func (t *Task) Normalize() error {
 	t.Name = clipRunesN(strings.Join(strings.Fields(t.Name), " "), 60)
-	t.Prompt = clipRunesN(strings.TrimSpace(t.Prompt), 4000)
-	t.Extra = clipRunesN(strings.TrimSpace(t.Extra), 2000)
+	t.Prompt = strings.TrimSpace(t.Prompt)
+	t.Extra = strings.TrimSpace(t.Extra)
+	if len([]rune(t.Prompt)) > MaxTaskPromptRunes {
+		return fmt.Errorf("task instructions exceed %d characters", MaxTaskPromptRunes)
+	}
+	if len([]rune(t.Extra)) > MaxTaskExtraRunes {
+		return fmt.Errorf("priority rules exceed %d characters", MaxTaskExtraRunes)
+	}
+	if (len([]rune(t.Prompt))+3)/4+(len([]rune(t.Extra))+3)/4 > MaxTaskTextTokens {
+		return fmt.Errorf("task instructions and priority rules exceed about %d tokens; shorten them", MaxTaskTextTokens)
+	}
 	t.Icon = clipRunesN(strings.TrimSpace(t.Icon), 8)
 	seen := map[string]bool{}
 	tools := t.Tools[:0:0]
@@ -111,6 +128,9 @@ func (t *Task) Normalize() error {
 		t.Every = 0
 	default:
 		return fmt.Errorf("schedule must be manual, interval, daily or weekdays")
+	}
+	if t.Goal {
+		t.Kind, t.Every, t.At, t.Enabled = TaskManual, 0, "", false
 	}
 	return nil
 }
@@ -304,11 +324,13 @@ func (s *Store) RecordTaskRun(id string, at time.Time, status, result string, ms
 }
 
 type taskArgs struct {
-	Name         string `json:"name,omitempty" jsonschema:"short title"`
-	Instructions string `json:"instructions" jsonschema:"what the agent must do, written so it can be done with no further questions: where to go, what to do, what counts as finished"`
-	Schedule     string `json:"schedule,omitempty" jsonschema:"manual (default), interval, daily or weekdays"`
-	EveryMinutes int    `json:"every_minutes,omitempty" jsonschema:"for interval: minutes between runs, at least 5"`
-	At           string `json:"at,omitempty" jsonschema:"for daily and weekdays: the local time as HH:MM, 24-hour"`
+	Name          string `json:"name,omitempty" jsonschema:"short title"`
+	Instructions  string `json:"instructions" jsonschema:"what the agent must do, written so it can be done with no further questions: where to go, what to do, what counts as finished"`
+	Goal          bool   `json:"goal,omitempty" jsonschema:"keep working across turns until completion is verified or a genuine blocker is reached; goals are manual and never scheduled"`
+	PriorityRules string `json:"priority_rules,omitempty" jsonschema:"hard constraints, exclusions, limits, or deadlines that take precedence over the task goal"`
+	Schedule      string `json:"schedule,omitempty" jsonschema:"manual (default), interval, daily or weekdays"`
+	EveryMinutes  int    `json:"every_minutes,omitempty" jsonschema:"for interval: minutes between runs, at least 5"`
+	At            string `json:"at,omitempty" jsonschema:"for daily and weekdays: the local time as HH:MM, 24-hour"`
 }
 
 type taskIDArgs struct {
@@ -316,8 +338,8 @@ type taskIDArgs struct {
 }
 
 func registerTaskTools(srv *sdk.Server, s *Store) {
-	tool(srv, "tasks_create", "Save a task: an instruction Phoenix can run on its own later, by the user's button or on a schedule. Use it when the user asks for something to be done regularly or says \"make this a task\". It starts switched on if it has a schedule.", func(a taskArgs) (string, error) {
-		t := Task{Name: a.Name, Prompt: a.Instructions, Kind: a.Schedule, Every: a.EveryMinutes, At: a.At}
+	tool(srv, "tasks_create", "Save a task: an instruction Phoenix can run on its own later, by the user's button or on a schedule. Use goal=true when the user wants continued work until completion is verified; goals are manual and never scheduled. Put hard constraints, exclusions, limits, and deadlines in priority_rules; they govern the task goal. It starts switched on if it has a schedule.", func(a taskArgs) (string, error) {
+		t := Task{Name: a.Name, Prompt: a.Instructions, Goal: a.Goal, Extra: a.PriorityRules, Kind: a.Schedule, Every: a.EveryMinutes, At: a.At}
 		t.Enabled = t.Kind != "" && t.Kind != TaskManual
 		saved, err := s.SaveTask(t)
 		if err != nil {
@@ -349,6 +371,9 @@ func loadedTasks(s *Store) []Task { return s.Tasks() }
 
 // DescribeSchedule is the schedule in words.
 func DescribeSchedule(t Task) string {
+	if t.Goal {
+		return "goal (runs until completion)"
+	}
 	switch t.Kind {
 	case TaskInterval:
 		if t.Every%60 == 0 {

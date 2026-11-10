@@ -5,6 +5,8 @@ go 1.27.3
 require (
 	github.com/auuunya/go-element v1.0.1
 	github.com/evanw/esbuild v0.28.2
+	github.com/giraffesyo/pdf v0.9.0
+	github.com/gpdf-dev/gpdf v1.0.14
 	github.com/modelcontextprotocol/go-sdk v1.8.0
 	github.com/wailsapp/go-webview2 v1.0.23
 	github.com/wailsapp/wails/v3 v3.1.0
@@ -17,6 +19,7 @@ require (
 replace github.com/wailsapp/go-webview2 => ./third_party/go-webview2
 
 require (
+	git.sr.ht/~jackmordaunt/go-toast/v2 v2.0.3 // indirect
 	github.com/coder/websocket v1.8.14 // indirect
 	github.com/dustin/go-humanize v1.1.0 // indirect
 	github.com/ebitengine/purego v0.11.1 // indirect
