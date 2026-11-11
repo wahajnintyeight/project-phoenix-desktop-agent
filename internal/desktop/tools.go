@@ -308,6 +308,7 @@ func (d *Server) snapshot(ctx context.Context, _ *sdk.CallToolRequest, in appArg
 	}
 	var snap struct {
 		SnapshotID string `json:"snapshot_id"`
+		Complete   *bool  `json:"complete"`
 		Tree       node   `json:"tree"`
 	}
 	if json.Unmarshal(data, &snap) != nil {
@@ -351,6 +352,9 @@ func (d *Server) snapshot(ctx context.Context, _ *sdk.CallToolRequest, in appArg
 	d.mu.Unlock()
 	if total > n {
 		fmt.Fprintf(&b, "… %d more controls not shown; use desktop_screenshot to see the rest.\n", total-n)
+	}
+	if snap.Complete != nil && !*snap.Complete {
+		b.WriteString("The control tree is incomplete; controls may be missing. Use desktop_screenshot or inspect the window again before concluding a control is absent.\n")
 	}
 	if b.Len() == 0 {
 		b.WriteString("No controls were found. The window may still be loading, or it may not expose its controls; try desktop_screenshot.")

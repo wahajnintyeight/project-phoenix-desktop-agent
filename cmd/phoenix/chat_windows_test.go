@@ -34,6 +34,50 @@ func TestTrimHistoryKeepsShortConversations(t *testing.T) {
 	}
 }
 
+func TestGoalLoopContinuesAfterEmptySearch(t *testing.T) {
+	for _, final := range []string{
+		"GOAL_BLOCKED: No additional useful sources are available.",
+		"GOAL_DONE: Found and verified a suitable role at Acme.",
+	} {
+		calls, continuations := 0, 0
+		result, err := runGoalLoop(context.Background(), nil, "Search for a suitable role", func(_ context.Context, history []provider.Message, prompt string, emit func(provider.Event)) (provider.Result, error) {
+			calls++
+			if calls == 1 {
+				emit(provider.Event{Kind: provider.EvToolUse, ToolName: "jobs_search"})
+				emit(provider.Event{Kind: provider.EvToolResult, Text: "No eligible postings found."})
+				return provider.Result{Text: "No eligible postings found in the first source."}, nil
+			}
+			if len(history) != 2 || !strings.Contains(history[1].Content, "No eligible postings") {
+				t.Fatalf("second call did not receive first search result: %#v", history)
+			}
+			if !strings.Contains(prompt, "Continue working toward the goal") {
+				t.Fatalf("second call prompt did not request continued work: %q", prompt)
+			}
+			if strings.HasPrefix(final, "GOAL_DONE") {
+				emit(provider.Event{Kind: provider.EvToolUse, ToolName: "jobs_search"})
+				emit(provider.Event{Kind: provider.EvToolResult, Text: "Verified matching role at Acme."})
+			}
+			return provider.Result{Text: final}, nil
+		}, nil, func() { continuations++ })
+		if err != nil || calls != 2 || continuations != 1 || result.Text != final {
+			t.Fatalf("final=%q calls=%d continuations=%d err=%v", result.Text, calls, continuations, err)
+		}
+	}
+}
+
+func TestGoalLoopStopsOnDeniedAction(t *testing.T) {
+	calls := 0
+	result, err := runGoalLoop(context.Background(), nil, "Find and apply", func(_ context.Context, _ []provider.Message, _ string, emit func(provider.Event)) (provider.Result, error) {
+		calls++
+		emit(provider.Event{Kind: provider.EvToolUse, ToolName: "apply"})
+		emit(provider.Event{Kind: provider.EvToolResult, IsError: true, Text: "User declined this action."})
+		return provider.Result{Text: "Continuing."}, nil
+	}, nil, nil)
+	if err != nil || calls != 1 || !strings.HasPrefix(result.Text, "GOAL_BLOCKED:") {
+		t.Fatalf("result=%q calls=%d err=%v", result.Text, calls, err)
+	}
+}
+
 func TestTrimHistoryLimitsCountAndStartsOnUser(t *testing.T) {
 	got := trimHistory(turns(chatMaxHistory+5, 10))
 	if len(got) > chatMaxHistory {

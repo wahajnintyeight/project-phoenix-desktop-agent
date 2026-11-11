@@ -26,11 +26,20 @@ func TestTaskOutcome(t *testing.T) {
 func TestTaskBriefCarriesLastResult(t *testing.T) {
 	b := taskBrief(library.Task{Name: "Sweep", Prompt: "Do X", LastRun: 1700000000, LastStatus: "ok", LastResult: "applied to Acme"})
 	for _, want := range []string{"Sweep", "Do X", "applied to Acme", "DONE:", "BLOCKED:", "Do not end with a choices block"} {
-		if !strings.Contains(b, want) {
+		if !strings.Contains(strings.ToLower(b), strings.ToLower(want)) {
 			t.Errorf("brief lacks %q", want)
 		}
 	}
 	if strings.Contains(taskBrief(library.Task{Name: "N", Prompt: "P"}), "Last run") {
 		t.Error("first run has no last result")
+	}
+}
+
+func TestGoalTaskBriefRequiresRequestedOutcome(t *testing.T) {
+	b := strings.ToLower(taskBrief(library.Task{Name: "Find an eligible job", Prompt: "Find one eligible job.", Goal: true}))
+	for _, want := range []string{"for search or hunt goals, finding no eligible result is not success", "if none remain, finish as blocked", "only when the requested outcome is verified"} {
+		if !strings.Contains(b, want) {
+			t.Errorf("goal brief lacks %q", want)
+		}
 	}
 }

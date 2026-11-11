@@ -29,7 +29,7 @@ func (f fixtureDriver) run(_ context.Context, args []string) (Envelope, bool, er
 	case "screenshot":
 		_ = os.WriteFile(args[len(args)-1], []byte("\x89PNG-fake"), 0600)
 	case "snapshot":
-		raw = `{"ok":true,"data":{"snapshot_id":"s1","tree":{"role":"window","children":[{"ref_id":"@s1:e1","role":"button","name":"Send","states":["focused"]},{"role":"group","children":[{"ref_id":"@s1:e2","role":"edit","name":"Message","value":"hi"}]}]}}}`
+		raw = `{"ok":true,"data":{"snapshot_id":"s1","complete":false,"tree":{"role":"window","children":[{"ref_id":"@s1:e1","role":"button","name":"Send","states":["focused"]},{"role":"group","children":[{"ref_id":"@s1:e2","role":"edit","name":"Message","value":"hi"}]}]}}}`
 	case "clipboard-get":
 		raw = `{"ok":true,"data":{"text":"copied words","type":"text"}}`
 	case "click":
@@ -108,7 +108,7 @@ func TestLookToolsAndApprovalWording(t *testing.T) {
 	}
 	snap := call(t, cs, "desktop_snapshot", map[string]any{"app": "notepad.exe"})
 	txt := firstText(snap)
-	if !strings.Contains(txt, `@s1:e1 button "Send" [focused]`) || !strings.Contains(txt, `@s1:e2 edit "Message" value="hi"`) {
+	if !strings.Contains(txt, `@s1:e1 button "Send" [focused]`) || !strings.Contains(txt, `@s1:e2 edit "Message" value="hi"`) || !strings.Contains(txt, "control tree is incomplete") {
 		t.Fatalf("%s", txt)
 	}
 	// Refs from the snapshot now give the approval prompt words, not ids.

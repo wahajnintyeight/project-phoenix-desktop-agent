@@ -155,16 +155,19 @@ func (s *automationState) snapshot(ctx context.Context, app, id string) (any, er
 	s.hwnd = hwnd
 	flat := make([]node, 0, 64)
 	visited := 0
+	complete := true
 	var walk func(*uia.IUIAutomationElement, int) error
 	walk = func(parent *uia.IUIAutomationElement, depth int) error {
 		if ctx.Err() != nil {
 			return ctx.Err()
 		}
 		if depth >= 24 || len(flat) >= maxOutline || visited >= 800 {
+			complete = false
 			return nil
 		}
 		children, err := parent.FindAll(condition)
 		if err != nil {
+			complete = false
 			return nil
 		}
 		if children == nil {
@@ -173,6 +176,7 @@ func (s *automationState) snapshot(ctx context.Context, app, id string) (any, er
 		defer children.Release()
 		count := int(children.Get_Length())
 		if count < 0 {
+			complete = false
 			return nil
 		}
 		for i := 0; i < count && len(flat) < maxOutline && visited < 800; i++ {
@@ -182,6 +186,7 @@ func (s *automationState) snapshot(ctx context.Context, app, id string) (any, er
 			visited++
 			el, err := children.GetElement(int32(i))
 			if err != nil || el == nil {
+				complete = false
 				continue
 			}
 			name, _ := el.Get_CurrentName()
@@ -218,13 +223,16 @@ func (s *automationState) snapshot(ctx context.Context, app, id string) (any, er
 				return err
 			}
 		}
+		if len(flat) >= maxOutline || visited >= 800 {
+			complete = false
+		}
 		return nil
 	}
 	if err := walk(root, 0); err != nil {
 		s.clear()
 		return nil, err
 	}
-	return map[string]any{"snapshot_id": snapshotID, "tree": node{Role: "window", Children: flat}}, nil
+	return map[string]any{"snapshot_id": snapshotID, "complete": complete, "tree": node{Role: "window", Children: flat}}, nil
 }
 func option(args []string, key string) string {
 	for i := 1; i+1 < len(args); i++ {
