@@ -432,13 +432,16 @@ func startChatRun(ctx context.Context, cancel context.CancelFunc, id provider.ID
 		req := provider.Request{Prompt: prompt, History: history, System: system, UseMCP: true, LimitMCP: limited, OnlyMCP: taskMCPNames(), MCPServers: extra}
 		if supportsMCP {
 			req.ApproveTool = func(approveCtx context.Context, call provider.ToolCall) error {
+				if connectedToolAllowed(call.Tool.Server, call.Tool.MCPName) {
+					return nil
+				}
 				if connectedApprovalRun == nil {
 					return errors.New("Phoenix could not start its approval service")
 				}
 				approver := desktop.HTTPApprover{URL: connectedApprovalRun.URL, Token: connectedApprovalRun.Token}
 				allowed, err := approver.Approve(approveCtx, desktop.Request{
 					Class: desktop.Act, Tool: call.Tool.MCPName, App: call.Tool.Server,
-					Summary: mcpApprovalSummary(call),
+					Summary: mcpApprovalSummary(call), Persistent: true,
 				})
 				if err != nil {
 					return err

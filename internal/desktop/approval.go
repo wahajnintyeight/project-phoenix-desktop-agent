@@ -30,10 +30,11 @@ const (
 
 // Request is one thing the agent wants to do.
 type Request struct {
-	Class   Class  `json:"class"`
-	Tool    string `json:"tool"`
-	App     string `json:"app,omitempty"`
-	Summary string `json:"summary"` // plain words for the user, built by Phoenix, never by the model
+	Class      Class  `json:"class"`
+	Tool       string `json:"tool"`
+	App        string `json:"app,omitempty"`
+	Summary    string `json:"summary"` // plain words for the user, built by Phoenix, never by the model
+	Persistent bool   `json:"persistent,omitempty"`
 }
 
 // Decision is the user's answer.
@@ -163,18 +164,23 @@ func (b *Broker) NewAutomaticRun(ctx context.Context) (*Run, error) {
 // Respond delivers the user's answer for a pending request. It reports whether the request
 // was still waiting.
 func (b *Broker) Respond(id string, d Decision) bool {
+	_, ok := b.RespondRequest(id, d)
+	return ok
+}
+
+func (b *Broker) RespondRequest(id string, d Decision) (Request, bool) {
 	b.mu.Lock()
 	w, ok := b.pending[id]
 	delete(b.pending, id)
 	b.mu.Unlock()
 	if !ok {
-		return false
+		return Request{}, false
 	}
 	if d != Allow && d != AllowAll {
 		d = Deny
 	}
 	w.ch <- d
-	return true
+	return w.req, true
 }
 
 func (b *Broker) serve(rw http.ResponseWriter, r *http.Request) {

@@ -24,8 +24,8 @@ export interface ChatEvent {
   out?: number;
   cost?: number;
   id?: string;
-  cls?: "look" | "act";
-  decision?: "allow" | "all" | "deny";
+  cls?: "look" | "act" | "connected";
+  decision?: "allow" | "all" | "always" | "deny";
   toolId?: string;
   server?: string;
   toolName?: string;
@@ -710,7 +710,7 @@ export class PhChat extends HTMLElement {
     card.dataset["id"] = ev.id ?? "";
     card.setAttribute("role", "group");
     card.setAttribute("aria-label", "The agent is asking for permission");
-    const act = ev.cls === "act";
+    const act = ev.cls === "act" || ev.cls === "connected";
     card.append(el("p", "chat-approval-label", act ? "Needs your OK" : "Wants to look"), el("p", "chat-approval-what", ev.text ?? ""));
     const actions = el("div", "chat-approval-actions");
     const button = (label: string, decision: string, cls: string): HTMLButtonElement => {
@@ -724,6 +724,7 @@ export class PhChat extends HTMLElement {
     };
     actions.append(button("Allow", "allow", "btn btn-primary btn-sm"));
     if (act) actions.append(button("Allow this tool for this message", "all", "btn btn-sm"));
+    if (ev.cls === "connected") actions.append(button("Always allow this tool", "always", "btn btn-sm"));
     actions.append(button("Decline", "deny", "btn btn-quiet btn-sm"));
     card.append(actions);
     this.#log.append(card);
@@ -898,7 +899,7 @@ export class PhChat extends HTMLElement {
         break;
       case "approved": {
         const card = this.#log.querySelector<HTMLElement>(`.chat-approval[data-id="${CSS.escape(ev.id ?? "")}"]`);
-        if (card) this.#answer(card, ev.decision === "deny" ? "Declined" : ev.decision === "all" ? "Allowed this tool for this message" : "Allowed");
+        if (card) this.#answer(card, ev.decision === "deny" ? "Declined" : ev.decision === "always" ? "Always allowed this tool · manage in Computer Use settings" : ev.decision === "all" ? "Allowed this tool for this message" : "Allowed");
         break;
       }
       case "note":

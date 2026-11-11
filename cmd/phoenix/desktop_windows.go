@@ -58,23 +58,40 @@ func desktopServer(run *desktop.Run) (mcp.Resolved, error) {
 // in the background (the agent is usually working in some other window).
 func onApprovalRequest(p desktop.Pending) {
 	addAgentActivity("approval", "Agent requested permission", "pending", 0)
-	postChat(chatEvent{K: "approve", ID: p.ID, Cls: string(p.Request.Class), Text: p.Request.Summary})
+	cls := string(p.Request.Class)
+	if p.Request.Persistent {
+		cls = "connected"
+	}
+	postChat(chatEvent{K: "approve", ID: p.ID, Cls: cls, Text: p.Request.Summary})
 	notifyUser("approval", "Agent needs your approval", chat.currentID, true)
 }
 
 // answerApproval is the UI's "g approve <id> <allow|all|deny>".
 func answerApproval(id, decision string) {
 	d := desktop.Decision(decision)
+	if decision == "always" {
+		d = desktop.Allow
+	}
 	if d != desktop.Allow && d != desktop.AllowAll {
 		d = desktop.Deny
 	}
-	approvalBroker().Respond(id, d)
+	req, ok := approvalBroker().RespondRequest(id, d)
+	if ok && decision == "always" && req.Persistent {
+		if err := saveConnectedTool(req.App, req.Tool, true); err != nil {
+			logf("save tool permission: %v", err)
+			decision = "all"
+		} else {
+			pushDesktop()
+		}
+	} else if decision == "always" {
+		decision = "all"
+	}
 	status := "declined"
 	if d == desktop.Allow || d == desktop.AllowAll {
 		status = "allowed"
 	}
 	addAgentActivity("approval", "Permission decision", status, 0)
-	postChat(chatEvent{K: "approved", ID: id, Decision: string(d)})
+	postChat(chatEvent{K: "approved", ID: id, Decision: decision})
 	if win != nil {
 		win.Flash(false)
 	}
@@ -83,8 +100,9 @@ func answerApproval(id, decision string) {
 // ── Settings ──────────────────────────────────────────────────────────────
 
 type desktopView struct {
-	Enabled bool            `json:"enabled"`
-	Skills  []desktop.Skill `json:"skills"`
+	Enabled bool                  `json:"enabled"`
+	Skills  []desktop.Skill       `json:"skills"`
+	Allowed []connectedPermission `json:"allowed"`
 }
 
 // pushDesktop reports native tools and whether the optional adapter adds more actions.
@@ -93,7 +111,7 @@ func pushDesktop() {
 		return
 	}
 	enabled, _ := hub.Desktop()
-	v := desktopView{Enabled: enabled, Skills: desktop.AvailableSkills()}
+	v := desktopView{Enabled: enabled, Skills: desktop.AvailableSkills(), Allowed: connectedPermissions()}
 	post("u" + fs + "desktop-settings" + fs + "data" + fs + jsonString(v))
 }
 
@@ -103,6 +121,13 @@ func handleDesktopOp(f []string) {
 		return
 	}
 	switch f[1] {
+	case "desktop-revoke":
+		if len(f) > 3 {
+			if err := saveConnectedTool(f[2], f[3], false); err != nil {
+				logf("revoke tool permission: %v", err)
+			}
+		}
+		pushDesktop()
 	case "desktop-enable":
 		on := len(f) > 2 && f[2] == "1"
 		if err := hub.SetDesktopEnabled(on); err != nil {

@@ -12,6 +12,7 @@ interface Skill {
 interface DesktopData {
   enabled: boolean;
   skills: Skill[];
+  allowed: { server: string; tool: string }[];
 }
 
 export class PhDesktop extends HTMLElement {
@@ -19,7 +20,8 @@ export class PhDesktop extends HTMLElement {
   readonly #toggle = el("input");
   readonly #toggleLabel = el("label", "mcp-use");
   readonly #skills = el("ul", "skill-list");
-  #data: DesktopData = { enabled: false, skills: [] };
+  readonly #permissions = el("ul", "skill-list");
+  #data: DesktopData = { enabled: false, skills: [], allowed: [] };
 
   connectedCallback(): void {
     if (this.childElementCount > 0) return;
@@ -36,7 +38,9 @@ export class PhDesktop extends HTMLElement {
     );
     const skills = el("div", "flex flex-col gap-3");
     skills.append(el("h3", undefined, "What the agent can do"), this.#skills);
-    this.append(this.#toggleLabel, this.#status, how, skills);
+    const permissions = el("div", "flex flex-col gap-3");
+    permissions.append(el("h3", undefined, "Always allowed connected tools"), el("p", "text-fg-muted", "These tools can run in future messages without asking. Revoke access at any time."), this.#permissions);
+    this.append(this.#toggleLabel, this.#status, how, skills, permissions);
     this.#render();
   }
 
@@ -59,6 +63,17 @@ export class PhDesktop extends HTMLElement {
       li.append(text, badge);
       return li;
     }));
+    const allowed = d.allowed ?? [];
+    this.#permissions.replaceChildren(...(allowed.length ? allowed.map((p) => {
+      const li = el("li", "skill");
+      const label = el("span", "font-medium", `${p.server} › ${p.tool}`);
+      const revoke = el("button", "btn btn-sm", "Revoke");
+      revoke.type = "button";
+      revoke.setAttribute("aria-label", `Revoke ${p.server} ${p.tool}`);
+      revoke.addEventListener("click", () => send("v", "desktop-revoke", p.server, p.tool));
+      li.append(label, revoke);
+      return li;
+    }) : [el("li", "text-fg-muted", "No tools always allowed.")]));
   }
 }
 

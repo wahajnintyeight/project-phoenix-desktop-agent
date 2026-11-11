@@ -263,17 +263,20 @@
   [data-resizing-panel="true"], [data-resizing-panel="true"] * { cursor: col-resize !important; user-select: none !important; }
 
   /* ── quick actions: one-click requests under the page ─────────────── */
-  .qa { @apply flex h-11 shrink-0 items-center gap-3 border-t border-line bg-canvas px-3; }
-  .qa-lead { @apply flex shrink-0 items-center gap-1.5 text-xs text-fg-subtle; }
-  .qa-list { @apply scroll flex min-w-0 flex-1 items-center gap-1.5 overflow-x-auto overflow-y-hidden py-1; scrollbar-width: none; }
+  .qa { @apply flex min-h-14 shrink-0 items-center gap-3 border-t border-line-strong bg-panel px-4; }
+  .qa-lead { @apply flex shrink-0 items-center gap-1.5 text-xs text-accent; }
+  .qa-title { @apply font-semibold text-fg; }
+  .qa-context { @apply text-fg-muted; }
+  .qa-list { @apply scroll flex min-w-0 flex-1 items-center gap-2 overflow-x-auto overflow-y-hidden py-2; }
   .qa-chip {
-    @apply h-7 shrink-0 rounded-md border border-line bg-raised px-3 text-xs font-medium whitespace-nowrap text-fg-muted transition-colors;
+    @apply h-9 shrink-0 rounded-lg border border-line-strong bg-raised px-4 text-sm font-medium whitespace-nowrap text-fg transition-colors;
   }
-  .qa-chip:hover:not(:disabled) { @apply bg-overlay text-fg; }
+  .qa-chip:hover:not(:disabled) { @apply border-accent bg-overlay text-fg; }
+  .qa-chip:focus-visible { outline: 2px solid var(--color-accent); outline-offset: 2px; }
   .qa-chip:active:not(:disabled) { @apply bg-line; }
   .qa-chip:disabled { @apply opacity-45; }
   /* The most likely request for this page: the one place the accent shows in the bar. */
-  .qa-chip[data-primary="true"] { border-color: color-mix(in oklab, var(--color-accent) 55%, transparent); @apply text-accent; }
+  .qa-chip[data-primary="true"] { border-color: var(--color-accent); background: color-mix(in oklab, var(--color-accent) 15%, var(--color-raised)); @apply text-fg; }
   .qa-chip[data-primary="true"]:hover:not(:disabled) { @apply text-accent-hover; }
   .freeze { @apply absolute inset-0 size-full; object-fit: fill; }
   .home { display: none; }

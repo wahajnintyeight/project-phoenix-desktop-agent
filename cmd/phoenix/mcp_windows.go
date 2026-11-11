@@ -174,6 +174,10 @@ func handleMCPOp(f []string) {
 				return
 			}
 			c := staged[0]
+			if err := revokeConnectedServer(updating); err != nil {
+				pushMCP("Could not revoke saved tool permissions: "+err.Error(), false)
+				return
+			}
 			if err := hub.MCPUpdate(updating, c.Server, c.EnvValues, c.HeaderValues); err != nil {
 				logf("mcp update %s: %v", c.Name, err)
 				pushMCP("Could not update "+c.Name+": "+err.Error(), false)
@@ -193,6 +197,10 @@ func handleMCPOp(f []string) {
 		go hub.WarmMCP()
 		pushMCP("", len(staged) > 0)
 	case "mcp-remove":
+		if err := revokeConnectedServer(arg); err != nil {
+			pushMCP("Could not revoke saved tool permissions: "+err.Error(), false)
+			return
+		}
 		if cancel, ok := mcpTestCancel[arg]; ok {
 			cancel()
 		}

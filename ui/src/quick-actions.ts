@@ -29,7 +29,8 @@ export class PhQuickActions extends HTMLElement {
     this.setAttribute("aria-label", "Quick actions");
 
     const lead = el("div", "qa-lead");
-    lead.append(icon("bolt", 14), this.#context);
+    const title = el("span", "qa-title", "Quick actions");
+    lead.append(icon("bolt", 16), title, this.#context);
     this.append(lead, this.#list);
 
     this.#list.addEventListener("click", (e) => {
