@@ -31,8 +31,9 @@ var taskRun struct {
 
 type taskView struct {
 	library.Task
-	Schedule string `json:"schedule"`
-	Next     int64  `json:"next,omitempty"`
+	Schedule        string `json:"schedule"`
+	Next            int64  `json:"next,omitempty"`
+	InterruptedChat string `json:"interruptedChat,omitempty"`
 }
 
 type tasksData struct {
@@ -61,7 +62,10 @@ func pushTasks() {
 		now := time.Now()
 		for _, t := range lib.Tasks() {
 			v := taskView{Task: t, Schedule: library.DescribeSchedule(t)}
-			if n := t.NextRun(now); !n.IsZero() {
+			if taskRun.id != t.ID {
+				v.InterruptedChat = interruptedTaskChat(t.ID)
+			}
+			if n := t.NextRun(now); !n.IsZero() && v.InterruptedChat == "" {
 				v.Next = n.Unix()
 			}
 			d.Tasks = append(d.Tasks, v)
@@ -126,6 +130,7 @@ func handleTaskOp(f []string) {
 		pushTasks()
 		taskResult(true, "Saved.")
 		if arg(3) == "1" {
+			clearInterruptedTask(saved.ID)
 			runTask(saved)
 		}
 	case "duplicate":
@@ -151,6 +156,9 @@ func handleTaskOp(f []string) {
 		pushTasks()
 	case "run":
 		if t, ok := lib.Task(arg(2)); ok {
+			if taskRun.id != t.ID && !queuedTask(t.ID) {
+				clearInterruptedTask(t.ID)
+			}
 			runTask(t)
 		}
 	}
@@ -302,10 +310,26 @@ func recordTaskEnd(id string, started time.Time, status, report string, ms int64
 // startTaskScheduler checks the schedules every 15 seconds. The first check waits a little so a
 // task missed while Phoenix was closed does not start before the window has settled.
 func startTaskScheduler() {
+	started := time.Now()
 	go func() {
 		time.Sleep(40 * time.Second)
+		prepared := false // accessed on the UI thread through runLater
 		for range time.Tick(15 * time.Second) {
-			runLater(checkSchedules)
+			runLater(func() {
+				if !prepared {
+					lib, err := openLibrary()
+					if err != nil {
+						return
+					}
+					if err := lib.SkipMissedTasks(started); err != nil {
+						logf("skip missed tasks: %v", err)
+						return
+					}
+					prepared = true
+					pushTasks()
+				}
+				checkSchedules()
+			})
 		}
 	}()
 }
@@ -320,7 +344,7 @@ func checkSchedules() {
 	}
 	now := time.Now()
 	for _, t := range lib.Tasks() {
-		if t.Due(now) {
+		if t.Due(now) && interruptedTaskChat(t.ID) == "" {
 			logf("task due: %s", t.ID)
 			runTask(t)
 			return

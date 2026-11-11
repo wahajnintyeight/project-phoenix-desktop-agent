@@ -11,7 +11,8 @@ import { send } from "./protocol";
 import { resolveSlashCommand, searchSlashCommands, type SlashCommandDefinition } from "./slash-commands";
 
 export interface ChatEvent {
-  k: "user" | "note" | "processing" | "tool" | "tool-result" | "approve" | "approved" | "start" | "delta" | "done" | "error" | "stopped" | "reset" | "restore" | "queue";
+  k: "user" | "note" | "processing" | "tool" | "tool-result" | "approve" | "approved" | "start" | "delta" | "done" | "error" | "stopped" | "reset" | "restore" | "queue" | "interrupted";
+  resume?: boolean | undefined;
   text?: string;
   at?: number;
   queue?: { id: number; text: string }[];
@@ -722,7 +723,7 @@ export class PhChat extends HTMLElement {
       return b;
     };
     actions.append(button("Allow", "allow", "btn btn-primary btn-sm"));
-    if (act) actions.append(button("Allow all this message", "all", "btn btn-sm"));
+    if (act) actions.append(button("Allow this tool for this message", "all", "btn btn-sm"));
     actions.append(button("Decline", "deny", "btn btn-quiet btn-sm"));
     card.append(actions);
     this.#log.append(card);
@@ -805,6 +806,19 @@ export class PhChat extends HTMLElement {
         this.#setRunning(true);
         break;
       }
+      case "interrupted": {
+        this.#empty.hidden = true;
+        const card = el("div", "chat-approval");
+        card.append(el("p", "chat-approval-label", "Interrupted run"), el("p", "chat-approval-what", ev.text ?? ""));
+        if (ev.resume) {
+          const resume = el("button", "btn btn-primary btn-sm", "Continue safely") as HTMLButtonElement;
+          resume.type = "button";
+          resume.addEventListener("click", () => { resume.disabled = true; send("g", "resume"); }, { passive: true });
+          card.append(resume);
+        }
+        this.#log.append(card);
+        break;
+      }
       case "queue":
         this.#renderQueue(ev.queue ?? [], ev.text);
         break;
@@ -884,7 +898,7 @@ export class PhChat extends HTMLElement {
         break;
       case "approved": {
         const card = this.#log.querySelector<HTMLElement>(`.chat-approval[data-id="${CSS.escape(ev.id ?? "")}"]`);
-        if (card) this.#answer(card, ev.decision === "deny" ? "Declined" : ev.decision === "all" ? "Allowed, and all actions this message" : "Allowed");
+        if (card) this.#answer(card, ev.decision === "deny" ? "Declined" : ev.decision === "all" ? "Allowed this tool for this message" : "Allowed");
         break;
       }
       case "note":

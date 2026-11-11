@@ -62,7 +62,7 @@ func TestForBrowserToolsDropsPastedText(t *testing.T) {
 	if strings.Contains(got, "SECRET BODY TEXT") || !strings.Contains(got, "Role | Acme") || !strings.Contains(got, "https://x.test/job") || !strings.Contains(got, "browser_snapshot") {
 		t.Fatalf("%q", got)
 	}
-	if got := forBrowserTools("hi"); !strings.Contains(got, "browser_snapshot") || !strings.HasPrefix(got, "hi") {
+	if got := forBrowserTools("hi"); got != "hi" {
 		t.Fatalf("%q", got)
 	}
 }

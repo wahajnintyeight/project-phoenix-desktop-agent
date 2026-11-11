@@ -25,7 +25,7 @@ func TestTaskOutcome(t *testing.T) {
 
 func TestTaskBriefCarriesLastResult(t *testing.T) {
 	b := taskBrief(library.Task{Name: "Sweep", Prompt: "Do X", LastRun: 1700000000, LastStatus: "ok", LastResult: "applied to Acme"})
-	for _, want := range []string{"Sweep", "Do X", "applied to Acme", "DONE:", "BLOCKED:", "do not end with a choices block"} {
+	for _, want := range []string{"Sweep", "Do X", "applied to Acme", "DONE:", "BLOCKED:", "Do not end with a choices block"} {
 		if !strings.Contains(b, want) {
 			t.Errorf("brief lacks %q", want)
 		}

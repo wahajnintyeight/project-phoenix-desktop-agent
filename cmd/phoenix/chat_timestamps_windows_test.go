@@ -30,3 +30,28 @@ func TestSavedMessageTimestamps(t *testing.T) {
 		t.Fatalf("legacy message: %+v, %v", legacy, err)
 	}
 }
+
+func TestInterruptedRunCheckpointAndTaskGuard(t *testing.T) {
+	oldChats, oldPath, oldReady := savedChats, chatStorePath, ready
+	t.Cleanup(func() { savedChats, chatStorePath, ready = oldChats, oldPath, oldReady })
+	savedChats, chatStorePath, ready = nil, "", false
+	id, _, _ := saveUserMessage("", "Run task", "The original task")
+	setPendingChatRun(id, "The original task", "task-1")
+	checkpointChatTool(id, "Browser · click")
+	c := findSavedChat(id)
+	if c.Pending == nil || c.Pending.Request != "The original task" || c.Pending.LastTool != "Browser · click" || interruptedTaskChat("task-1") != id {
+		t.Fatalf("pending run not preserved: %+v", c.Pending)
+	}
+	data, err := json.Marshal(c)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var loaded savedChat
+	if err := json.Unmarshal(data, &loaded); err != nil || !cleanSavedChat(&loaded) || loaded.Pending == nil || loaded.Pending.TaskID != "task-1" {
+		t.Fatalf("checkpoint did not survive reload: %+v, %v", loaded.Pending, err)
+	}
+	clearInterruptedTask("task-1")
+	if c.Pending != nil || interruptedTaskChat("task-1") != "" {
+		t.Fatal("manual rerun did not clear interruption")
+	}
+}

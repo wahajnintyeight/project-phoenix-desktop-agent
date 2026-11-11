@@ -284,6 +284,43 @@ func TestPendingIsDeniedWhenTheTurnEnds(t *testing.T) {
 	}
 }
 
+func TestAllowForTurnIsScopedToToolAndApp(t *testing.T) {
+	got := make(chan Pending, 2)
+	b := NewBroker(func(p Pending) { got <- p })
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	run, err := b.NewRun(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	a := HTTPApprover{URL: run.URL, Token: run.Token}
+	ask := func(app, tool string) <-chan bool {
+		result := make(chan bool, 1)
+		go func() { ok, _ := a.Approve(ctx, Request{Class: Act, App: app, Tool: tool}); result <- ok }()
+		return result
+	}
+	first := ask("server-a", "read")
+	b.Respond((<-got).ID, AllowAll)
+	if !<-first {
+		t.Fatal("allow should succeed")
+	}
+	if ok := <-ask("server-a", "read"); !ok {
+		t.Fatal("same tool should be allowed")
+	}
+	for _, pair := range [][2]string{{"server-a", "write"}, {"server-b", "read"}} {
+		result := ask(pair[0], pair[1])
+		select {
+		case p := <-got:
+			b.Respond(p.ID, Deny)
+		case <-time.After(3 * time.Second):
+			t.Fatal("different tool or server did not prompt")
+		}
+		if <-result {
+			t.Fatal("different tool or server inherited approval")
+		}
+	}
+}
+
 func TestEnvelopeError(t *testing.T) {
 	var e Envelope
 	if err := json.Unmarshal([]byte(`{"ok":false,"error":{"code":"X","message":"m","suggestion":"s"}}`), &e); err != nil {

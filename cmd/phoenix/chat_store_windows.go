@@ -55,6 +55,15 @@ type savedChat struct {
 	CreatedAt time.Time               `json:"createdAt"`
 	UpdatedAt time.Time               `json:"updatedAt"`
 	Messages  []chatTranscriptMessage `json:"messages"`
+	Pending   *pendingChatRun         `json:"pending,omitempty"`
+}
+
+// pendingChatRun stores only enough to offer a fresh attempt after a process interruption.
+// Tool arguments, results and approval decisions are deliberately not persisted here.
+type pendingChatRun struct {
+	Request  string `json:"request"`
+	LastTool string `json:"lastTool,omitempty"`
+	TaskID   string `json:"taskId,omitempty"`
 }
 
 type savedChatSummary struct {
@@ -224,7 +233,55 @@ func cleanSavedChat(c *savedChat) bool {
 		clean = append(clean, m)
 	}
 	c.Messages = clean
+	if c.Pending != nil {
+		c.Pending.Request = clippedUTF8(c.Pending.Request, chatMaxInput)
+		c.Pending.LastTool = clippedText(c.Pending.LastTool, activitySummaryRunes)
+		c.Pending.TaskID = clippedText(c.Pending.TaskID, 128)
+		if strings.TrimSpace(c.Pending.Request) == "" {
+			c.Pending = nil
+		}
+	}
 	return true
+}
+
+func setPendingChatRun(id, request, taskID string) {
+	if c := findSavedChat(id); c != nil {
+		c.Pending = &pendingChatRun{Request: clippedUTF8(request, chatMaxInput), TaskID: taskID}
+		persistSavedChats()
+		flushAgentDataWrites()
+	}
+}
+
+func interruptedTaskChat(taskID string) string {
+	for _, c := range savedChats {
+		if c.Pending != nil && c.Pending.TaskID == taskID && taskID != "" {
+			return c.ID
+		}
+	}
+	return ""
+}
+
+func clearInterruptedTask(taskID string) {
+	for i := range savedChats {
+		if savedChats[i].Pending != nil && savedChats[i].Pending.TaskID == taskID {
+			savedChats[i].Pending = nil
+		}
+	}
+	persistSavedChats()
+}
+
+func checkpointChatTool(id, tool string) {
+	if c := findSavedChat(id); c != nil && c.Pending != nil {
+		c.Pending.LastTool = clippedText(tool, activitySummaryRunes)
+		persistSavedChats()
+	}
+}
+
+func clearPendingChatRun(id string) {
+	if c := findSavedChat(id); c != nil && c.Pending != nil {
+		c.Pending = nil
+		persistSavedChats()
+	}
 }
 
 func validSavedChatID(id string) bool {
@@ -519,6 +576,18 @@ func activateSavedChat(c *savedChat) {
 		chat.history = append(chat.history, provider.Message{Role: m.Role, Content: content})
 	}
 	postChat(chatEvent{K: "restore", Messages: display})
+	if c.Pending != nil {
+		note := "This run was interrupted. Its last action may have completed."
+		if c.Pending.LastTool != "" {
+			note += " Last tool: " + c.Pending.LastTool + "."
+		}
+		if c.Pending.TaskID != "" {
+			note += " Review the task and its results before running it again."
+		} else {
+			note += " Continue to inspect the current state before taking further action."
+		}
+		postChat(chatEvent{K: "interrupted", Text: note, Resume: c.Pending.TaskID == ""})
+	}
 	pushContext()
 }
 
@@ -531,6 +600,10 @@ func persistSavedChats() {
 	copy(snapshot, savedChats)
 	for i := range snapshot {
 		snapshot[i].Messages = append([]chatTranscriptMessage(nil), snapshot[i].Messages...)
+		if snapshot[i].Pending != nil {
+			pending := *snapshot[i].Pending
+			snapshot[i].Pending = &pending
+		}
 	}
 	queueAgentDataWrite(agentDataWrite{path: chatStorePath, value: snapshot})
 }

@@ -30,8 +30,10 @@ interface Task {
   limit?: boolean | undefined;
   tools?: string[] | undefined;
   notify?: boolean | undefined;
+  missed?: "run" | "skip" | undefined;
   schedule?: string | undefined;
   next?: number | undefined;
+  interruptedChat?: string | undefined;
   lastRun?: number | undefined;
   lastStatus?: Status | undefined;
   lastResult?: string | undefined;
@@ -202,6 +204,7 @@ class PhTasks extends HTMLElement {
   readonly #instructionBudget = el("p", "tp-note");
   readonly #kind = el("div", "tp-seg");
   readonly #every = el("input", "field");
+  readonly #missed = el("select", "field");
   readonly #unit = el("select", "field");
   readonly #at = el("input", "field");
   readonly #all = el("input");
@@ -320,6 +323,12 @@ class PhTasks extends HTMLElement {
     this.#at.title = "Time of day, in your local time";
     const whenRow = el("div", "tp-when");
     whenRow.append(el("span", "tp-when-every", "every"), this.#every, this.#unit, el("span", "tp-when-at", "at"), this.#at);
+    for (const [value, label] of [["run", "Run once when Phoenix returns"], ["skip", "Skip missed runs"]] as const) {
+      const option = el("option", undefined, label); option.value = value; this.#missed.append(option);
+    }
+    this.#missed.setAttribute("aria-label", "When Phoenix was closed");
+    const missedRow = field("When Phoenix was closed", this.#missed);
+    missedRow.classList.add("tp-missed");
 
     this.#all.type = "checkbox";
     const allLabel = el("label", "tp-check");
@@ -334,7 +343,7 @@ class PhTasks extends HTMLElement {
     this.#panes.append(
       pane("ideas", "Ideas", ideaGrid),
       pane("what", "What to do", field("Icon", this.#icons), field("Name", this.#name), field("Task instructions", this.#prompt), goalLabel, field("Priority rules (optional)", this.#extra), this.#instructionBudget),
-      pane("when", "When", this.#kind, whenRow),
+      pane("when", "When", this.#kind, whenRow, missedRow),
       pane("tools", "Tools", allLabel, this.#picks, notifyLabel),
     );
 
@@ -433,6 +442,7 @@ class PhTasks extends HTMLElement {
     this.#unit.value = hours ? "60" : "1";
     this.#every.value = String(hours ? mins / 60 : mins);
     this.#at.value = t.at || "09:00";
+    this.#missed.value = t.missed ?? "run";
     this.#all.checked = !t.limit;
     this.#fillPicks(new Set(t.tools ?? ["browser", "files"]));
     this.#picks.hidden = this.#all.checked;
@@ -478,6 +488,7 @@ class PhTasks extends HTMLElement {
     this.#form.querySelector<HTMLElement>(".tp-when-every")!.hidden = k !== "interval";
     this.#form.querySelector<HTMLElement>(".tp-when-at")!.hidden = this.#at.hidden;
     this.#form.querySelector<HTMLElement>(".tp-when")!.hidden = k === "manual";
+    this.#form.querySelector<HTMLElement>(".tp-missed")!.hidden = k === "manual";
   }
 
   #syncGoal(): void {
@@ -509,6 +520,7 @@ class PhTasks extends HTMLElement {
       limit: !this.#all.checked,
       tools: this.#all.checked ? [] : tools,
       notify: this.#notify.checked,
+      missed: this.#missed.value === "skip" ? "skip" : "run",
     };
     this.#err.textContent = "";
     this.#syncInstructionBudget();
@@ -621,7 +633,7 @@ class PhTasks extends HTMLElement {
       switch (this.#filter) {
         case "scheduled": return t.kind !== "manual";
         case "manual": return t.kind === "manual";
-        case "attention": return t.lastStatus === "blocked" || t.lastStatus === "failed";
+        case "attention": return !!t.interruptedChat || t.lastStatus === "blocked" || t.lastStatus === "failed";
         default: return true;
       }
     });
@@ -649,7 +661,7 @@ class PhTasks extends HTMLElement {
       el("h1", undefined, "Tasks"),
       el("p", undefined, tasks.length === 0
         ? "Jobs the agent does for you."
-        : running ? "Working…" : live ? `${live} scheduled${next ? ` · next ${when(next)}` : ""}` : "Nothing scheduled"),
+        : running ? "Working…" : live ? `${live} scheduled${next ? ` · next ${when(next)}` : ""}. Phoenix must be running; missed runs follow each task's setting. Interrupted runs need review.` : "Nothing scheduled"),
     );
     const stats = el("div", "tp-stats");
     if (tasks.length > 0) {
@@ -711,6 +723,7 @@ class PhTasks extends HTMLElement {
     const result = el("p", "tp-result");
     if (running) result.textContent = t.goal ? "Working toward the goal…" : "Running now…";
     else if (waiting) result.textContent = "Waiting for the agent to be free…";
+    else if (t.interruptedChat) result.textContent = "Interrupted · review the previous run";
     else if (t.lastRun) result.textContent = `${STATUS_TEXT[t.lastStatus ?? "ok"] ?? ""} ${ago(t.lastRun)}${t.lastResult ? ": " + t.lastResult : ""}`;
     else result.textContent = "Not run yet.";
     result.title = result.textContent;
@@ -751,6 +764,7 @@ class PhTasks extends HTMLElement {
     head.append(tile, names, close);
 
     const acts = el("div", "tp-d-acts");
+    if (t.interruptedChat) acts.append(this.#button("session", "Review interrupted run", t.interruptedChat, "btn"));
     if (running) acts.append(this.#button("stop", "Stop", t.id, "btn", "stop"));
     else {
       const run = this.#button("run", waiting ? "Waiting…" : "Run now", t.id, "btn btn-primary", waiting ? undefined : "play");
@@ -773,6 +787,7 @@ class PhTasks extends HTMLElement {
     const tg = acts.querySelector<HTMLElement>('[data-op="toggle"]');
     if (tg) tg.title = TIPS[t.enabled ? "toggle:on" : "toggle:off"] ?? "";
     d.append(head, acts, sec("Instructions", t.prompt));
+    if (t.interruptedChat) d.append(sec("Interrupted run", "The previous run may have completed an action before it stopped. Review its chat and the current state before running this task again. Scheduled runs are paused until you choose Run now."));
     if (t.extra) d.append(sec("Priority rules", t.extra));
     d.append(sec("Tools", chips));
 

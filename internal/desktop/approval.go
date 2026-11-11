@@ -24,7 +24,7 @@ const (
 	// approval covers that application for the rest of the turn.
 	Look Class = "look"
 	// Act changes something or reads private data (click, type, clipboard, ...). It is asked
-	// every time, unless the user chose "allow all actions this turn".
+	// every time, unless the user chose to allow that tool for this turn.
 	Act Class = "act"
 )
 
@@ -41,7 +41,7 @@ type Decision string
 
 const (
 	Allow    Decision = "allow"
-	AllowAll Decision = "all" // allow this and every later action this turn
+	AllowAll Decision = "all" // allow this tool on this app for the rest of the turn
 	Deny     Decision = "deny"
 )
 
@@ -89,7 +89,7 @@ type Run struct {
 	Token string
 
 	mu        sync.Mutex
-	allowAll  bool
+	allowed   map[string]bool
 	automatic bool
 	looked    map[string]bool
 	done      chan struct{}
@@ -122,7 +122,7 @@ func (b *Broker) NewRun(ctx context.Context) (*Run, error) {
 		go func() { _ = srv.Serve(ln) }()
 	}
 	r := &Run{
-		ID: randomHex(6), Token: randomHex(32), looked: map[string]bool{}, done: make(chan struct{}),
+		ID: randomHex(6), Token: randomHex(32), looked: map[string]bool{}, allowed: map[string]bool{}, done: make(chan struct{}),
 		URL: "http://" + b.ln.Addr().String() + "/approve",
 	}
 	b.runs[r.Token] = r
@@ -226,7 +226,7 @@ func (b *Broker) decide(ctx context.Context, run *Run, req Request) Decision {
 	case req.Class == Look && run.looked[req.App]:
 		run.mu.Unlock()
 		return Allow
-	case req.Class == Act && run.allowAll:
+	case req.Class == Act && run.allowed[req.App+"\x00"+req.Tool]:
 		run.mu.Unlock()
 		return Allow
 	}
@@ -258,7 +258,7 @@ func (b *Broker) decide(ctx context.Context, run *Run, req Request) Decision {
 			run.looked[req.App] = true
 		}
 		if d == AllowAll {
-			run.allowAll = true
+			run.allowed[req.App+"\x00"+req.Tool] = true
 			run.looked[req.App] = true
 		}
 		return Allow

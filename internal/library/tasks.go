@@ -50,6 +50,7 @@ type Task struct {
 	Limit   bool     `json:"limit,omitempty"`
 	Tools   []string `json:"tools,omitempty"`
 	Notify  bool     `json:"notify,omitempty"` // flash the taskbar when a run ends
+	Missed  string   `json:"missed,omitempty"` // run once or skip schedules missed while Phoenix was closed
 	Enabled bool     `json:"enabled"`          // a disabled task never runs by itself
 	Created int64    `json:"created"`          // when the task or its schedule was set
 
@@ -97,6 +98,12 @@ func (t *Task) Normalize() error {
 		return fmt.Errorf("task instructions and priority rules exceed about %d tokens; shorten them", MaxTaskTextTokens)
 	}
 	t.Icon = clipRunesN(strings.TrimSpace(t.Icon), 8)
+	if t.Missed == "" {
+		t.Missed = "run"
+	}
+	if t.Missed != "run" && t.Missed != "skip" {
+		return fmt.Errorf("missed schedule policy must be run or skip")
+	}
 	seen := map[string]bool{}
 	tools := t.Tools[:0:0]
 	for _, id := range t.Tools {
@@ -227,6 +234,25 @@ func (s *Store) Tasks() []Task {
 	tasksMu.Lock()
 	defer tasksMu.Unlock()
 	return loadTasks(s)
+}
+
+// SkipMissedTasks advances only skip-policy schedules that were already due when Phoenix
+// started. Created is the schedule baseline; this does not record a run that never happened.
+func (s *Store) SkipMissedTasks(started time.Time) error {
+	tasksMu.Lock()
+	defer tasksMu.Unlock()
+	list := loadTasks(s)
+	changed := false
+	for i := range list {
+		if list[i].Missed == "skip" && list[i].Due(started) {
+			list[i].Created = started.Unix()
+			changed = true
+		}
+	}
+	if changed {
+		return saveTasks(s, list)
+	}
+	return nil
 }
 
 // Task returns one task by id.

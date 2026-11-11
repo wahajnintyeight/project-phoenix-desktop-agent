@@ -140,7 +140,7 @@ const lookFirst = "\n\n[Phoenix: do not answer from memory or from earlier turns
 func forBrowserTools(prompt string) string {
 	i := strings.Index(prompt, "\n\nThe user has shared the web page")
 	if i < 0 {
-		return prompt + lookFirst
+		return prompt
 	}
 	block := prompt[i:]
 	var url, title string

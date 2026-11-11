@@ -87,3 +87,27 @@ func TestContinuationBlockCarriesSummaryAndLastExchange(t *testing.T) {
 		t.Error("only the last exchange is carried verbatim")
 	}
 }
+
+func TestSummaryFeedRetainsRecentMessagesAndEnds(t *testing.T) {
+	h := []provider.Message{{Role: "user", Content: "original goal"}}
+	for i := 0; i < 120; i++ {
+		h = append(h, provider.Message{Role: "assistant", Content: strings.Repeat("x", 7000)})
+	}
+	h = append(h, provider.Message{Role: "user", Content: strings.Repeat("a", 7000) + " FINAL CONSTRAINT"})
+	got := summaryFeed(h)
+	for _, want := range []string{"original goal", "FINAL CONSTRAINT", "middle messages omitted"} {
+		if !strings.Contains(got, want) {
+			t.Errorf("summary feed missing %q", want)
+		}
+	}
+	if len(got) > chatSummaryFeed+100 {
+		t.Fatalf("feed exceeds budget: %d", len(got))
+	}
+}
+
+func TestDigestKeepsEndOfLongMessage(t *testing.T) {
+	got := condenseHistory([]provider.Message{{Role: "user", Content: strings.Repeat("é", 200) + " FINAL CONSTRAINT"}})
+	if !strings.Contains(got, "FINAL CONSTRAINT") {
+		t.Fatalf("missing late constraint: %q", got)
+	}
+}

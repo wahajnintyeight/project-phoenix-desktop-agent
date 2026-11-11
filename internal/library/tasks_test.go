@@ -90,6 +90,36 @@ func TestTaskStore(t *testing.T) {
 	}
 }
 
+func TestSkipMissedTasksDoesNotRecordRun(t *testing.T) {
+	st, err := Open(filepath.Join(t.TempDir(), "l.db"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer st.Close()
+	start := time.Now().Truncate(time.Second)
+	list := []Task{
+		{ID: "skip", Kind: TaskInterval, Every: 30, Enabled: true, Missed: "skip", Created: start.Add(-time.Hour).Unix()},
+		{ID: "run", Kind: TaskInterval, Every: 30, Enabled: true, Missed: "run", Created: start.Add(-time.Hour).Unix()},
+		{ID: "later", Kind: TaskInterval, Every: 30, Enabled: true, Missed: "skip", Created: start.Add(-10 * time.Minute).Unix()},
+	}
+	if err := saveTasks(st, list); err != nil {
+		t.Fatal(err)
+	}
+	if err := st.SkipMissedTasks(start); err != nil {
+		t.Fatal(err)
+	}
+	tasks := st.Tasks()
+	if tasks[0].Due(start) || tasks[0].LastRun != 0 || tasks[0].Runs != 0 {
+		t.Fatalf("missed task not skipped cleanly: %+v", tasks[0])
+	}
+	if !tasks[1].Due(start) || tasks[2].Created != list[2].Created {
+		t.Fatalf("other tasks changed: %+v", tasks)
+	}
+	if !tasks[0].Due(start.Add(30 * time.Minute)) {
+		t.Fatal("skipped task did not resume its schedule")
+	}
+}
+
 func TestTaskToolsCreateAndList(t *testing.T) {
 	st, err := Open(filepath.Join(t.TempDir(), "l.db"))
 	if err != nil {
