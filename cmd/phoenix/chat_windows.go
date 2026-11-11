@@ -82,6 +82,7 @@ type chatEvent struct {
 	Millis    int64                `json:"ms,omitempty"`
 	In        int                  `json:"in,omitempty"`
 	Out       int                  `json:"out,omitempty"`
+	Cached    int                  `json:"cached,omitempty"`
 	Cost      float64              `json:"cost,omitempty"`
 	Ctx       int                  `json:"ctx,omitempty"`      // done: estimated tokens in the context window
 	Queue     []chatQueueItem      `json:"queue,omitempty"`    // queue: messages waiting, in order
@@ -585,7 +586,7 @@ func startChatRun(ctx context.Context, cancel context.CancelFunc, id provider.ID
 				if taskRun.id == "" {
 					notifyUser("chat", "Agent response ready", chatID, true)
 				}
-				postChat(chatEvent{K: "done", At: at, Model: model, Millis: time.Since(started).Milliseconds(), In: usage.InputTokens, Out: usage.OutputTokens, Cost: usage.CostUSD, Ctx: historyTokens(chat.history) + chatSystemTokens})
+				postChat(chatEvent{K: "done", At: at, Model: model, Millis: time.Since(started).Milliseconds(), In: usage.InputTokens, Out: usage.OutputTokens, Cached: usage.CachedTokens, Cost: usage.CostUSD, Ctx: historyTokens(chat.history) + chatSystemTokens})
 				setAgentState("idle", "Agent idle", false)
 				if taskRun.id != "" {
 					status, report := taskOutcome(answer)
