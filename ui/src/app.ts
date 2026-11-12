@@ -209,12 +209,29 @@ if (appRoot) {
 
 // Agent panel sections: local view state, nothing for Go to know.
 const agent = document.querySelector<HTMLElement>(".agent");
+const agentDetails = document.querySelector<HTMLElement>("#agent-details-panel");
+const agentDetailsButton = document.querySelector<HTMLButtonElement>("#agent-details");
+function showAgentDetails(open: boolean): void {
+  if (!agentDetails || !agentDetailsButton) return;
+  agentDetails.hidden = !open;
+  agentDetailsButton.setAttribute("aria-expanded", String(open));
+}
+agentDetailsButton?.addEventListener("click", () => showAgentDetails(agentDetails?.hidden ?? true));
+agentDetailsButton?.addEventListener("keydown", (event) => {
+  if (event.key === "Escape" && agentDetails && !agentDetails.hidden) { event.preventDefault(); showAgentDetails(false); }
+});
+agentDetails?.addEventListener("keydown", (event) => {
+  if (event.key === "Escape") { showAgentDetails(false); agentDetailsButton?.focus(); }
+});
 document.querySelector(".agent-tabs")?.addEventListener("click", (e) => {
   const b = (e.target as Element | null)?.closest<HTMLElement>("[data-pane-btn]");
   const name = b?.dataset["paneBtn"];
   if (!b || !name || !agent) return;
+  const restoreFocus = agentDetails?.contains(document.activeElement) ?? false;
   agent.dataset["pane"] = name;
   document.querySelectorAll<HTMLElement>("[data-pane-btn]").forEach((t) => t.setAttribute("aria-selected", String(t === b)));
+  showAgentDetails(false);
+  if (restoreFocus) agentDetailsButton?.focus();
   if (name === "chat") document.querySelector<PhChat>("#chat")?.scrollToLatest();
 }, { passive: true });
 

@@ -5,8 +5,10 @@ const STORAGE_KEY = "phoenix.agentDrawer";
 export function initAgentDrawer(): void {
   const workspace = document.querySelector<HTMLElement>("#workspace");
   const agent = document.querySelector<HTMLElement>("#agent-panel");
+  const quickActions = document.querySelector<HTMLElement>("#quick-actions");
   const mode = document.querySelector<HTMLButtonElement>("#agent-mode");
   const collapse = document.querySelector<HTMLButtonElement>("#agent-collapse");
+  const details = document.querySelector<HTMLButtonElement>("#agent-details");
   const handle = document.querySelector<HTMLButtonElement>("#agent-drag");
   const edges = document.querySelectorAll<HTMLElement>("[data-drawer-edge]");
   if (!workspace || !agent || !mode || !collapse || !handle) return;
@@ -23,7 +25,7 @@ export function initAgentDrawer(): void {
   let lastBounds = "";
   let drag: { pointer: number; x: number; y: number; height: number; width: number; edge: string } | null = null;
   const min = 44;
-  const max = (): number => Math.max(min, workspace.clientHeight - 24);
+  const max = (): number => Math.max(min, workspace.clientHeight - (quickActions?.offsetHeight ?? 56) - 24);
   const maxWidth = (): number => Math.max(200, workspace.clientWidth - 92);
   const reportBounds = (): void => {
     if (!ready || boundsFrame) return;
@@ -74,6 +76,7 @@ export function initAgentDrawer(): void {
     workspace.dataset["drawerCollapsed"] = String(collapsed);
     collapse.textContent = collapsed ? "Restore" : "Minimize";
     collapse.setAttribute("aria-label", collapsed ? "Restore agent drawer" : "Minimize agent drawer");
+    if (details) details.disabled = collapsed;
     agent.querySelectorAll<HTMLElement>("ph-context, .agent-tabs, .agent-body").forEach((element) => { element.inert = collapsed; });
     syncOverlay();
   };
@@ -91,6 +94,7 @@ export function initAgentDrawer(): void {
     }
     else {
       workspace.dataset["drawerCollapsed"] = "false";
+      if (details) details.disabled = false;
       agent.querySelectorAll<HTMLElement>("ph-context, .agent-tabs, .agent-body").forEach((element) => { element.inert = false; });
       syncOverlay();
     }
@@ -159,5 +163,12 @@ export function initAgentDrawer(): void {
     if (height > min) expandedHeight = height;
     save();
   });
-  new ResizeObserver(() => { if (drawerMode && !drag) { applyWidth(preferredWidth || maxWidth()); apply(collapsed ? min : expandedHeight || max()); } }).observe(workspace);
+  const resize = (): void => {
+    workspace.style.setProperty("--quick-actions-height", `${quickActions?.offsetHeight ?? 56}px`);
+    if (drawerMode && !drag) { applyWidth(preferredWidth || maxWidth()); apply(collapsed ? min : expandedHeight || max()); }
+  };
+  const observer = new ResizeObserver(resize);
+  observer.observe(workspace);
+  if (quickActions) observer.observe(quickActions);
+  resize();
 }

@@ -19,10 +19,13 @@ class PhNotifications extends HTMLElement {
     this.#state = value;
     this.#render();
     const tab = document.querySelector<HTMLElement>("[data-pane-btn=notifications]");
+    const unread = value.items.filter((item) => !item.read).length;
     if (tab) {
-      const unread = value.items.filter((item) => !item.read).length;
       tab.textContent = unread ? `Notifications (${unread})` : "Notifications";
     }
+    const badge = document.querySelector<HTMLElement>("#agent-details-count");
+    if (badge) { badge.hidden = unread === 0; badge.textContent = String(unread); }
+    document.querySelector<HTMLElement>("#agent-details")?.setAttribute("aria-label", unread ? `Agent details, ${unread} unread notifications` : "Agent details");
   }
 
   set result(value: { ok: boolean; message: string }) {

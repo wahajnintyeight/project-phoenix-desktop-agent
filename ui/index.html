@@ -321,14 +321,17 @@
       <div class="agent-layout-bar">
         <button type="button" id="agent-drag" class="agent-drag" aria-label="Resize agent drawer" aria-description="Use up and down arrows to resize the drawer" title="Drag to resize the drawer"><span></span></button>
         <span class="agent-layout-title">Agent</span>
+        <button type="button" id="agent-details" class="agent-layout-button agent-details-toggle" aria-label="Agent details" aria-controls="agent-details-panel" aria-expanded="false">Details <span id="agent-details-count" class="agent-details-count" aria-hidden="true" hidden></span></button>
         <button type="button" id="agent-collapse" class="agent-layout-button" aria-label="Minimize agent drawer" title="Minimize agent drawer">Minimize</button>
         <button type="button" id="agent-mode" class="agent-layout-button" aria-label="Move agent to bottom drawer" title="Move agent to bottom drawer">Expand</button>
       </div>
-      <ph-context id="ctx-meter"></ph-context>
-      <div class="agent-tabs" role="tablist" aria-label="Agent panel sections">
-        <button class="agent-tab" role="tab" data-pane-btn="chat" aria-selected="true">Chat</button>
-        <button class="agent-tab" role="tab" data-pane-btn="activity" aria-selected="false">Activity</button>
-        <button class="agent-tab" role="tab" data-pane-btn="notifications" aria-selected="false">Notifications</button>
+      <div id="agent-details-panel" class="agent-details-panel" hidden>
+        <ph-context id="ctx-meter"></ph-context>
+        <div class="agent-tabs" role="tablist" aria-label="Agent panel sections">
+          <button class="agent-tab" role="tab" data-pane-btn="chat" aria-selected="true">Chat</button>
+          <button class="agent-tab" role="tab" data-pane-btn="activity" aria-selected="false">Activity</button>
+          <button class="agent-tab" role="tab" data-pane-btn="notifications" aria-selected="false">Notifications</button>
+        </div>
       </div>
 
       <div class="agent-body">
