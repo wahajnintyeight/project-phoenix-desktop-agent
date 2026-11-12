@@ -1,0 +1,29 @@
+.agent-session-slot { @apply min-w-0 flex-1; }
+.agent[data-session-mounted="true"] .agent-layout-title { display: none; }
+.workspace[data-drawer-collapsed="true"] .agent-session-slot { display: none; }
+.workspace[data-drawer-collapsed="true"] .agent[data-session-mounted="true"] .agent-layout-title { display: block; }
+.chat-head { @apply relative px-3 pt-2 pb-2; }
+.chat-history { @apply min-w-0; }
+.chat-history-trigger { @apply inline-flex h-8 max-w-full cursor-pointer list-none items-center gap-2 rounded-lg border border-line-strong bg-raised px-2.5 text-fg transition-colors; max-width: min(24rem, 100%); }
+.chat-history-trigger::-webkit-details-marker { display: none; }
+.chat-history-trigger:hover, .chat-history[open] .chat-history-trigger { @apply bg-overlay; border-color: var(--color-mauve-shadow-600); }
+.chat-history-icon { @apply inline-flex shrink-0 items-center text-accent; }
+.chat-title { @apply min-w-0 truncate text-sm font-semibold text-fg; }
+.chat-history-chevron { @apply shrink-0 text-fg-subtle transition-transform; }
+.chat-history[open] .chat-history-chevron { @apply rotate-180; }
+.chat-history-pop { @apply absolute z-30 flex flex-col overflow-hidden rounded-xl border shadow-pop; left: 8px; top: calc(100% + 4px); width: min(24rem, calc(100% - 16px)); background: var(--color-overlay); border-color: var(--color-line-strong); }
+.chat-history:not([open]) .chat-history-pop { display: none; }
+.chat-new { @apply mx-2 mt-2 flex min-h-10 items-center gap-2 rounded-lg px-3 text-left text-sm font-medium text-fg transition-colors; }
+.chat-new:hover:not(:disabled) { @apply bg-raised; }
+.chat-new:disabled { @apply cursor-not-allowed opacity-45; }
+.chat-history-note { @apply hidden px-4 pt-2 text-xs text-warn; }
+.chat-history[data-running="true"] .chat-history-note { @apply block; }
+.chat-history-list { @apply scroll flex max-h-[min(22rem,50vh)] flex-col gap-1 overflow-y-auto p-2; }
+.chat-history-item { @apply flex w-full items-center gap-3 rounded-lg px-3 py-2 text-left transition-colors; }
+.chat-history-item:hover:not(:disabled), .chat-history-item[aria-current="true"] { @apply bg-raised; }
+.chat-history-item:disabled { @apply cursor-not-allowed opacity-50; }
+.chat-history-main { @apply flex min-w-0 flex-1 flex-col gap-0.5; }
+.chat-history-title { @apply w-full truncate text-sm font-medium text-fg; }
+.chat-history-meta, .chat-history-empty { @apply text-xs text-fg-subtle; }
+.chat-history-empty { @apply px-3 py-2; }
+.chat-history-now { @apply shrink-0 text-xs font-medium text-accent; }

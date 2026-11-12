@@ -74,6 +74,7 @@ export function initAgentDrawer(): void {
     workspace.style.setProperty("--drawer-height", `${height}px`);
     collapsed = height <= min;
     workspace.dataset["drawerCollapsed"] = String(collapsed);
+    if (collapsed) document.querySelector<HTMLDetailsElement>("#agent-session-slot details")?.removeAttribute("open");
     collapse.textContent = collapsed ? "Restore" : "Minimize";
     collapse.setAttribute("aria-label", collapsed ? "Restore agent drawer" : "Minimize agent drawer");
     if (details) details.disabled = collapsed;
@@ -87,8 +88,8 @@ export function initAgentDrawer(): void {
     mode.setAttribute("aria-label", drawer ? "Move agent to side panel" : "Move agent to bottom drawer");
     mode.title = drawer ? "Move agent to side panel" : "Move agent to bottom drawer";
     if (drawer) {
-      if (!expandedHeight) expandedHeight = max();
-      if (!preferredWidth) preferredWidth = Math.min(900, maxWidth());
+      if (!expandedHeight) expandedHeight = Math.min(620, max());
+      if (!preferredWidth) preferredWidth = Math.min(720, maxWidth());
       applyWidth(preferredWidth);
       apply(collapsed ? min : expandedHeight);
     }

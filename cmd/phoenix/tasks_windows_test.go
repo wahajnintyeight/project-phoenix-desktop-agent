@@ -13,6 +13,8 @@ func TestTaskOutcome(t *testing.T) {
 		{"Working on it.\n**DONE:** sent 3 emails", "ok", "sent 3 emails"},
 		{"BLOCKED: LinkedIn asks for a login", "blocked", "LinkedIn asks for a login"},
 		{"DONE: all clear\n```choices\nNext?\n- Again\n```", "ok", "all clear"},
+		{"DONE: all clear\n```actions\nNext?\n- Explore Acme\n```", "ok", "all clear"},
+		{"DONE: all clear\n```suggestions\nSuggested next steps\n- Again\n```", "ok", "all clear"},
 		{"", "ok", "Finished with no report."},
 		{"No marker here", "ok", "No marker here"},
 	} {

@@ -1,10 +1,10 @@
 // <ph-chat>: the conversation with the agent. Go owns the conversation; this element only
 // draws what Go reports (`events`) and sends what the user types ("g send", "g stop",
 // "g new"). Every message is placed with textContent: model output is untrusted text.
-import { choicePanel, splitChoices } from "./choices";
+import { Msg } from "./chat-message";
+import type { ChoiceAnswer } from "./choices";
 import { el } from "./dom";
 import { icon, type IconName } from "./icons";
-import { MarkdownView } from "./markdown";
 import type { PhMcp } from "./mcp-settings";
 import "./setup-card";
 import { send } from "./protocol";
@@ -63,100 +63,6 @@ function when(iso: string): string {
   if (days <= 0) return "Today";
   if (days === 1) return "Yesterday";
   return new Intl.DateTimeFormat(undefined, { dateStyle: "medium" }).format(date);
-}
-
-/** One message in the log. The agent's replies are Markdown; everything else is plain text. */
-class Msg {
-  readonly box: HTMLElement;
-  readonly text = el("div", "chat-text");
-  readonly meta = el("p", "chat-meta");
-  readonly time = document.createElement("time");
-  readonly copy = el("button", "chat-copy");
-  readonly who: string;
-  #raw = "";
-  #md: MarkdownView | null = null;
-  #frame = 0;
-  #copyTimer = 0;
-
-  constructor(who: string, cls: string, markdown: boolean, at: number) {
-    this.who = who;
-    this.box = el("article", `chat-msg ${cls}`);
-    const footer = el("div", "chat-msg-footer");
-    const copyable = cls.includes("chat-user") || cls.includes("chat-ai");
-    this.copy.type = "button";
-    this.copy.hidden = !copyable || this.#raw === "";
-    this.copy.setAttribute("aria-label", "Copy message");
-    // Icon only; the label is for screen readers and tells them when the copy worked.
-    this.copy.append(icon("copy", 14), icon("check", 14), el("span", "sr-only", "Copy"));
-    this.copy.addEventListener("click", () => this.#copyText(), { passive: true });
-    this.time.className = "chat-time";
-    this.setTime(at);
-    footer.append(this.meta, this.time, this.copy);
-    // The name is for screen readers; sighted users read it in the footer line.
-    this.box.append(el("h3", cls.includes("chat-error") ? "chat-who" : "sr-only", who), this.text, footer);
-    if (markdown) this.#md = new MarkdownView(this.text);
-  }
-
-  setTime(at: number): void {
-    const date = new Date(at);
-    if (!at || Number.isNaN(date.valueOf())) {
-      this.time.removeAttribute("datetime");
-      this.time.textContent = "Date unavailable";
-      return;
-    }
-    this.time.dateTime = date.toISOString();
-    this.time.textContent = new Intl.DateTimeFormat(undefined, { dateStyle: "medium", timeStyle: "short" }).format(date);
-  }
-
-  get empty(): boolean {
-    return this.#raw === "";
-  }
-
-  set(text: string): void {
-    this.#raw = text;
-    this.text.textContent = text;
-    if (this.copy.isConnected && (this.who === "You" || this.box.classList.contains("chat-ai"))) this.copy.hidden = text === "";
-  }
-
-  /** Adds streamed text; the Markdown is redrawn at most once per frame. */
-  append(text: string): void {
-    this.#raw += text;
-    if (this.#raw && (this.who === "You" || this.box.classList.contains("chat-ai"))) this.copy.hidden = false;
-    if (!this.#md) {
-      this.text.append(document.createTextNode(text));
-    } else if (!this.#frame) {
-      this.#frame = requestAnimationFrame(() => this.flush());
-    }
-  }
-
-  flush(): void {
-    if (this.#frame) cancelAnimationFrame(this.#frame);
-    this.#frame = 0;
-    this.#md?.set(splitChoices(this.#raw).body);
-  }
-
-  /** The reply is complete: if it ends in a choices block, draw the buttons under it. */
-  showChoices(): void {
-    if (!this.#md || this.box.querySelector(".chat-choices")) return;
-    const { choices } = splitChoices(this.#raw);
-    if (!choices) return;
-    const panel = choicePanel(choices, (text) => {
-      panel.dispatchEvent(new CustomEvent<{ text: string; question: string }>("phoenix-choice", { bubbles: true, detail: { text, question: choices.question } }));
-    });
-    this.text.after(panel);
-  }
-
-  #copyText(): void {
-    if (!this.#raw || !navigator.clipboard?.writeText) return;
-    const show = (label: string, copied: boolean): void => {
-      this.copy.lastElementChild!.textContent = label;
-      if (copied) this.copy.dataset["copied"] = "";
-      else delete this.copy.dataset["copied"];
-      window.clearTimeout(this.#copyTimer);
-      this.#copyTimer = window.setTimeout(() => show("Copy", false), 1500);
-    };
-    void navigator.clipboard.writeText(this.#raw).then(() => show("Copied", true), () => show("Copy failed", false));
-  }
 }
 
 interface ToolCardState {
@@ -259,7 +165,6 @@ export class PhChat extends HTMLElement {
   readonly #newChat = el("button", "chat-new");
   readonly #title = el("span", "chat-title", "New chat");
   readonly #chatHistory = el("details", "chat-history");
-  readonly #chatHistoryCount = el("span", "chat-history-count", "0");
   #chatItems: SavedChatSummary[] = [];
   #currentChat = "";
   readonly #closeHistory = (e: Event): void => {
@@ -281,6 +186,7 @@ export class PhChat extends HTMLElement {
   #steps: StepGroup | null = null; // the folded run of tool calls currently being added to
   #activeCommand = 0;
   #current: Msg | null = null;
+  #pendingChoices: Msg | null = null;
   #scrollFrame = 0;
   #scrollDirty = false;
   readonly #syncScrollLatest = (): void => {
@@ -301,7 +207,10 @@ export class PhChat extends HTMLElement {
 
   connectedCallback(): void {
     if (this.childElementCount > 0) {
+      this.#mountHistory();
       this.#inputObserver.observe(this.#input);
+      document.addEventListener("pointerdown", this.#closeHistory, { passive: true });
+      document.addEventListener("keydown", this.#closeHistory);
       return;
     }
 
@@ -311,13 +220,14 @@ export class PhChat extends HTMLElement {
     // that job instead.
     this.#log.setAttribute("aria-live", "off");
     this.#log.addEventListener("scroll", this.#syncScrollLatest, { passive: true });
-    // A tapped option (or a typed answer) is sent as the user's next message.
-    this.#log.addEventListener("phoenix-choice", (e) => {
-      const { text, question } = (e as CustomEvent<{ text: string; question: string }>).detail;
-      if (!text || this.#running) return;
+    this.#log.addEventListener("phoenix-answers", (event) => {
+      const answers = (event as CustomEvent<ChoiceAnswer[]>).detail;
+      if (this.#running || !answers.length) return;
+      const text = answers.length === 1 ? answers[0]!.answer : answers.map((answer) => `${answer.question}\n${answer.answer}`).join("\n\n");
+      const facts = answers.filter((answer) => answer.kind === "question").map(({ question, answer }) => ({ question, answer }));
       this.#setRunning(true);
-      send("g", "send", text, this.#shareOn ? "1" : "0", "c" + question); // "c": remember this answer
-
+      if (facts.length) send("g", "send", text, this.#shareOn ? "1" : "0", "q" + JSON.stringify(facts));
+      else send("g", "send", text, this.#shareOn ? "1" : "0");
     });
     this.#scrollLatest.type = "button";
     this.#scrollLatest.hidden = true;
@@ -397,27 +307,28 @@ export class PhChat extends HTMLElement {
     this.#newChat.disabled = true; // nothing to leave until the first message
     this.#newChat.title = "New chat";
     this.#newChat.setAttribute("aria-label", "New chat");
-    this.#newChat.append(icon("compose", 18));
+    this.#newChat.append(icon("compose", 16), el("span", undefined, "New chat"));
     const trigger = el("summary", "chat-history-trigger");
-    trigger.title = "Switch session";
+    trigger.title = "Switch chat";
     const mark = el("span", "chat-history-icon");
     mark.append(icon("chat", 16));
-    const copy = el("span", "chat-history-copy");
-    copy.append(el("span", "chat-history-kicker", "Session"), this.#title);
     const chevron = icon("chevronDown", 14);
     chevron.classList.add("chat-history-chevron");
-    trigger.append(mark, copy, this.#chatHistoryCount, chevron);
+    trigger.append(mark, this.#title, chevron);
     const pop = el("div", "chat-history-pop");
     pop.append(
-      el("p", "chat-history-head", "Switch session"),
+      this.#newChat,
       el("p", "chat-history-note", "Stop the current reply to switch sessions."),
       this.#chatHistoryList,
     );
     this.#chatHistory.append(trigger, pop);
-    const head = el("div", "chat-head");
-    head.append(this.#chatHistory, this.#newChat);
+    if (!this.#mountHistory()) {
+      const head = el("div", "chat-head");
+      head.append(this.#chatHistory);
+      this.append(head);
+    }
     this.#logWrap.append(this.#log, this.#scrollLatest);
-    this.append(head, this.#logWrap, wrap);
+    this.append(this.#logWrap, wrap);
     this.#inputObserver.observe(this.#input);
 
     this.#input.addEventListener("keydown", (e) => {
@@ -448,16 +359,29 @@ export class PhChat extends HTMLElement {
     // While the agent works the button is Stop; with text in the box it queues that message.
     this.#send.addEventListener("click", () => (this.#running && this.#input.value.trim() === "" ? send("g", "stop") : this.#submitInput()), { passive: true });
     this.#share.addEventListener("click", () => this.#setShare(!this.#shareOn), { passive: true });
-    this.#newChat.addEventListener("click", () => send("g", "new"), { passive: true });
+    this.#newChat.addEventListener("click", () => { this.#chatHistory.open = false; send("g", "new"); }, { passive: true });
     document.addEventListener("pointerdown", this.#closeHistory, { passive: true });
     document.addEventListener("keydown", this.#closeHistory);
   }
 
   disconnectedCallback(): void {
+    if (this.#chatHistory.parentElement?.id === "agent-session-slot") {
+      this.#chatHistory.remove();
+      delete document.querySelector<HTMLElement>("#agent-panel")?.dataset["sessionMounted"];
+    }
     document.removeEventListener("pointerdown", this.#closeHistory);
     document.removeEventListener("keydown", this.#closeHistory);
     this.#inputObserver.disconnect();
     this.#inputWidth = 0;
+  }
+
+  #mountHistory(): boolean {
+    const slot = document.querySelector<HTMLElement>("#agent-session-slot");
+    if (!slot) return false;
+    slot.append(this.#chatHistory);
+    const panel = document.querySelector<HTMLElement>("#agent-panel");
+    if (panel) panel.dataset["sessionMounted"] = "true";
+    return true;
   }
 
   set events(list: ChatEvent[]) {
@@ -494,8 +418,6 @@ export class PhChat extends HTMLElement {
     const list = Array.isArray(value) ? value : value.items;
     this.#currentChat = Array.isArray(value) ? "" : value.current;
     this.#chatItems = list;
-    this.#chatHistoryCount.textContent = String(list.length);
-    this.#chatHistoryCount.title = `${list.length} saved ${list.length === 1 ? "session" : "sessions"}`;
     this.#chatHistoryList.replaceChildren();
     if (!list.length) {
       this.#chatHistoryList.append(el("p", "chat-history-empty", "Sessions you start will be saved here, so you can come back to them."));
@@ -677,8 +599,12 @@ export class PhChat extends HTMLElement {
   }
 
   #setRunning(on: boolean): void {
+    if (on && !this.#running) {
+      this.#pendingChoices?.setChoiceMode("inactive");
+      this.#pendingChoices = null;
+    }
     this.#running = on;
-    if (on) this.#log.querySelectorAll(".chat-choices").forEach((p) => p.remove()); // answered or moved on
+    this.#newChat.disabled = on || !this.#empty.hidden;
     this.#log.setAttribute("aria-busy", String(on));
     this.#chatHistory.dataset["running"] = String(on);
     this.#chatHistoryList.querySelectorAll<HTMLButtonElement>(".chat-history-item").forEach((button) => { button.disabled = on; });
@@ -694,7 +620,7 @@ export class PhChat extends HTMLElement {
 
   #message(who: string, cls: string, markdown = false, at = Date.now()): Msg {
     this.#empty.hidden = true;
-    this.#newChat.disabled = false;
+    this.#newChat.disabled = this.#running;
     const m = new Msg(who, cls, markdown, at);
     this.#log.append(m.box);
     return m;
@@ -705,6 +631,7 @@ export class PhChat extends HTMLElement {
     this.#empty.hidden = true;
     if (this.#current?.empty) this.#current.box.remove();
     else this.#current?.flush();
+    this.#current?.setChoiceMode("inactive");
     this.#current = null; // the reply continues in a new message below the card
     this.#endSteps();
     const card = el("div", "chat-approval");
@@ -747,6 +674,7 @@ export class PhChat extends HTMLElement {
   #apply(ev: ChatEvent): void {
     switch (ev.k) {
       case "reset":
+        this.#pendingChoices = null;
         this.#log.replaceChildren(this.#empty);
         this.#processing.hidden = true;
         this.#toolCalls.clear();
@@ -760,6 +688,7 @@ export class PhChat extends HTMLElement {
         this.#setRunning(false);
         break;
       case "restore": {
+        this.#pendingChoices = null;
         this.#log.replaceChildren(this.#empty);
         this.#processing.hidden = true;
         this.#toolCalls.clear();
@@ -787,10 +716,11 @@ export class PhChat extends HTMLElement {
             m.append(message.content);
             m.flush();
             m.meta.title = who;
-            if (at === restored.length - 1) m.showChoices(); // still waiting for the answer
+            if (at === restored.length - 1 && m.getChoices().length) this.#pendingChoices = m;
           }
         }
         this.#setRunning(false);
+        this.#pendingChoices?.setChoiceMode("ready");
         break;
       }
       case "user": {
@@ -842,6 +772,7 @@ export class PhChat extends HTMLElement {
         // text that follows gets a fresh one below the tool line.
         if (this.#current?.empty) this.#current.box.remove();
         else this.#current?.flush();
+        this.#current?.setChoiceMode("inactive");
         this.#current = null;
         if (!ev.toolId) {
           const t = el("p", "chat-tool");
@@ -908,6 +839,8 @@ export class PhChat extends HTMLElement {
         break;
       case "start": {
         this.#who = [ev.provider, ev.model].filter(Boolean).join(" · ") || "Agent";
+        this.#current?.flush();
+        this.#current?.setChoiceMode("inactive");
         this.#current = null;
         break;
       }
@@ -920,6 +853,7 @@ export class PhChat extends HTMLElement {
           this.#current.meta.title = this.#who;
         }
         this.#current.box.dataset["streaming"] = "true";
+        this.#current.setChoiceMode("streaming");
         this.#current.append(ev.text ?? "");
         break;
       }
@@ -937,10 +871,11 @@ export class PhChat extends HTMLElement {
           const bits = [ev.ms ? `${(ev.ms / 1000).toFixed(1)} s` : "", tokens ? `${tokens >= 1000 ? `${(tokens / 1000).toFixed(1)}k` : tokens} tokens` : "", ev.cached ? `${ev.cached >= 1000 ? `${(ev.cached / 1000).toFixed(1)}k` : ev.cached} cached` : "", ev.cost ? `$${ev.cost.toFixed(3)}` : ""]; // the context window has its own meter at the top of the panel
           c.meta.textContent = bits.filter(Boolean).join(" · ");
           c.meta.title = [c.who, ev.out ? `${ev.in ?? 0} in, ${ev.out} out` : "", ev.cached ? `${ev.cached} cache reads reported by provider` : ""].filter(Boolean).join(" · ");
-          c.showChoices();
         }
+        this.#pendingChoices = c && c.getChoices().length ? c : null;
         this.#current = null;
         this.#setRunning(false);
+        this.#pendingChoices?.setChoiceMode("ready");
         break;
       }
       case "stopped": {
@@ -949,6 +884,7 @@ export class PhChat extends HTMLElement {
         this.#expireCards();
         if (this.#current) {
           this.#current.flush();
+          this.#current.setChoiceMode("inactive");
           if (ev.at) this.#current.setTime(ev.at);
           delete this.#current.box.dataset["streaming"];
           this.#current.meta.textContent = `${this.#current.who} · Stopped`;
@@ -963,6 +899,7 @@ export class PhChat extends HTMLElement {
         this.#expireCards();
         if (this.#current) {
           this.#current.flush();
+          this.#current.setChoiceMode("inactive");
           delete this.#current.box.dataset["streaming"];
         }
         const m = this.#message("Something went wrong", "chat-error");

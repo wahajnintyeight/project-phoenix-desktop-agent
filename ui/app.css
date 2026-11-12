@@ -15,6 +15,9 @@
 @import "./notifications.css";
 @import "./tasks.css" layer(components);
 @import "./agent-drawer.css" layer(components);
+@import "./quick-actions.css" layer(components);
+@import "./chat-questions.css" layer(components);
+@import "./chat-history.css" layer(components);
 @source "./index.html";
 @source "./src";
 
@@ -264,22 +267,6 @@
   .panel-resize:hover::after, .panel-resize:focus-visible::after, [data-resizing-panel="true"] .panel-resize::after { background: var(--color-accent); }
   [data-resizing-panel="true"], [data-resizing-panel="true"] * { cursor: col-resize !important; user-select: none !important; }
 
-  /* ── quick actions: one-click requests under the page ─────────────── */
-  .qa { @apply flex min-h-14 shrink-0 items-center gap-3 border-t border-line-strong bg-panel px-4; }
-  .qa-lead { @apply flex shrink-0 items-center gap-1.5 text-xs text-accent; }
-  .qa-title { @apply font-semibold text-fg; }
-  .qa-context { @apply text-fg-muted; }
-  .qa-list { @apply scroll flex min-w-0 flex-1 items-center gap-2 overflow-x-auto overflow-y-hidden py-2; }
-  .qa-chip {
-    @apply h-9 shrink-0 rounded-lg border border-line-strong bg-raised px-4 text-sm font-medium whitespace-nowrap text-fg transition-colors;
-  }
-  .qa-chip:hover:not(:disabled) { @apply border-accent bg-overlay text-fg; }
-  .qa-chip:focus-visible { outline: 2px solid var(--color-accent); outline-offset: 2px; }
-  .qa-chip:active:not(:disabled) { @apply bg-line; }
-  .qa-chip:disabled { @apply opacity-45; }
-  /* The most likely request for this page: the one place the accent shows in the bar. */
-  .qa-chip[data-primary="true"] { border-color: var(--color-accent); background: color-mix(in oklab, var(--color-accent) 15%, var(--color-raised)); @apply text-fg; }
-  .qa-chip[data-primary="true"]:hover:not(:disabled) { @apply text-accent-hover; }
   .freeze { @apply absolute inset-0 size-full; object-fit: fill; }
   .home { display: none; }
   [data-view="home"] .home { display: flex; }
@@ -399,19 +386,6 @@
   .chat-approval .btn-quiet { @apply border-line-strong; }
   .chat-approval-actions { @apply flex flex-wrap items-center gap-2; }
   .chat-approval-result { @apply text-xs text-fg-muted; }
-
-  /* Choices: the agent's options as buttons, plus a box for a different answer. */
-  .chat-choices { @apply mt-3 flex flex-col gap-2 rounded-xl border p-3; background: var(--card-soft); border-color: var(--card-edge); }
-  .chat-choices-question { @apply text-sm font-semibold text-fg; }
-  .chat-choices-list { @apply flex flex-wrap gap-2; }
-  .chat-choice { @apply h-auto min-h-8 max-w-full whitespace-normal py-1.5 text-left; overflow-wrap: anywhere; }
-  .chat-choice[aria-pressed="true"] { background: var(--color-accent-fill); color: var(--color-accent-fill-ink); border-color: transparent; }
-  .chat-choices-custom { @apply flex items-center gap-2; }
-  .chat-choices-input { @apply h-8 min-w-0 flex-1 rounded-lg border border-line-strong bg-sunken px-3 text-sm text-fg placeholder:text-fg-subtle; }
-  .chat-choices-go { @apply size-8 shrink-0 justify-center p-0; }
-  .chat-choices[data-answered] { @apply opacity-70; }
-  .chat-choices[data-answered] .chat-choices-custom { @apply hidden; }
-  .chat-log[aria-busy="true"] .chat-choices:not([data-answered]) { @apply pointer-events-none opacity-50; }
 
   /* ── Files view: a file explorer ─────────────────────────────────── */
   ph-files { @apply relative grid size-full min-h-0 overflow-hidden; grid-template-columns: 15.5rem minmax(0, 1fr); background: var(--color-canvas); container-type: inline-size; }
@@ -799,36 +773,6 @@
 
   /* ── chat ────────────────────────────────────────────────────────── */
   /* The session bar: which conversation you are in, the way to every other one, and a clean slate. */
-  .chat-head { @apply relative flex items-stretch gap-2 px-3 pt-2 pb-2; }
-  .chat-history { @apply min-w-0 flex-1; }
-  .chat-history-trigger { @apply flex min-w-0 cursor-pointer list-none items-center gap-3 rounded-xl border p-2 pr-3 transition-colors; background: var(--card); border-color: var(--card-edge); }
-  .chat-history-trigger::-webkit-details-marker { display: none; }
-  .chat-history-trigger:hover, .chat-history[open] .chat-history-trigger { border-color: var(--color-mauve-shadow-600); }
-  .chat-history-icon { @apply grid size-9 shrink-0 place-items-center rounded-lg text-accent; background: color-mix(in oklab, var(--color-mauve-shadow-500) 24%, transparent); }
-  .chat-history-copy { @apply flex min-w-0 flex-1 flex-col; }
-  .chat-history-kicker { @apply text-xs text-fg-subtle; }
-  .chat-title { @apply truncate text-sm font-semibold text-fg; }
-  .chat-history-count { @apply inline-flex h-5 min-w-5 shrink-0 items-center justify-center rounded-full border border-line-strong px-1.5 text-xs font-medium tabular text-fg-muted; }
-  .chat-history-chevron { @apply shrink-0 text-fg-subtle transition-transform; }
-  .chat-history[open] .chat-history-chevron { @apply rotate-180; }
-  .chat-new { @apply inline-flex w-12 shrink-0 items-center justify-center self-stretch rounded-xl border border-line-strong text-fg transition-colors; }
-  .chat-new:hover:not(:disabled) { background: var(--card-soft); border-color: var(--color-mauve-shadow-600); }
-  .chat-new:disabled { @apply opacity-45; }
-  .chat-history-pop { @apply absolute inset-x-3 top-[calc(100%-4px)] z-30 flex flex-col overflow-hidden rounded-xl border shadow-pop; background: var(--color-overlay); border-color: var(--color-mauve-shadow-600); }
-  .chat-history:not([open]) .chat-history-pop { display: none; }
-  .chat-history-head { @apply flex items-center justify-between px-4 pt-3 pb-1 text-sm font-semibold text-fg; }
-  .chat-history-note { @apply hidden px-4 pb-1 text-xs text-warn; }
-  .chat-history[data-running="true"] .chat-history-note { @apply block; }
-  .chat-history-list { @apply scroll flex max-h-[min(22rem,55vh)] flex-col gap-1.5 overflow-y-auto p-2; }
-  .chat-history-item { @apply flex w-full items-center gap-3 rounded-lg border px-3 py-2 text-left transition-colors; background: var(--card-soft); border-color: var(--card-edge); }
-  .chat-history-item:hover:not(:disabled) { border-color: var(--color-line-strong); }
-  .chat-history-item[aria-current="true"] { background: var(--card); border-color: var(--color-mauve-shadow-600); }
-  .chat-history-item:disabled { @apply cursor-not-allowed opacity-50; }
-  .chat-history-main { @apply flex min-w-0 flex-1 flex-col gap-0.5; }
-  .chat-history-title { @apply w-full truncate text-sm font-medium text-fg; }
-  .chat-history-meta, .chat-history-empty { @apply text-xs text-fg-subtle; }
-  .chat-history-empty { @apply px-3 py-3; }
-  .chat-history-now { @apply inline-flex h-5 shrink-0 items-center rounded-full border px-2 text-xs font-medium text-accent; border-color: var(--color-mauve-shadow-600); }
   .chat-log-wrap { @apply relative min-h-0 flex-1; }
   .chat-log { @apply scroll absolute inset-0 flex min-h-0 flex-col gap-4 overflow-auto px-4 pt-2 pb-4; user-select: text; -webkit-user-select: text; }
   .chat-scroll-latest { @apply absolute right-4 bottom-3 z-10 inline-flex h-8 items-center gap-1.5 rounded-full border px-3 text-xs font-medium text-fg shadow-pop transition-colors; background: var(--color-overlay); border-color: var(--color-line-strong); }

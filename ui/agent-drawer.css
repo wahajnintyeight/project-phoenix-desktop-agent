@@ -15,7 +15,7 @@
 .agent-edge:hover, .agent-edge:focus-visible { background: color-mix(in oklab, var(--color-accent) 45%, transparent); }
 .workspace[data-drawer-collapsed="true"] .agent-edge { display: none; }
 
-.agent-layout-bar { @apply relative flex h-11 shrink-0 items-center gap-2 border-b border-line px-3; }
+.agent-layout-bar { @apply relative z-20 flex h-11 shrink-0 items-center gap-2 border-b border-line px-3; }
 .agent-layout-title { @apply flex-1 text-sm font-semibold text-fg; }
 .agent-layout-button { @apply rounded-md px-2 py-1 text-xs text-fg-muted; }
 .agent-layout-button:hover { @apply bg-raised text-fg; }

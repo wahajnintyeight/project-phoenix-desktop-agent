@@ -231,7 +231,7 @@ func beginTask(t library.Task, display, text string) {
 	}
 }
 
-var choicesFence = regexp.MustCompile("(?s)```choices.*?```")
+var choicesFence = regexp.MustCompile("(?s)```(?:choices|actions|suggestions).*?```")
 
 // taskOutcome reads the agent's closing line: its status and the report.
 func taskOutcome(answer string) (status, report string) {

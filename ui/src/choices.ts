@@ -1,98 +1,93 @@
-// Choices: when the agent needs the user to pick, it ends its reply with a fenced block
-//
-//   ```choices
-//   Which one first?
-//   - Lorven Tech: Fullstack (PHP)
-//   - RemoteHunter: Senior Full-Stack
-//   ```
-//
-// Phoenix hides the block and draws the options as buttons under the message, plus a field for
-// a different answer. A click (or typing and pressing the button) sends that text as the
-// user's next message, so answering is one tap instead of writing. The block is plain text, so
-// it works with every provider and survives being saved in the history.
 import { el } from "./dom";
-import { icon } from "./icons";
+import type { ChoiceSet } from "./choice-parser";
 
-export interface ChoiceSet {
-  question: string;
-  options: string[];
-}
+export { splitChoices } from "./choice-parser";
+export type { ChoiceSet } from "./choice-parser";
+export interface ChoiceAnswer { question: string; answer: string; kind: ChoiceSet["kind"] }
+export type ChoiceMode = "inactive" | "streaming" | "ready" | "submitted";
+type Group = { key: string; set: ChoiceSet; node: HTMLElement; input: HTMLInputElement; buttons: HTMLButtonElement[]; answer: string };
 
-const MAX_OPTIONS = 8;
-const MAX_LABEL = 120;
-const COMPLETE = /(?:^|\n)[ \t]*```choices[ \t]*\n([\s\S]*?)\n[ \t]*```[ \t]*(?:\n|$)/;
-const OPEN = /(?:^|\n)[ \t]*```choices[\s\S]*$/;
+/** A response can add question groups while streaming without erasing earlier selections. */
+export class ChoiceMenus {
+  readonly element = el("form", "chat-question-menus");
+  readonly #status = el("p", "chat-question-status");
+  readonly #submit = el("button", "btn btn-primary btn-sm chat-question-submit", "Continue");
+  #groups: Group[] = [];
+  #mode: ChoiceMode = "inactive";
 
-/** Splits a reply into the text to show and the choices to draw (null when there are none). */
-export function splitChoices(raw: string): { body: string; choices: ChoiceSet | null } {
-  const m = COMPLETE.exec(raw);
-  if (m) {
-    const body = (raw.slice(0, m.index) + "\n" + raw.slice(m.index + m[0].length)).trim();
-    return { body, choices: parse(m[1] ?? "") };
+  constructor(private readonly answer: (answers: ChoiceAnswer[]) => void) {
+    this.element.setAttribute("aria-label", "Answer the agent's questions");
+    this.#status.setAttribute("role", "status");
+    this.#submit.type = "submit";
+    this.element.append(this.#status, this.#submit);
+    this.element.addEventListener("submit", (event) => { event.preventDefault(); this.#send(); });
   }
-  // Still being written: keep the half-finished block off the screen.
-  const open = OPEN.exec(raw);
-  return { body: open ? raw.slice(0, open.index).trimEnd() : raw, choices: null };
-}
 
-function parse(block: string): ChoiceSet | null {
-  const options: string[] = [];
-  let question = "";
-  for (const line of block.split("\n")) {
-    const t = line.trim();
-    if (!t) continue;
-    const item = /^(?:[-*•]|\d+[.)])\s+(.*)$/.exec(t);
-    if (item) {
-      const label = (item[1] ?? "").replace(/\*\*/g, "").trim().slice(0, MAX_LABEL);
-      if (label && options.length < MAX_OPTIONS && !options.includes(label)) options.push(label);
-    } else if (!question && options.length === 0) {
-      question = t.replace(/^\?\s*/, "").slice(0, 160);
+  update(sets: ChoiceSet[]): void {
+    let keep = 0;
+    while (keep < sets.length && keep < this.#groups.length && this.#groups[keep]?.key === JSON.stringify(sets[keep])) keep++;
+    for (const group of this.#groups.splice(keep)) group.node.remove();
+    for (let i = keep; i < sets.length; i++) {
+      const set = sets[i];
+      if (!set) continue;
+      const group = this.#group(set);
+      this.#groups.push(group);
+      this.element.insertBefore(group.node, this.#status);
     }
+    this.#refresh();
   }
-  return options.length ? { question, options } : null;
-}
 
-/** The panel under a message: one button per option and a box for something else. */
-export function choicePanel(set: ChoiceSet, choose: (text: string) => void): HTMLElement {
-  const panel = el("div", "chat-choices");
-  panel.setAttribute("role", "group");
-  panel.setAttribute("aria-label", set.question || "Choose an option");
-  if (set.question) panel.append(el("p", "chat-choices-question", set.question));
+  setMode(mode: ChoiceMode): void { this.#mode = mode; this.#refresh(); }
 
-  const list = el("div", "chat-choices-list");
-  const finish = (text: string, button?: HTMLElement): void => {
-    if (panel.dataset["answered"] !== undefined) return;
-    panel.dataset["answered"] = "";
-    panel.querySelectorAll<HTMLButtonElement | HTMLInputElement>("button, input").forEach((x) => { x.disabled = true; });
-    button?.setAttribute("aria-pressed", "true");
-    choose(text);
-  };
-  for (const option of set.options) {
-    const b = el("button", "btn btn-sm chat-choice", option);
-    b.type = "button";
-    b.addEventListener("click", () => finish(option, b), { passive: true });
-    list.append(b);
+  #group(set: ChoiceSet): Group {
+    const node = el("fieldset", "chat-question");
+    node.append(el("legend", "chat-question-label", set.question));
+    const input = el("input", "chat-question-input");
+    input.type = "text";
+    input.maxLength = 500;
+    input.placeholder = "Type your own answer…";
+    input.setAttribute("aria-label", `Your answer: ${set.question}`);
+    const list = el("div", "chat-question-options");
+    const group: Group = { key: JSON.stringify(set), set, node, input, buttons: [], answer: "" };
+    input.addEventListener("input", () => {
+      group.answer = input.value.trim();
+      group.buttons.forEach((button) => button.setAttribute("aria-pressed", "false"));
+      this.#refresh();
+    });
+    for (const option of set.options) {
+      const button = el("button", "btn chat-question-option", option);
+      button.type = "button";
+      button.setAttribute("aria-pressed", "false");
+      button.addEventListener("click", () => {
+        group.answer = option;
+        input.value = "";
+        group.buttons.forEach((other) => other.setAttribute("aria-pressed", String(other === button)));
+        this.#refresh();
+        if (this.#groups.length === 1 && this.#mode === "ready") this.#send();
+      });
+      group.buttons.push(button);
+      list.append(button);
+    }
+    node.append(input, list);
+    return group;
   }
-  panel.append(list);
 
-  const custom = el("form", "chat-choices-custom");
-  const input = el("input", "chat-choices-input");
-  input.type = "text";
-  input.maxLength = 500;
-  input.placeholder = "Or type your own answer";
-  input.setAttribute("aria-label", "Your own answer");
-  const go = el("button", "btn btn-primary btn-sm chat-choices-go");
-  go.type = "submit";
-  go.disabled = true;
-  go.setAttribute("aria-label", "Send this answer");
-  go.append(icon("arrowUp", 14));
-  input.addEventListener("input", () => { go.disabled = input.value.trim() === ""; }, { passive: true });
-  custom.addEventListener("submit", (e) => {
-    e.preventDefault();
-    const text = input.value.trim();
-    if (text) finish(text);
-  });
-  custom.append(input, go);
-  panel.append(custom);
-  return panel;
+  #refresh(): void {
+    const editable = this.#mode === "streaming" || this.#mode === "ready";
+    const status = this.#mode === "streaming" ? "Waiting for the agent to finish…" : "";
+    if (this.#status.textContent !== status) this.#status.textContent = status;
+    for (const group of this.#groups) {
+      group.input.disabled = !editable;
+      group.buttons.forEach((button) => { button.disabled = !editable; });
+    }
+    this.#submit.disabled = this.#mode !== "ready" || !this.#groups.length || this.#groups.some((group) => !group.answer);
+    this.#submit.textContent = this.#groups.length === 1 ? "Send answer" : "Continue";
+  }
+
+  #send(): void {
+    if (this.#submit.disabled) return;
+    const answers = this.#groups.map((group) => ({ question: group.set.question, answer: group.answer, kind: group.set.kind }));
+    this.setMode("submitted");
+    this.answer(answers);
+  }
 }
