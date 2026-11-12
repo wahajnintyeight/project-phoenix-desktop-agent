@@ -10,9 +10,9 @@ Losing the private key means existing Phoenix installs can no longer verify new 
 
 ## Publishing
 
-Push a version tag such as `v0.2.0` after the signing secret is configured. The Windows workflow builds a per-user NSIS installer, the raw executable used by the self-updater, and a signed `phoenix-update-manifest.json`, then verifies the manifest before publishing all three assets.
+Push a version tag such as `v0.2.2` after the signing secret is configured. The Windows workflow builds a per-user NSIS installer, the raw executable used by the self-updater, and a signed `phoenix-update-manifest.json`, then verifies the manifest before publishing all three assets.
 
-The published `v0.1.0` build predates this updater, so install the first updater-enabled release (for example, `v0.2.0`) manually with its new per-user installer. That version and later releases can self-update.
+The published `v0.1.0` build predates this updater, so install `v0.2.1` manually with its per-user installer. That version and later releases can self-update.
 
 The updater replaces the running executable in its installation directory. Phoenix installers therefore default to per-user scope under `%LOCALAPPDATA%\Programs\Phoenix`; machine installs under Program Files are not writable for ordinary users. Existing machine-scope installations must be reinstalled with the per-user installer before they can self-update.
 
@@ -21,7 +21,7 @@ The updater replaces the running executable in its installation directory. Phoen
 Use the same commands as CI after building `dist/phoenix-windows-amd64.exe`:
 
 ```powershell
-$version = '0.2.0'
+$version = '0.2.1'
 $key = "$env:LOCALAPPDATA\Phoenix\update-signing\updater.key"
 $prefix = 'https://github.com/wahajnintyeight/project-phoenix-desktop-agent/releases/latest/download/'
 wails3 updater manifest -version $version -channel stable -name "Phoenix $version" -key $key -url-prefix $prefix -output dist/phoenix-update-manifest.json dist/phoenix-windows-amd64.exe
