@@ -41,7 +41,7 @@ jobs:
           $config = [IO.File]::ReadAllText('build/config.yml')
           $config = [regex]::Replace($config, '(?m)^  version: .+$', "  version: `"$version`"")
           [IO.File]::WriteAllText('build/config.yml', $config)
-          wails3 update build-assets -config build/config.yml -dir build -silent
+          wails3 update build-assets -name phoenix -config build/config.yml -dir build -silent
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
 
       - name: Build per-user installer
