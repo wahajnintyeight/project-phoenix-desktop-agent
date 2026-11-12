@@ -19,10 +19,23 @@ export function initAgentDrawer(): void {
   let drawerMode = false;
   let overlaySent = false;
   let ready = false;
+  let boundsFrame = 0;
+  let lastBounds = "";
   let drag: { pointer: number; x: number; y: number; height: number; width: number; edge: string } | null = null;
   const min = 44;
   const max = (): number => Math.max(min, workspace.clientHeight - 24);
   const maxWidth = (): number => Math.max(200, workspace.clientWidth - 92);
+  const reportBounds = (): void => {
+    if (!ready || boundsFrame) return;
+    boundsFrame = requestAnimationFrame(() => {
+      boundsFrame = 0;
+      const r = agent.getBoundingClientRect();
+      const fields = drawerMode && !collapsed ? [r.x, r.y, r.width, r.height] : [0, 0, 0, 0];
+      const value = fields.map((v) => String(Math.round(v * 100) / 100));
+      const key = value.join("|");
+      if (key !== lastBounds) { lastBounds = key; send("d", ...value); }
+    });
+  };
   try {
     const saved: unknown = JSON.parse(localStorage.getItem(STORAGE_KEY) ?? "null");
     if (saved && typeof saved === "object") {
@@ -39,6 +52,7 @@ export function initAgentDrawer(): void {
   };
   const syncOverlay = (): void => {
     const open = drawerMode && !collapsed;
+    reportBounds();
     if (!ready || open === overlaySent) return;
     overlaySent = open;
     send("m", open ? "drawer-open" : "drawer-close");
@@ -46,6 +60,7 @@ export function initAgentDrawer(): void {
   const applyWidth = (value: number): void => {
     width = Math.round(Math.max(Math.min(320, maxWidth()), Math.min(maxWidth(), value)));
     workspace.style.setProperty("--drawer-width", `${width}px`);
+    reportBounds();
     edges.forEach((edge) => {
       edge.setAttribute("aria-valuemin", String(Math.min(320, maxWidth())));
       edge.setAttribute("aria-valuemax", String(maxWidth()));
@@ -82,6 +97,8 @@ export function initAgentDrawer(): void {
   };
   setMode(drawerMode);
   requestAnimationFrame(() => { ready = true; syncOverlay(); });
+  new ResizeObserver(reportBounds).observe(agent);
+  window.addEventListener("resize", reportBounds, { passive: true });
   mode.addEventListener("click", () => { setMode(!drawerMode); save(); });
   collapse.addEventListener("click", () => {
     if (height <= min) apply(expandedHeight || max());

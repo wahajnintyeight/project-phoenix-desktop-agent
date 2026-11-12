@@ -43,8 +43,8 @@ type tab struct {
 	canBack bool
 	canFwd  bool
 
-	cv *edge.Chromium // nil for the home tab
-	wv unsafe.Pointer // ICoreWebView2*
+	cv   *edge.Chromium // nil for the home tab
+	wv   unsafe.Pointer // ICoreWebView2*
 	host uintptr
 
 	byAgent  bool      // opened for the agent's work; closed when it is done (see tabhygiene_windows.go)
@@ -231,7 +231,7 @@ func activate(id int) {
 	}
 	activeID = id
 	layoutAll()
-	if t := activeTab(); t != nil && t.cv != nil && !menuOpen {
+	if t := activeTab(); t != nil && t.cv != nil && !menuOpen && !drawerOpen {
 		t.cv.Focus()
 	}
 	pushTabs()
@@ -546,24 +546,10 @@ func syncOverlay() {
 	}
 	pageHidden = false
 	layoutAll()
-	if t := activeTab(); t != nil && t.cv != nil {
+	if t := activeTab(); t != nil && t.cv != nil && !drawerOpen {
 		t.cv.Focus()
 	}
 	post("u" + fs + "freeze" + fs + "hidden" + fs + "true")
-}
-
-func refreshOverlay() {
-	if !menuOpen {
-		return
-	}
-	pageHidden = false
-	layoutAll()
-	freezeGen++
-	if t := activeTab(); t == nil || t.cv == nil {
-		post("u" + fs + "freeze" + fs + "hidden" + fs + "true")
-		return
-	}
-	freezeActive(freezeGen)
 }
 
 // frozen is the UI's acknowledgement that the frozen image has been painted.

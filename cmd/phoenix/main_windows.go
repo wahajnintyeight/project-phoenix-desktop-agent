@@ -456,7 +456,7 @@ func onResized() {
 
 // focusContent gives keyboard focus to the page when a web tab is showing.
 func focusContent() {
-	if t := activeTab(); t != nil && t.cv != nil && !pageHidden {
+	if t := activeTab(); t != nil && t.cv != nil && !pageHidden && !drawerOpen {
 		t.cv.Focus()
 	}
 }

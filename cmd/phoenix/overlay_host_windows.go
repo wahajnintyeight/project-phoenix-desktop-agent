@@ -2,20 +2,21 @@ package main
 
 import (
 	"math"
+	"strconv"
 	"unsafe"
 
 	"golang.org/x/sys/windows"
 )
 
 var (
-	gdi32            = windows.NewLazySystemDLL("gdi32.dll")
-	pCreateWindowEx  = user32.NewProc("CreateWindowExW")
-	pDestroyWindow   = user32.NewProc("DestroyWindow")
-	pShowWindow      = user32.NewProc("ShowWindow")
-	pSetWindowRgn    = user32.NewProc("SetWindowRgn")
-	pCreateRectRgn   = gdi32.NewProc("CreateRectRgn")
-	pCombineRgn      = gdi32.NewProc("CombineRgn")
-	pDeleteObject    = gdi32.NewProc("DeleteObject")
+	gdi32           = windows.NewLazySystemDLL("gdi32.dll")
+	pCreateWindowEx = user32.NewProc("CreateWindowExW")
+	pDestroyWindow  = user32.NewProc("DestroyWindow")
+	pShowWindow     = user32.NewProc("ShowWindow")
+	pSetWindowRgn   = user32.NewProc("SetWindowRgn")
+	pCreateRectRgn  = gdi32.NewProc("CreateRectRgn")
+	pCombineRgn     = gdi32.NewProc("CombineRgn")
+	pDeleteObject   = gdi32.NewProc("DeleteObject")
 )
 
 // Each browser gets a host window so its visible region can exclude the agent panel.
@@ -30,9 +31,30 @@ func newBrowserHost() uintptr {
 
 type clipRect struct{ left, top, right, bottom int32 }
 
+func setDrawerRect(fields []string) {
+	if len(fields) < 4 {
+		return
+	}
+	var v [4]float64
+	for i := range v {
+		n, err := strconv.ParseFloat(fields[i], 64)
+		if err != nil || math.IsNaN(n) || math.IsInf(n, 0) || n < -20000 || n > 20000 || (i >= 2 && n < 0) {
+			return
+		}
+		v[i] = n
+	}
+	if drawerRect.x == v[0] && drawerRect.y == v[1] && drawerRect.w == v[2] && drawerRect.h == v[3] {
+		return
+	}
+	drawerRect.x, drawerRect.y, drawerRect.w, drawerRect.h = v[0], v[1], v[2], v[3]
+	if t := activeTab(); t != nil {
+		t.place()
+	}
+}
+
 func drawerClip(page clipRect, x, y, w, h, scale float64) (clipRect, bool) {
-	left := int32(math.Round(x * scale)) - page.left
-	top := int32(math.Round(y * scale)) - page.top
+	left := int32(math.Round(x*scale)) - page.left
+	top := int32(math.Round(y*scale)) - page.top
 	right := int32(math.Round((x+w)*scale)) - page.left
 	bottom := int32(math.Round((y+h)*scale)) - page.top
 	r := clipRect{max(0, left), max(0, top), min(page.right-page.left, right), min(page.bottom-page.top, bottom)}
@@ -52,8 +74,12 @@ func clipBrowserHost(host uintptr, page clipRect) {
 	full, _, _ := pCreateRectRgn.Call(0, 0, uintptr(page.right-page.left), uintptr(page.bottom-page.top))
 	cut, _, _ := pCreateRectRgn.Call(uintptr(r.left), uintptr(r.top), uintptr(r.right), uintptr(r.bottom))
 	if full == 0 || cut == 0 {
-		if full != 0 { pDeleteObject.Call(full) }
-		if cut != 0 { pDeleteObject.Call(cut) }
+		if full != 0 {
+			pDeleteObject.Call(full)
+		}
+		if cut != 0 {
+			pDeleteObject.Call(cut)
+		}
 		return
 	}
 	result, _, _ := pCombineRgn.Call(full, full, cut, 4) // RGN_DIFF
