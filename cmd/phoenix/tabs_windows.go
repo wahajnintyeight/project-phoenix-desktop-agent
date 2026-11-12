@@ -546,11 +546,11 @@ func refreshOverlay() {
 	}
 	pageHidden = false
 	layoutAll()
+	freezeGen++
 	if t := activeTab(); t == nil || t.cv == nil {
 		post("u" + fs + "freeze" + fs + "hidden" + fs + "true")
 		return
 	}
-	freezeGen++
 	freezeActive(freezeGen)
 }
 
