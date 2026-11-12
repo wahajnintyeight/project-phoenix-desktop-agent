@@ -250,6 +250,8 @@ func onMessage(message string) {
 		}
 	case "l": // page slot rectangle (css px)
 		setSlot(f[1:])
+	case "d": // floating agent panel rectangle (css px)
+		setDrawerRect(f[1:])
 	case "v": // provider management
 		handleProviderOp(f)
 	case "f": // the Files view

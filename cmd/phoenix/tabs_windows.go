@@ -45,6 +45,7 @@ type tab struct {
 
 	cv *edge.Chromium // nil for the home tab
 	wv unsafe.Pointer // ICoreWebView2*
+	host uintptr
 
 	byAgent  bool      // opened for the agent's work; closed when it is done (see tabhygiene_windows.go)
 	openedAt time.Time // when, for choosing the oldest to close
@@ -64,6 +65,7 @@ var (
 	menuOpen   bool // an overlay (the ⋯ menu) is open
 	popupOpen  bool
 	drawerOpen bool
+	drawerRect struct{ x, y, w, h float64 }
 	// pageHidden is true while the active page window is hidden behind a frozen image.
 	pageHidden bool
 	freezeGen  int
@@ -155,10 +157,16 @@ func (t *tab) place() {
 	}
 	ctrl := t.cv.GetController()
 	if t.id == activeID && haveSlot && !pageHidden {
-		_ = ctrl.PutBounds(slotBounds())
+		bounds := slotBounds()
+		w, h := bounds.Right-bounds.Left, bounds.Bottom-bounds.Top
+		pSetWindowPos.Call(t.host, 0, uintptr(bounds.Left), uintptr(bounds.Top), uintptr(w), uintptr(h), swpNoActivate|0x0004)
+		_ = ctrl.PutBounds(edge.Rect{Right: w, Bottom: h})
+		clipBrowserHost(t.host, clipRect{bounds.Left, bounds.Top, bounds.Right, bounds.Bottom})
 		_ = ctrl.PutIsVisible(true)
+		pShowWindow.Call(t.host, 8) // SW_SHOWNA
 	} else {
 		_ = ctrl.PutIsVisible(false)
+		pShowWindow.Call(t.host, 0)
 	}
 }
 
@@ -229,9 +237,6 @@ func activate(id int) {
 	pushTabs()
 	pushToolbar()
 	refreshActions(true)
-	if drawerOpen {
-		refreshOverlay()
-	}
 }
 
 func createWebTab(rawURL string) {
@@ -279,16 +284,20 @@ func prepareWebTab(t *tab) bool {
 		}
 		pushTabs()
 		if t.id == activeID {
-			if drawerOpen {
-				runLater(refreshOverlay)
-			}
 			runLater(func() { refreshActions(false) })
 			scheduleActionRefresh(t.id, 1500*time.Millisecond) // pages that build themselves late
 		}
 	}
 
-	if !cv.Embed(hwnd) {
+	t.host = newBrowserHost()
+	if t.host == 0 {
+		t.cv = nil
+		return false
+	}
+	if !cv.Embed(t.host) {
 		logf("tab %d: embed failed", t.id)
+		pDestroyWindow.Call(t.host)
+		t.host = 0
 		t.cv = nil
 		return false
 	}
@@ -297,6 +306,8 @@ func prepareWebTab(t *tab) bool {
 	if err != nil {
 		logf("tab %d: GetCoreWebView2: %v", t.id, err)
 		comCall(unsafe.Pointer(cv.GetController()), ctrlClose)
+		pDestroyWindow.Call(t.host)
+		t.host = 0
 		t.cv = nil
 		return false
 	}
@@ -428,6 +439,7 @@ func closeTab(id int) {
 	forgetBrowserTab(id)
 	if t.cv != nil {
 		comCall(unsafe.Pointer(t.cv.GetController()), ctrlClose)
+		pDestroyWindow.Call(t.host)
 	}
 	tabs = append(tabs[:i], tabs[i+1:]...)
 	if len(tabs) == 0 {
@@ -518,11 +530,11 @@ func setMenuOpen(open bool) {
 
 func setDrawerOpen(open bool) {
 	drawerOpen = open
-	syncOverlay()
+	layoutAll()
 }
 
 func syncOverlay() {
-	open := popupOpen || drawerOpen
+	open := popupOpen
 	if menuOpen == open {
 		return
 	}

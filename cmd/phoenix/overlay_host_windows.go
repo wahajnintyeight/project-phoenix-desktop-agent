@@ -1,0 +1,68 @@
+package main
+
+import (
+	"math"
+	"unsafe"
+
+	"golang.org/x/sys/windows"
+)
+
+var (
+	gdi32            = windows.NewLazySystemDLL("gdi32.dll")
+	pCreateWindowEx  = user32.NewProc("CreateWindowExW")
+	pDestroyWindow   = user32.NewProc("DestroyWindow")
+	pShowWindow      = user32.NewProc("ShowWindow")
+	pSetWindowRgn    = user32.NewProc("SetWindowRgn")
+	pCreateRectRgn   = gdi32.NewProc("CreateRectRgn")
+	pCombineRgn      = gdi32.NewProc("CombineRgn")
+	pDeleteObject    = gdi32.NewProc("DeleteObject")
+)
+
+// Each browser gets a host window so its visible region can exclude the agent panel.
+func newBrowserHost() uintptr {
+	class, _ := windows.UTF16PtrFromString("Static")
+	h, _, err := pCreateWindowEx.Call(0, uintptr(unsafe.Pointer(class)), 0, 0x44000000, 0, 0, 1, 1, hwnd, 0, 0, 0)
+	if h == 0 {
+		logf("create browser host: %v", err)
+	}
+	return h
+}
+
+type clipRect struct{ left, top, right, bottom int32 }
+
+func drawerClip(page clipRect, x, y, w, h, scale float64) (clipRect, bool) {
+	left := int32(math.Round(x * scale)) - page.left
+	top := int32(math.Round(y * scale)) - page.top
+	right := int32(math.Round((x+w)*scale)) - page.left
+	bottom := int32(math.Round((y+h)*scale)) - page.top
+	r := clipRect{max(0, left), max(0, top), min(page.right-page.left, right), min(page.bottom-page.top, bottom)}
+	return r, r.right > r.left && r.bottom > r.top
+}
+
+func clipBrowserHost(host uintptr, page clipRect) {
+	if !drawerOpen || drawerRect.w <= 0 || drawerRect.h <= 0 {
+		pSetWindowRgn.Call(host, 0, 1)
+		return
+	}
+	r, overlaps := drawerClip(page, drawerRect.x, drawerRect.y, drawerRect.w, drawerRect.h, float64(dpiFor(hwnd))/96)
+	if !overlaps {
+		pSetWindowRgn.Call(host, 0, 1)
+		return
+	}
+	full, _, _ := pCreateRectRgn.Call(0, 0, uintptr(page.right-page.left), uintptr(page.bottom-page.top))
+	cut, _, _ := pCreateRectRgn.Call(uintptr(r.left), uintptr(r.top), uintptr(r.right), uintptr(r.bottom))
+	if full == 0 || cut == 0 {
+		if full != 0 { pDeleteObject.Call(full) }
+		if cut != 0 { pDeleteObject.Call(cut) }
+		return
+	}
+	result, _, _ := pCombineRgn.Call(full, full, cut, 4) // RGN_DIFF
+	pDeleteObject.Call(cut)
+	if result == 0 {
+		pDeleteObject.Call(full)
+		return
+	}
+	if ok, _, _ := pSetWindowRgn.Call(host, full, 1); ok == 0 {
+		pDeleteObject.Call(full)
+	}
+}
