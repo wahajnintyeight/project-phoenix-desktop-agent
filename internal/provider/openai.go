@@ -300,11 +300,15 @@ type apiTool struct {
 }
 
 type chatRequest struct {
-	Model           string        `json:"model"`
-	Messages        []chatMessage `json:"messages"`
-	Stream          bool          `json:"stream"`
-	Tools           []apiTool     `json:"tools,omitempty"`
-	ReasoningEffort string        `json:"reasoning_effort,omitempty"`
+	Model     string        `json:"model"`
+	Messages  []chatMessage `json:"messages"`
+	Stream    bool          `json:"stream"`
+	Tools     []apiTool     `json:"tools,omitempty"`
+	SessionID string        `json:"session_id,omitempty"`
+	Usage     *struct {
+		Include bool `json:"include"`
+	} `json:"usage,omitempty"`
+	ReasoningEffort string `json:"reasoning_effort,omitempty"`
 	Reasoning       *struct {
 		Effort string `json:"effort"`
 	} `json:"reasoning,omitempty"`
@@ -312,6 +316,12 @@ type chatRequest struct {
 
 func (p OpenAICompat) buildRequest(s Settings, req Request) chatRequest {
 	cr := chatRequest{Model: firstNonEmpty(req.Model, s.Model), Stream: true}
+	if p.Spec.ID == OpenRouter && (s.BaseURL == "" || strings.TrimRight(s.BaseURL, "/") == strings.TrimRight(p.Spec.BaseURL, "/")) {
+		cr.SessionID = req.CacheSession
+		cr.Usage = &struct {
+			Include bool `json:"include"`
+		}{Include: true}
+	}
 	if req.System != "" {
 		cr.Messages = append(cr.Messages, chatMessage{Role: "system", Content: req.System})
 	}
@@ -326,6 +336,7 @@ func (p OpenAICompat) buildRequest(s Settings, req Request) chatRequest {
 			Name: tool.Name, Description: tool.Description, Parameters: tool.Parameters,
 		}})
 	}
+	sort.Slice(cr.Tools, func(i, j int) bool { return cr.Tools[i].Function.Name < cr.Tools[j].Function.Name })
 	if e := firstNonEmpty(req.Effort, s.Effort); e != "" {
 		switch p.Spec.effort {
 		case effortTopLevel:

@@ -1,7 +1,7 @@
 // A small, safe Markdown renderer for agent replies. It builds DOM nodes with
 // createElement and textContent only: model output is untrusted, so nothing is ever parsed
-// as HTML, and links are shown as text (their address in muted type), never as clickable
-// anchors. Supported: headings, paragraphs (single newlines kept), bold, italic, strike,
+// as HTML, and links are restricted to HTTP(S) anchors that open in a Phoenix tab. Supported:
+// headings, paragraphs (single newlines kept), bold, italic, strike,
 // inline code, fenced code with a copy button, bulleted, numbered and nested lists,
 // quotes and tables.
 //
@@ -9,6 +9,8 @@
 // lines, and blocks before the one still being written keep their DOM.
 
 type Inline = Node;
+
+import { send } from "./protocol";
 
 const el = <K extends keyof HTMLElementTagNameMap>(tag: K, cls?: string, text?: string): HTMLElementTagNameMap[K] => {
   const e = document.createElement(tag);
@@ -27,6 +29,15 @@ function hostOf(url: string): string {
     return u.protocol === "http:" || u.protocol === "https:" ? u.host : "";
   } catch {
     return "";
+  }
+}
+
+function webURL(value: string): string | null {
+  try {
+    const url = new URL(value);
+    return url.protocol === "http:" || url.protocol === "https:" ? url.href : null;
+  } catch {
+    return null;
   }
 }
 
@@ -65,10 +76,20 @@ function inlineLine(s: string): Inline[] {
       i.append(...inlineLine(m[6] ?? m[7] ?? ""));
       out.push(i);
     } else if (m[8] !== undefined && m[9] !== undefined) {
-      // A link is text plus where it goes; the user decides what to do with the address.
-      out.push(document.createTextNode(m[8]));
-      const host = hostOf(m[9]);
-      if (host) out.push(el("span", "md-link-host", ` (${host})`));
+      const href = webURL(m[9]);
+      if (!href) {
+        out.push(document.createTextNode(m[8]));
+        continue;
+      }
+      const link = el("a", "md-link", m[8]);
+      link.href = href;
+      const host = hostOf(href);
+      if (host) link.append(el("span", "md-link-host", ` (${host})`));
+      link.addEventListener("click", (event) => {
+        event.preventDefault();
+        send("b", href);
+      });
+      out.push(link);
     }
   }
   if (last < s.length) out.push(document.createTextNode(s.slice(last)));

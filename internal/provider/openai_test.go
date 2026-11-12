@@ -294,3 +294,20 @@ func TestHistoryReachesEveryDriver(t *testing.T) {
 		t.Error("a single question must be sent unchanged")
 	}
 }
+
+func TestCacheFriendlyRequests(t *testing.T) {
+	tools := []Tool{{Name: "z", Parameters: json.RawMessage(`{"type":"object"}`)}, {Name: "a", Parameters: json.RawMessage(`{"type":"object"}`)}}
+	req := Request{Prompt: "hello", CacheSession: "session-123", Tools: tools}
+	got := spec(t, OpenRouter).buildRequest(Settings{Model: "m"}, req)
+	if got.SessionID != "session-123" || got.Usage == nil || !got.Usage.Include {
+		t.Fatalf("OpenRouter cache routing or usage disabled: %+v", got)
+	}
+	if got.Tools[0].Function.Name != "a" || got.Tools[1].Function.Name != "z" || tools[0].Name != "z" {
+		t.Fatalf("tools not sorted without changing caller: %+v", got.Tools)
+	}
+	custom := spec(t, OpenRouter).buildRequest(Settings{Model: "m", BaseURL: "https://example.com"}, req)
+	other := spec(t, Grok).buildRequest(Settings{Model: "m"}, req)
+	if custom.SessionID != "" || custom.Usage != nil || other.SessionID != "" || other.Usage != nil {
+		t.Fatal("provider-specific fields sent to an unsupported endpoint")
+	}
+}

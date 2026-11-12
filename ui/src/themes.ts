@@ -68,19 +68,6 @@ export const PALETTES: readonly Palette[] = [
     },
   },
   {
-    id: "earth",
-    name: "Neutral earth",
-    note: "Stone and clay",
-    n: {
-      dark: ["#14110e", "#1c1814", "#2c2620", "#463d33", "#786c60", "#a89b8c", "#d1c5b6", "#e6dccf", "#f4eee6"],
-      light: ["#0a0908", "#423b35", "#625548", "#9b8a76", "#c6ac8f", "#ddcebc", "#eae0d5", "#efe7de", "#fbf9f7"],
-    },
-    a: {
-      dark: ["#2a2118", "#4c4133", "#5e503f", "#786c60", "#89755b", "#a89177", "#c6ac8f", "#ddcebc", "#efe7de"],
-      light: ["#2a2118", "#393026", "#4c4133", "#5e503f", "#786c60", "#89755b", "#a89177", "#c6ac8f", "#ddcebc"],
-    },
-  },
-  {
     id: "steel",
     name: "Steel",
     note: "Cool greys",
@@ -104,6 +91,36 @@ export const PALETTES: readonly Palette[] = [
     a: {
       dark: ["#000000", "#333333", "#b7b7b7", "#dbdbdb", "#ebebeb", "#f2f2f2", "#f8f8f8", "#fcfcfc", "#ffffff"],
       light: ["#000000", "#0f0f0f", "#1e1e1e", "#494949", "#6e6e6e", "#929292", "#b7b7b7", "#dbdbdb", "#ffffff"],
+    },
+  },
+  {
+    id: "midnight-gold",
+    name: "Midnight gold",
+    note: "Deep blue and warm gold",
+    n: {
+      dark: ["#000814", "#001d3d", "#002a52", "#003566", "#004b87", "#638fbd", "#9dc4ff", "#d3e6ff", "#f4f9ff"],
+      light: ["#000814", "#001d3d", "#003566", "#2b5274", "#8098ad", "#b7c6d3", "#dce6ef", "#f0f5fa", "#fbfdff"],
+    },
+    a: {
+      dark: ["#332700", "#664e00", "#997500", "#cc9c00", "#ffc300", "#ffcf33", "#ffdb66", "#ffe799", "#fff3cc"],
+      light: ["#332700", "#443500", "#664e00", "#997500", "#cc9c00", "#ffc300", "#ffcf33", "#ffdb66", "#fff3cc"],
+    },
+  },
+  {
+    id: "vibrant-fusion",
+    name: "Vibrant fusion",
+    note: "Deep blue, teal and ember",
+    n: {
+      dark: ["#01090e", "#01111b", "#021a29", "#183750", "#076098", "#57baf7", "#8cb8dd", "#abdcfb", "#f4f9ff"],
+      light: ["#01090e", "#0c1b28", "#183750", "#245278", "#65a0d1", "#b2d0e8", "#d9e7f4", "#eef5fa", "#fbfdff"],
+    },
+    a: {
+      dark: ["#041613", "#072c27", "#0b413a", "#0f574e", "#136f63", "#1eae9b", "#3bdec8", "#7ce9da", "#bef4ed"],
+      light: ["#041613", "#072c27", "#0b413a", "#0f574e", "#136f63", "#1eae9b", "#3bdec8", "#7ce9da", "#bef4ed"],
+    },
+    over: {
+      dark: { ok: "#7ce9da", warn: "#ffd56c", danger: "#ff8787", "danger-ink": "#2a0000" },
+      light: { ok: "#0f574e", warn: "#6a4c00", danger: "#a70000", "danger-ink": "#ffc3c3" },
     },
   },
 ];
@@ -233,7 +250,7 @@ const KEY_MODE = "phoenix.mode";
 const LEGACY: Record<string, { theme: string; mode: ModeChoice }> = {
   dark: { theme: "mauve", mode: "dark" },
   "soft-sand": { theme: "sand", mode: "light" },
-  earth: { theme: "earth", mode: "light" },
+  earth: { theme: "mauve", mode: "light" },
   steel: { theme: "steel", mode: "light" },
 };
 

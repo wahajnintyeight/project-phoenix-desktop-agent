@@ -88,13 +88,10 @@ OutFile "..\..\..\bin\${INFO_PROJECTNAME}-${ARCH}-installer.exe" # Name of the i
 !endif
 ShowInstDetails show # This will always show the installation details.
 
-Var StartMenuState
 Var DesktopState
-Var StartMenuCheckbox
 Var DesktopCheckbox
 
 Function .onInit
-   StrCpy $StartMenuState ${BST_CHECKED}
    StrCpy $DesktopState ${BST_CHECKED}
    !insertmacro wails.checkArchitecture
 FunctionEnd
@@ -106,19 +103,15 @@ Function ShortcutsPage
     ${If} $0 == error
         Abort
     ${EndIf}
-    ${NSD_CreateLabel} 0 0 100% 25u "Choose the shortcuts you want to create."
+    ${NSD_CreateLabel} 0 0 100% 25u "Phoenix will appear in Start menu search. Choose whether to also add a desktop shortcut."
     Pop $0
-    ${NSD_CreateCheckbox} 0 32u 100% 12u "Start menu shortcut"
-    Pop $StartMenuCheckbox
-    ${NSD_SetState} $StartMenuCheckbox $StartMenuState
-    ${NSD_CreateCheckbox} 0 52u 100% 12u "Desktop shortcut"
+    ${NSD_CreateCheckbox} 0 32u 100% 12u "Desktop shortcut"
     Pop $DesktopCheckbox
     ${NSD_SetState} $DesktopCheckbox $DesktopState
     nsDialogs::Show
 FunctionEnd
 
 Function ShortcutsLeave
-    ${NSD_GetState} $StartMenuCheckbox $StartMenuState
     ${NSD_GetState} $DesktopCheckbox $DesktopState
 FunctionEnd
 
@@ -131,9 +124,7 @@ Section
     
     !insertmacro wails.files
 
-    ${If} $StartMenuState == ${BST_CHECKED}
-        CreateShortcut "$SMPROGRAMS\${INFO_PRODUCTNAME}.lnk" "$INSTDIR\${PRODUCT_EXECUTABLE}"
-    ${EndIf}
+    CreateShortcut "$SMPROGRAMS\${INFO_PRODUCTNAME}.lnk" "$INSTDIR\${PRODUCT_EXECUTABLE}"
     ${If} $DesktopState == ${BST_CHECKED}
         CreateShortcut "$DESKTOP\${INFO_PRODUCTNAME}.lnk" "$INSTDIR\${PRODUCT_EXECUTABLE}"
     ${EndIf}
@@ -153,6 +144,8 @@ Section "uninstall"
 
     Delete "$SMPROGRAMS\${INFO_PRODUCTNAME}.lnk"
     Delete "$DESKTOP\${INFO_PRODUCTNAME}.lnk"
+    SetShellVarContext current
+    Delete "$SMPROGRAMS\${INFO_PRODUCTNAME}.lnk"
 
     !insertmacro wails.unassociateFiles
     !insertmacro wails.unassociateCustomProtocols

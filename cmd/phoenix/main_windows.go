@@ -238,6 +238,10 @@ func onMessage(message string) {
 	switch f[0] {
 	case "r": // UI ready: start up on the first one, then push state
 		uiReady()
+	case "b": // open a Markdown link in a new in-app browser tab
+		if len(f) > 1 {
+			openLinkInNewTab(f[1])
+		}
 	case "n": // address bar submit
 		if len(f) > 1 {
 			navigateActive(f[1])

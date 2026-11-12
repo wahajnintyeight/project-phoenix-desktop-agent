@@ -35,7 +35,7 @@ const $ = (id: string): HTMLElement | null => document.getElementById(id);
 
 // Go may only set these. Anything else is ignored.
 const SETTABLE_PROPS = new Set(["tabs", "history", "chats", "activity", "value", "disabled", "src", "hidden", "data", "result", "models", "events", "actions", "preview"]);
-const SETTABLE_ATTRS = new Set(["data-view", "data-state"]);
+const SETTABLE_ATTRS = new Set(["data-view", "data-state", "aria-pressed"]);
 
 // ── Message handling (Go → UI) ──────────────────────────────────────────
 const pending = new Map<number, () => void>();
@@ -95,6 +95,12 @@ document.addEventListener("click", (e) => {
   if (action === "probe.ping") { void runPing(); return; }
   if (action === "probe.click") { probeClick(e); return; }
   if (action === "probe.clear") { out("No results yet.", true); return; }
+  if (action === "browser.dark.toggle") {
+    const dark = target.getAttribute("aria-pressed") !== "true";
+    target.setAttribute("aria-pressed", String(dark));
+    send("v", "dark", String(dark));
+    return;
+  }
 
   send("c", action, target.dataset["id"] ?? target.id);
 }, { passive: true });

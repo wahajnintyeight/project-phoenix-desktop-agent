@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"encoding/base64"
 	"encoding/json"
 	"math"
@@ -49,6 +50,7 @@ type tab struct {
 	openedAt time.Time // when, for choosing the oldest to close
 
 	browserEpoch atomic.Uint64 // bumped for each top-level navigation; invalidates page refs
+	darkModeMu   sync.Mutex
 }
 
 var (
@@ -195,6 +197,10 @@ func pushToolbar() {
 		return
 	}
 	view, addr := t.kind, "" // the view names match the tab kinds
+	dark := false
+	if cfgStore != nil {
+		cfgStore.View(func(c *config.Config) { dark = c.Browser.DarkMode })
+	}
 	if t.kind == kindWeb && t.url != "about:blank" {
 		addr = t.url
 	}
@@ -203,6 +209,7 @@ func pushToolbar() {
 		"u"+fs+"omnibox"+fs+"value"+fs+jsonString(addr),
 		"u"+fs+"nav-back"+fs+"disabled"+fs+strconv.FormatBool(!t.canBack),
 		"u"+fs+"nav-forward"+fs+"disabled"+fs+strconv.FormatBool(!t.canFwd),
+		"a"+fs+"browser-dark-mode"+fs+"aria-pressed"+fs+strconv.FormatBool(dark),
 	)
 }
 
@@ -234,6 +241,14 @@ func createWebTab(rawURL string) {
 	t.cv.Navigate(rawURL)
 }
 
+func openLinkInNewTab(rawURL string) {
+	u, err := url.Parse(rawURL)
+	if err != nil || u.Host == "" || (u.Scheme != "http" && u.Scheme != "https") {
+		return
+	}
+	createWebTab(u.String())
+}
+
 // prepareWebTab attaches a page WebView and its host-side handlers to an existing tab.
 // It lets a home tab become a browsing tab without leaving an extra blank tab behind.
 func prepareWebTab(t *tab) bool {
@@ -251,6 +266,7 @@ func prepareWebTab(t *tab) bool {
 	cv.NavigationCompletedCallback = func(_ *edge.ICoreWebView2, args *edge.ICoreWebView2NavigationCompletedEventArgs) {
 		t.loading = false
 		if comGetBool(unsafe.Pointer(args), navCompletedGetIsSuccess) {
+			applyBrowserDarkMode(t)
 			if current := comGetString(t.wv, wvGetSource); current != "" {
 				t.url = current
 			}
@@ -368,6 +384,32 @@ func prepareWebTab(t *tab) bool {
 	})
 
 	return true
+}
+
+func applyBrowserDarkMode(t *tab) {
+	if t == nil || t.kind != kindWeb || t.wv == nil || cfgStore == nil {
+		return
+	}
+	id, epoch := t.id, t.browserEpoch.Load()
+	go func() {
+		t.darkModeMu.Lock()
+		defer t.darkModeMu.Unlock()
+		var dark bool
+		cfgStore.View(func(c *config.Config) { dark = c.Browser.DarkMode })
+		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+		defer cancel()
+		features := []map[string]string{}
+		if dark {
+			features = append(features, map[string]string{"name": "prefers-color-scheme", "value": "dark"})
+		}
+		var result struct{}
+		if err := cdpCallJSON(ctx, id, epoch, "Emulation.setEmulatedMedia", map[string]any{"features": features}, &result); err != nil {
+			logf("set page color preference for tab %d: %v", id, err)
+		}
+		if err := cdpCallJSON(ctx, id, epoch, "Emulation.setAutoDarkModeOverride", map[string]bool{"enabled": dark}, &result); err != nil {
+			logf("set forced page dark mode for tab %d: %v", id, err)
+		}
+	}()
 }
 
 func closeTab(id int) {

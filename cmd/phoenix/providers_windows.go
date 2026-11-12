@@ -303,6 +303,23 @@ func pushBrowser() {
 	pushMemory()
 }
 
+func setBrowserDarkMode(dark bool) {
+	if cfgStore == nil {
+		return
+	}
+	if err := cfgStore.Update(func(c *config.Config) { c.Browser.DarkMode = dark }); err != nil {
+		logf("save browser dark mode: %v", err)
+		pushToolbar()
+		return
+	}
+	pushToolbar()
+	for _, t := range tabs {
+		if t.kind == kindWeb {
+			applyBrowserDarkMode(t)
+		}
+	}
+}
+
 // setSearchURL validates and saves the address bar's search engine.
 func setSearchURL(u string) {
 	if cfgStore == nil {
@@ -358,6 +375,11 @@ func handleProviderOp(f []string) {
 	case "search": // v search <url>
 		if len(f) > 2 {
 			setSearchURL(f[2])
+		}
+		return
+	case "dark": // v dark true|false
+		if len(f) > 2 && (f[2] == "true" || f[2] == "false") {
+			setBrowserDarkMode(f[2] == "true")
 		}
 		return
 	}

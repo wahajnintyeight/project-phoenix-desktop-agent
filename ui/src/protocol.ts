@@ -2,6 +2,7 @@
 //
 // UI → Go:  c action id   click on a [data-action] element
 //           n text        navigate (address bar submit)
+//           b url         open a Markdown link in a new in-app browser tab
 //           l x y w h     page-slot rectangle in CSS pixels
 //           i field value seq   input changed (type-ahead)
 //           p seq         ping

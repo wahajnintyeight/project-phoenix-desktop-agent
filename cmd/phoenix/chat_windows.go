@@ -430,7 +430,7 @@ func startChatRun(ctx context.Context, cancel context.CancelFunc, id provider.ID
 				})
 			}
 		}
-		req := provider.Request{Prompt: prompt, History: history, System: system, UseMCP: true, LimitMCP: limited, OnlyMCP: taskMCPNames(), MCPServers: extra}
+		req := provider.Request{Prompt: prompt, History: history, System: system, CacheSession: chatID, UseMCP: true, LimitMCP: limited, OnlyMCP: taskMCPNames(), MCPServers: extra}
 		if supportsMCP {
 			req.ApproveTool = func(approveCtx context.Context, call provider.ToolCall) error {
 				if connectedToolAllowed(call.Tool.Server, call.Tool.MCPName) {

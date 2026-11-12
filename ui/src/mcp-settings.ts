@@ -211,7 +211,11 @@ export class PhMcp extends HTMLElement {
     addButton.type = "button";
     addButton.dataset["op"] = "add";
     addButton.append(plus(), document.createTextNode("Add server"));
-    this.#overview.append(this.#summary, this.#list, this.#empty, addButton,
+    const overviewHeader = el("div", "mcp-overview-header");
+    const overviewText = el("div", "mcp-overview-text");
+    overviewText.append(el("h3", undefined, "Your servers"), this.#summary);
+    overviewHeader.append(overviewText, addButton);
+    this.#overview.append(overviewHeader, this.#list, this.#empty,
       el("p", "mcp-safety text-xs text-fg-muted", "Program servers run with your Windows permissions. Credentials are stored encrypted and never shown here."));
 
     this.#title.tabIndex = -1;
@@ -513,11 +517,8 @@ export class PhMcp extends HTMLElement {
     item.dataset["server"] = server.name;
     const main = el("div", "mcp-item-main");
     const nameLine = el("div", "mcp-item-title");
-    const open = el("button", "mcp-open", server.name);
-    open.type = "button";
-    open.dataset["op"] = "open";
-    open.setAttribute("aria-label", `Manage ${server.name}`);
-    nameLine.append(open, this.#status(server.name));
+    const name = el("h4", "mcp-server-name", server.name);
+    nameLine.append(name, this.#status(server.name));
     const endpoint = el("span", "mcp-sub", server.summary);
     endpoint.title = server.summary;
     main.append(nameLine, endpoint);
@@ -527,6 +528,7 @@ export class PhMcp extends HTMLElement {
     const manage = el("button", "btn btn-sm", "Manage");
     manage.type = "button";
     manage.dataset["op"] = "open";
+    manage.setAttribute("aria-label", `Manage ${server.name}`);
     actions.append(manage);
     item.append(main, actions);
     return item;
@@ -536,14 +538,13 @@ export class PhMcp extends HTMLElement {
     const server = this.#data.servers.find((s) => s.name === this.#selected);
     if (!server) return;
     this.#detail.dataset["server"] = server.name;
-    const top = el("div", "mcp-detail-top");
-    top.append(backButton("All servers", "back-list"), this.#status(server.name));
+    const back = backButton("All servers", "back-list");
 
     const title = el("h3", "mcp-detail-title", server.name);
     title.tabIndex = -1;
     const transport = el("span", "chip", server.transport === "http" ? "Web address" : "Program");
     const heading = el("div", "mcp-detail-heading");
-    heading.append(title, transport);
+    heading.append(title, transport, this.#status(server.name));
     const endpoint = el("code", "mcp-detail-endpoint", server.summary);
     endpoint.title = server.summary;
 
@@ -552,7 +553,7 @@ export class PhMcp extends HTMLElement {
     const testLabel = this.#busy.has(server.name) ? "Cancel test"
       : server.transport === "http" && !server.authorized ? "Test / sign in"
       : this.#tests.has(server.name) ? "Test again" : "Test connection";
-    const test = el("button", "btn", testLabel);
+    const test = el("button", "btn btn-primary", testLabel);
     test.type = "button";
     test.dataset["op"] = "test";
     const edit = el("button", "btn btn-quiet", "Edit");
@@ -562,11 +563,14 @@ export class PhMcp extends HTMLElement {
     controls.append(test, edit);
 
     const intro = el("p", "text-fg-muted mcp-detail-intro", server.enabled
-      ? "This server is available automatically to supported providers."
-      : "This server is installed but off. Test it, then turn on agent access when you are ready.");
+      ? "Agent access is on. This server is available to supported providers."
+      : "Agent access is off. Test the connection, then enable access when ready.");
     const authHint = server.transport === "http"
       ? el("p", "text-fg-muted mcp-detail-intro", "If the server requires sign-in, Phoenix opens its authorization page in your browser.")
       : null;
+
+    const serverHeader = el("div", "mcp-detail-header");
+    serverHeader.append(heading, intro, controls);
 
     const connection = el("section", "mcp-section");
     connection.append(el("h4", undefined, "Connection"), endpoint);
@@ -585,8 +589,7 @@ export class PhMcp extends HTMLElement {
     const testSection = el("section", "mcp-section");
     testSection.append(el("h4", undefined, "Connection test"), this.#testBlock(server.name));
 
-    const destructive = el("section", "mcp-section mcp-remove-section");
-    destructive.append(el("h4", undefined, "Remove server"));
+    const destructive = el("div", "mcp-remove-confirm");
     if (this.#removing === server.name) {
       destructive.append(el("p", "text-fg-muted", "This removes the server and deletes its saved credentials. This cannot be undone."));
       const actions = el("div", "row");
@@ -599,13 +602,15 @@ export class PhMcp extends HTMLElement {
       actions.append(remove, keep);
       destructive.append(actions);
     } else {
-      const remove = el("button", "btn btn-quiet", "Remove server");
+      const remove = el("button", "btn btn-danger", "Remove server");
       remove.type = "button";
       remove.dataset["op"] = "remove";
-      destructive.append(remove);
+      controls.append(remove);
     }
 
-    this.#detail.replaceChildren(top, heading, controls, intro, ...(authHint ? [authHint] : []), connection, credentials, testSection, destructive);
+    const details = el("div", "mcp-detail-sections");
+    details.append(connection, credentials, testSection, ...(authHint ? [authHint] : []));
+    this.#detail.replaceChildren(back, serverHeader, ...(this.#removing === server.name ? [destructive] : []), details);
   }
 
   #status(name: string): HTMLElement {

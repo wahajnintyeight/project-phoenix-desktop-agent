@@ -211,12 +211,13 @@ type ToolApprover func(context.Context, ToolCall) error
 
 // Request is one run.
 type Request struct {
-	History []Message // earlier turns, oldest first; empty for a single question
-	Prompt  string    // sent on stdin, so length is not limited by the command line
-	System  string    // appended to the CLI's system prompt where the CLI supports it
-	Model   string    // overrides Settings.Model
-	Effort  string    // overrides Settings.Effort
-	WorkDir string    // the run's working root; an empty directory is created if blank
+	CacheSession string    // opaque conversation ID for providers that support sticky cache routing
+	History      []Message // earlier turns, oldest first; empty for a single question
+	Prompt       string    // sent on stdin, so length is not limited by the command line
+	System       string    // appended to the CLI's system prompt where the CLI supports it
+	Model        string    // overrides Settings.Model
+	Effort       string    // overrides Settings.Effort
+	WorkDir      string    // the run's working root; an empty directory is created if blank
 
 	// MCPServers are servers Phoenix adds for this run itself (the desktop tools), already
 	// resolved. Providers that support MCP get them next to the user's enabled servers.
