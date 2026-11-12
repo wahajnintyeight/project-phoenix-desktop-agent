@@ -243,7 +243,7 @@ func createWebTab(rawURL string) {
 
 func openLinkInNewTab(rawURL string) {
 	u, err := url.Parse(rawURL)
-	if err != nil || u.Host == "" || (u.Scheme != "http" && u.Scheme != "https") {
+	if err != nil || u.Hostname() == "" || (u.Scheme != "http" && u.Scheme != "https") {
 		return
 	}
 	createWebTab(u.String())

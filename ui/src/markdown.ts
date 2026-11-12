@@ -8,9 +8,9 @@
 // Streaming: a reply is re-rendered as it grows. The text is split into blocks at blank
 // lines, and blocks before the one still being written keep their DOM.
 
-type Inline = Node;
-
 import { send } from "./protocol";
+
+type Inline = Node;
 
 const el = <K extends keyof HTMLElementTagNameMap>(tag: K, cls?: string, text?: string): HTMLElementTagNameMap[K] => {
   const e = document.createElement(tag);

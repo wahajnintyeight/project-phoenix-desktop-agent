@@ -14,6 +14,7 @@
 @import "tailwindcss" source(none);
 @import "./notifications.css";
 @import "./tasks.css" layer(components);
+@import "./agent-drawer.css" layer(components);
 @source "./index.html";
 @source "./src";
 
@@ -764,15 +765,6 @@
 
   /* ── agent panel ─────────────────────────────────────────────────── */
   .agent { @apply flex min-h-0 min-w-0 flex-col bg-panel; }
-  ph-context { @apply flex flex-col gap-1.5 border-b border-line px-4 pt-3 pb-2.5; }
-  .ctx-row { @apply flex items-baseline justify-between gap-2; }
-  .ctx-label { @apply text-sm font-medium text-fg-muted; }
-  .ctx-left { @apply text-sm font-semibold tabular text-fg; }
-  .ctx-track { @apply h-1.5 w-full overflow-hidden rounded-full; background: var(--color-line); }
-  .ctx-fill { @apply block h-full rounded-full bg-accent; transition: width 240ms ease-out, background-color 240ms; }
-  ph-context[data-state="high"] .ctx-fill { background: var(--color-warn); }
-  ph-context[data-state="full"] .ctx-fill { background: var(--color-danger); }
-  ph-context[data-state="full"] .ctx-left { color: var(--color-danger); }
   .agent-tabs { @apply flex items-center gap-1 px-3 pt-3 pb-1; }
   .agent-tab { @apply h-8 rounded-full border border-line-strong px-4 text-sm text-fg-muted transition-colors; }
   .agent-tab:hover { @apply text-fg; border-color: var(--color-mauve-shadow-600); }

@@ -227,6 +227,8 @@ func onMessage(message string) {
 		// logged.
 		switch {
 		case len(f) < 2:
+		case f[0] == "b":
+			logf("msg b") // link URLs can contain private tokens; do not log them
 		case strings.HasPrefix(f[1], "mcp-"):
 			logf("msg v %s", f[1])
 		case len(f) > 2:

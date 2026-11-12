@@ -21,8 +21,10 @@ import "./tasks";
 import "./context-meter";
 import "./quick-actions";
 import { initPanelResize } from "./panel-resize";
+import { initAgentDrawer } from "./agent-drawer";
 
 initPanelResize();
+initAgentDrawer();
 
 document.addEventListener("contextmenu", (event) => {
   const target = event.target;
