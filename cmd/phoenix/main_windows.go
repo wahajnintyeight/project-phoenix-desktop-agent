@@ -265,6 +265,8 @@ func onMessage(message string) {
 			switch f[1] {
 			case "open", "close":
 				setMenuOpen(f[1] == "open")
+			case "drawer-open", "drawer-close":
+				setDrawerOpen(f[1] == "drawer-open")
 			case "frozen":
 				frozen()
 			}

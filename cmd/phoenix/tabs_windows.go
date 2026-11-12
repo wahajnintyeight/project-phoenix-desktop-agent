@@ -59,9 +59,11 @@ var (
 	nextID   = 1
 
 	// Page-slot rectangle in CSS pixels, relative to the UI webview origin.
-	slot     struct{ x, y, w, h float64 }
-	haveSlot bool
-	menuOpen bool // an overlay (the ⋯ menu) is open
+	slot       struct{ x, y, w, h float64 }
+	haveSlot   bool
+	menuOpen   bool // an overlay (the ⋯ menu) is open
+	popupOpen  bool
+	drawerOpen bool
 	// pageHidden is true while the active page window is hidden behind a frozen image.
 	pageHidden bool
 	freezeGen  int
@@ -227,6 +229,9 @@ func activate(id int) {
 	pushTabs()
 	pushToolbar()
 	refreshActions(true)
+	if drawerOpen {
+		refreshOverlay()
+	}
 }
 
 func createWebTab(rawURL string) {
@@ -274,6 +279,9 @@ func prepareWebTab(t *tab) bool {
 		}
 		pushTabs()
 		if t.id == activeID {
+			if drawerOpen {
+				runLater(refreshOverlay)
+			}
 			runLater(func() { refreshActions(false) })
 			scheduleActionRefresh(t.id, 1500*time.Millisecond) // pages that build themselves late
 		}
@@ -504,6 +512,17 @@ func setSlot(f []string) {
 // only then hide the page window, so the user sees no change underneath the overlay.
 
 func setMenuOpen(open bool) {
+	popupOpen = open
+	syncOverlay()
+}
+
+func setDrawerOpen(open bool) {
+	drawerOpen = open
+	syncOverlay()
+}
+
+func syncOverlay() {
+	open := popupOpen || drawerOpen
 	if menuOpen == open {
 		return
 	}
@@ -519,6 +538,20 @@ func setMenuOpen(open bool) {
 		t.cv.Focus()
 	}
 	post("u" + fs + "freeze" + fs + "hidden" + fs + "true")
+}
+
+func refreshOverlay() {
+	if !menuOpen {
+		return
+	}
+	pageHidden = false
+	layoutAll()
+	if t := activeTab(); t == nil || t.cv == nil {
+		post("u" + fs + "freeze" + fs + "hidden" + fs + "true")
+		return
+	}
+	freezeGen++
+	freezeActive(freezeGen)
 }
 
 // frozen is the UI's acknowledgement that the frozen image has been painted.
