@@ -2,6 +2,19 @@
 
 Notable Phoenix changes are listed here. Versions use the `vMAJOR.MINOR.PATCH` release tags.
 
+## [0.2.2] - 2026-11-12
+
+### Added
+
+- Resizable floating agent drawer that overlays the browser, with saved sizing and drag controls.
+- Contextual response menus that let users answer agent questions or choose a next step directly from a reply.
+
+### Changed
+
+- Simplified the agent header by moving secondary details into an on-demand panel.
+- Agent response choices are recorded only when they answer a user question; action selections are sent as instructions.
+- Browser content remains scrollable outside the floating agent drawer.
+
 ## [0.2.1] - 2026-11-12
 
 ### Added
