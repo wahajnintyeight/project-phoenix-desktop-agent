@@ -109,6 +109,17 @@ func main() {
 			OnSecondInstanceLaunch: func(application.SecondInstanceData) { runLater(showWindow) },
 		},
 	})
+	if err := initUpdateManager(); err != nil {
+		updateInitErr = err
+		logf("update manager: %v", err)
+	}
+	app.OnShutdown(func() {
+		flushAgentDataWrites()
+		if hub != nil {
+			hub.Close()
+		}
+		cleanupUploads()
+	})
 	nativeNotifications.OnNotificationResponse(func(result notifications.NotificationResult) {
 		if result.Error == nil && result.Response.ID != "" {
 			runLater(func() { openNotification(result.Response.ID) })
@@ -171,11 +182,6 @@ func setupTray() {
 	menu.AddSeparator()
 	menu.Add("Quit Phoenix").OnClick(func(*application.Context) {
 		quitting = true
-		flushAgentDataWrites()
-		if hub != nil {
-			hub.Close() // stops the MCP servers Phoenix started
-			cleanupUploads()
-		}
 		app.Quit()
 	})
 	tray := app.SystemTray.New()
@@ -349,10 +355,6 @@ func handleAction(action, id string) {
 		clearHistory()
 	case "app.restart":
 		quitting, restarting = true, true
-		flushAgentDataWrites()
-		if hub != nil {
-			hub.Close()
-		}
 		app.Quit()
 	case "setup.get": // the setup card's "Get Claude Code" / "Get Codex"
 		runLater(func() { openSetupPage(id) })
@@ -364,6 +366,12 @@ func handleAction(action, id string) {
 		runLater(openTasks)
 	case "menu.browser":
 		runLater(showBrowser)
+	case "update.check":
+		checkForUpdates()
+	case "update.install":
+		installUpdate()
+	case "update.restart":
+		restartWithUpdate()
 	case "tab.select", "tab.close":
 		n, err := strconv.Atoi(id)
 		if err != nil {

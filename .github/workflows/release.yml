@@ -1,0 +1,80 @@
+name: Release Phoenix
+
+on:
+  push:
+    tags: ["v*"]
+
+permissions:
+  contents: write
+
+jobs:
+  windows:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: Install Wails CLI
+        shell: pwsh
+        run: |
+          go install github.com/wailsapp/wails/v3/cmd/wails3@v3.1.0
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          Add-Content $env:GITHUB_PATH "$env:USERPROFILE\go\bin"
+
+      - name: Install NSIS
+        shell: pwsh
+        run: |
+          choco install nsis --yes --no-progress
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          Add-Content $env:GITHUB_PATH (Join-Path ${env:ProgramFiles(x86)} 'NSIS')
+
+      - name: Set release version and generate Wails assets
+        shell: pwsh
+        run: |
+          $version = $env:GITHUB_REF_NAME.TrimStart('v')
+          if ($version -notmatch '^\d+\.\d+\.\d+$') { throw "Expected a vX.Y.Z tag, got $env:GITHUB_REF_NAME" }
+          $config = [IO.File]::ReadAllText('build/config.yml')
+          $config = [regex]::Replace($config, '(?m)^  version: .+$', "  version: `"$version`"")
+          [IO.File]::WriteAllText('build/config.yml', $config)
+          wails3 update build-assets -config build/config.yml -dir build -silent
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+
+      - name: Build per-user installer
+        shell: pwsh
+        run: |
+          npm ci --ignore-scripts --no-audit --no-fund
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          wails3 package GOOS=windows INSTALL_SCOPE=user
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          New-Item -ItemType Directory -Force dist | Out-Null
+          Copy-Item bin/phoenix.exe dist/phoenix-windows-amd64.exe
+          Copy-Item bin/phoenix-amd64-installer.exe dist/Phoenix-Setup-windows-amd64.exe
+
+      - name: Create and verify signed update manifest
+        shell: pwsh
+        env:
+          PHOENIX_UPDATE_PRIVATE_KEY: ${{ secrets.PHOENIX_UPDATE_PRIVATE_KEY }}
+        run: |
+          if ([string]::IsNullOrWhiteSpace($env:PHOENIX_UPDATE_PRIVATE_KEY)) { throw 'Set the PHOENIX_UPDATE_PRIVATE_KEY repository secret before publishing.' }
+          $keyPath = Join-Path $env:RUNNER_TEMP 'phoenix-updater.key'
+          [IO.File]::WriteAllText($keyPath, $env:PHOENIX_UPDATE_PRIVATE_KEY, [Text.UTF8Encoding]::new($false))
+          $version = $env:GITHUB_REF_NAME.TrimStart('v')
+          $prefix = "https://github.com/$env:GITHUB_REPOSITORY/releases/latest/download/"
+          wails3 updater manifest -version $version -channel stable -name "Phoenix $version" -key $keyPath -url-prefix $prefix -output dist/phoenix-update-manifest.json dist/phoenix-windows-amd64.exe
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          wails3 updater verify -manifest dist/phoenix-update-manifest.json -publickey internal/update/updater-public.pem -dir dist
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+
+      - name: Publish GitHub release
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          $version = $env:GITHUB_REF_NAME.TrimStart('v')
+          gh release create $env:GITHUB_REF_NAME dist/Phoenix-Setup-windows-amd64.exe dist/phoenix-windows-amd64.exe dist/phoenix-update-manifest.json --title "Phoenix $version" --generate-notes
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }

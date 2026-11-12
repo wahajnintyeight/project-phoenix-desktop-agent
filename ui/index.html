@@ -225,6 +225,19 @@
 
               <section class="flex flex-col gap-3">
                 <div>
+                  <h3>Software updates</h3>
+                  <p class="text-fg-muted">Check whether a newer Phoenix release is available.</p>
+                </div>
+                <div class="flex flex-wrap items-center gap-3">
+                  <button id="update-check" class="btn btn-sm" data-action="update.check">Check for updates</button>
+                  <button id="update-install" class="btn btn-sm" data-action="update.install" hidden>Download and install</button>
+                  <button id="update-restart" class="btn btn-sm" data-action="update.restart" hidden>Restart to update</button>
+                  <p id="update-status" class="text-sm text-fg-muted" role="status" aria-live="polite"></p>
+                </div>
+              </section>
+
+              <section class="flex flex-col gap-3">
+                <div>
                   <h3>Application</h3>
                   <p class="text-fg-muted">Restart Phoenix to reload the application.</p>
                 </div>
