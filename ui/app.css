@@ -326,6 +326,21 @@
   .nav-item { @apply rounded-md px-3 py-1.5 text-left text-sm text-fg-muted transition-colors; }
   .nav-item:hover { @apply bg-raised text-fg; }
   .nav-item[aria-current="true"] { @apply bg-raised font-medium text-fg; }
+  .update-notice { @apply mr-3 flex items-center gap-2 self-center rounded-full border border-line-strong bg-raised px-3 py-1 text-xs font-medium text-fg; }
+  .update-notice:hover { @apply bg-overlay; }
+  .update-notice-dot { @apply size-2 rounded-full bg-accent; }
+  .update-card { @apply flex max-w-xl flex-col gap-4 rounded-xl border border-line bg-panel p-4; }
+  .update-card-heading { @apply flex items-center gap-3; }
+  .update-icon { @apply grid size-10 shrink-0 place-items-center rounded-lg bg-raised text-accent; }
+  .update-copy { @apply flex min-w-0 flex-col gap-0.5; }
+  .update-label { @apply text-sm font-semibold text-fg; }
+  .update-status { @apply text-sm text-fg-muted; overflow-wrap: anywhere; }
+  .update-actions { @apply flex flex-wrap items-center gap-2; }
+  .update-progress { @apply flex flex-col gap-2; }
+  .update-progress-heading { @apply flex justify-between gap-3 text-xs text-fg-muted; }
+  .update-progress progress { appearance: none; width: 100%; height: 8px; overflow: hidden; border: 0; border-radius: 999px; background: var(--color-raised); }
+  .update-progress progress::-webkit-progress-bar { background: var(--color-raised); border-radius: 999px; }
+  .update-progress progress::-webkit-progress-value { background: var(--color-accent); border-radius: 999px; transition: width 180ms ease; }
   .settings [data-for] { display: none; }
   .settings[data-section="providers"] [data-for="providers"],
   .settings[data-section="memory"] [data-for="memory"],

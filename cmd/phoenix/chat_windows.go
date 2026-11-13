@@ -409,7 +409,7 @@ func startChatRun(ctx context.Context, cancel context.CancelFunc, id provider.ID
 	if supportsMCP && allows("files") {
 		if _, err := openLibrary(); err != nil {
 			logf("library: %v", err)
-		} else if srv, err := filesServer(); err != nil {
+		} else if srv, err := filesServer(chatID); err != nil {
 			logf("files server: %v", err)
 		} else {
 			extra = append(extra, srv)
@@ -433,7 +433,7 @@ func startChatRun(ctx context.Context, cancel context.CancelFunc, id provider.ID
 	}
 	system += filesNote
 	system += profileNote()
-	system += memoryNote()
+	system += memoryNote(text, history, filesNote != "")
 	go func() {
 		defer cancel()
 		started := time.Now()

@@ -44,6 +44,14 @@ const pending = new Map<number, () => void>();
 
 listen((op, f) => {
   switch (op) {
+    case "d": { // update download progress; an empty value means indeterminate
+      const progress = $("update-progress") as HTMLProgressElement | null;
+      if (progress) {
+        if (f[0] === "") progress.removeAttribute("value");
+        else progress.value = Number(f[0]);
+      }
+      break;
+    }
     case "n":
       if (f[0] === "chat") document.querySelector<HTMLButtonElement>('[data-pane-btn="chat"]')?.click();
       if (f[0] === "task") document.querySelector<HTMLElement>("#tasks")?.dispatchEvent(new CustomEvent("notification-open", { detail: f[1] ?? "" }));
@@ -97,6 +105,11 @@ document.addEventListener("click", (e) => {
   if (action === "probe.ping") { void runPing(); return; }
   if (action === "probe.click") { probeClick(e); return; }
   if (action === "probe.clear") { out("No results yet.", true); return; }
+  if (action === "update.open") {
+    document.querySelector<HTMLButtonElement>('[data-section-btn="general"]')?.click();
+    send("c", "menu.settings");
+    return;
+  }
   if (action === "browser.dark.toggle") {
     const dark = target.getAttribute("aria-pressed") !== "true";
     target.setAttribute("aria-pressed", String(dark));

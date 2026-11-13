@@ -85,6 +85,11 @@ type saveURLArgs struct {
 
 // NewServer builds the file tool server for one library. origin is recorded on what it creates.
 func NewServer(s *Store, origin string) *sdk.Server {
+	return NewServerForSession(s, origin, "")
+}
+
+// NewServerForSession associates proposed lessons with the originating Phoenix chat.
+func NewServerForSession(s *Store, origin, chatID string) *sdk.Server {
 	srv := sdk.NewServer(&sdk.Implementation{Name: ServerName, Version: "0.2"}, &sdk.ServerOptions{Instructions: instructions})
 	tool(srv, "files_list", "List files and folders in the library (or a folder in it), folders first, with each file's kind.", func(a listArgs) (string, error) {
 		ns, trunc, err := s.List(a.Path)
@@ -220,6 +225,9 @@ func NewServer(s *Store, origin string) *sdk.Server {
 		return t, nil
 	})
 	registerApplicationTools(srv, s)
+	if s.LearningEnabled() {
+		registerLearningTools(srv, s, chatID)
+	}
 	registerTaskTools(srv, s)
 	return srv
 }

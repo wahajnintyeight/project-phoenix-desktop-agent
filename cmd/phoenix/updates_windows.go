@@ -22,7 +22,7 @@ func initUpdateManager() error {
 	if err != nil {
 		return err
 	}
-	provider, err := endpoint.New(endpoint.Config{URL: update.ManifestURL, Channel: "stable"})
+	provider, err := endpoint.New(endpoint.Config{URL: update.ManifestURL, Channel: "stable", HTTPClient: update.HTTPClient()})
 	if err != nil {
 		return err
 	}
@@ -40,7 +40,12 @@ func initUpdateManager() error {
 			return
 		}
 		percent := progress.Written * 100 / progress.Total
-		runLater(func() { post("t" + fs + "update-status" + fs + fmt.Sprintf("Downloading update… %d%%", percent)) })
+		if percent > 100 {
+			percent = 100
+		}
+		runLater(func() {
+			post("d"+fs+fmt.Sprint(percent), "t"+fs+"update-percent"+fs+fmt.Sprintf("%d%%", percent))
+		})
 	})
 	return nil
 }
@@ -53,21 +58,24 @@ func checkForUpdates() {
 	if !updateFlowActive.CompareAndSwap(false, true) {
 		return
 	}
-	post("t"+fs+"update-status"+fs+"Checking for updates…", "u"+fs+"update-check"+fs+"disabled"+fs+"true", "u"+fs+"update-install"+fs+"hidden"+fs+"true", "u"+fs+"update-restart"+fs+"hidden"+fs+"true")
+	post("t" + fs + "update-version" + fs + fmt.Sprintf("Installed version %s", app.Updater.CurrentVersion()))
+	post("t"+fs+"update-status"+fs+"Checking for updates…", "u"+fs+"update-check"+fs+"disabled"+fs+"true", "u"+fs+"update-install"+fs+"disabled"+fs+"true")
 	go func() {
-		release, err := app.Updater.Check(context.Background())
+		ctx, cancel := context.WithTimeout(context.Background(), update.CheckTimeout)
+		defer cancel()
+		release, err := app.Updater.Check(ctx)
 		runLater(func() {
 			updateFlowActive.Store(false)
-			post("u" + fs + "update-check" + fs + "disabled" + fs + "false")
+			post("u"+fs+"update-check"+fs+"disabled"+fs+"false", "u"+fs+"update-install"+fs+"disabled"+fs+"false")
 			if err != nil {
 				post("t" + fs + "update-status" + fs + fmt.Sprintf("Could not check for updates: %v", err))
 				return
 			}
 			if release != nil {
-				post("t"+fs+"update-status"+fs+fmt.Sprintf("Phoenix %s is available.", release.Version), "u"+fs+"update-install"+fs+"hidden"+fs+"false")
+				post("t"+fs+"update-status"+fs+fmt.Sprintf("Phoenix %s is available. Download it when you’re ready.", release.Version), "u"+fs+"update-install"+fs+"hidden"+fs+"false", "t"+fs+"update-notice-text"+fs+"Update available", "u"+fs+"update-notice"+fs+"hidden"+fs+"false")
 				return
 			}
-			post("t" + fs + "update-status" + fs + fmt.Sprintf("Phoenix is up to date (%s).", app.Updater.CurrentVersion()))
+			post("t"+fs+"update-status"+fs+"Phoenix is up to date.", "u"+fs+"update-install"+fs+"hidden"+fs+"true", "u"+fs+"update-notice"+fs+"hidden"+fs+"true")
 		})
 	}()
 }
@@ -76,17 +84,19 @@ func installUpdate() {
 	if !updateFlowActive.CompareAndSwap(false, true) {
 		return
 	}
-	post("t"+fs+"update-status"+fs+"Downloading and verifying update…", "u"+fs+"update-check"+fs+"disabled"+fs+"true", "u"+fs+"update-install"+fs+"disabled"+fs+"true")
+	post("t"+fs+"update-status"+fs+"Downloading and verifying update…", "t"+fs+"update-percent"+fs+"Starting…", "d"+fs, "u"+fs+"update-progress-wrap"+fs+"hidden"+fs+"false", "u"+fs+"update-check"+fs+"disabled"+fs+"true", "u"+fs+"update-install"+fs+"disabled"+fs+"true")
 	go func() {
-		err := app.Updater.DownloadAndInstall(context.Background())
+		ctx, cancel := context.WithTimeout(context.Background(), update.DownloadTimeout)
+		defer cancel()
+		err := app.Updater.DownloadAndInstall(ctx)
 		runLater(func() {
 			updateFlowActive.Store(false)
 			post("u"+fs+"update-check"+fs+"disabled"+fs+"false", "u"+fs+"update-install"+fs+"disabled"+fs+"false")
 			if err != nil {
-				post("t" + fs + "update-status" + fs + fmt.Sprintf("Update failed: %v", err))
+				post("t"+fs+"update-status"+fs+fmt.Sprintf("Update failed: %v", err), "u"+fs+"update-progress-wrap"+fs+"hidden"+fs+"true")
 				return
 			}
-			post("t"+fs+"update-status"+fs+"Update verified and ready. Restart Phoenix to apply it.", "u"+fs+"update-install"+fs+"hidden"+fs+"true", "u"+fs+"update-restart"+fs+"hidden"+fs+"false")
+			post("t"+fs+"update-status"+fs+"Update verified and ready. Restart Phoenix to apply it.", "u"+fs+"update-progress-wrap"+fs+"hidden"+fs+"true", "u"+fs+"update-install"+fs+"hidden"+fs+"true", "u"+fs+"update-check"+fs+"disabled"+fs+"true", "u"+fs+"update-restart"+fs+"hidden"+fs+"false", "t"+fs+"update-notice-text"+fs+"Restart to update", "u"+fs+"update-notice"+fs+"hidden"+fs+"false")
 		})
 	}()
 }

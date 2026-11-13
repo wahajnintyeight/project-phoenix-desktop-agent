@@ -27,6 +27,9 @@
       <span class="pill-stop"><svg viewBox="0 0 16 16" width="12" height="12" aria-hidden="true"><rect x="3" y="3" width="10" height="10" rx="2" fill="currentColor"/></svg>Stop</span>
     </button>
 
+    <button id="update-notice" class="update-notice no-drag" data-action="update.open" hidden>
+      <span class="update-notice-dot" aria-hidden="true"></span><span id="update-notice-text">Update available</span>
+    </button>
     <div class="no-drag flex h-full">
       <button class="wc" data-action="win.min" aria-label="Minimize"><svg viewBox="0 0 10 10" width="10" height="10"><path d="M0 5h10" stroke="currentColor"/></svg></button>
       <button class="wc" data-action="win.max" aria-label="Maximize"><svg class="ico-max" viewBox="0 0 10 10" width="10" height="10"><rect x=".5" y=".5" width="9" height="9" fill="none" stroke="currentColor"/></svg><svg class="ico-restore" viewBox="0 0 10 10" width="10" height="10"><path d="M2.5 2.5v-2h7v7h-2M.5 2.5h7v7h-7z" fill="none" stroke="currentColor"/></svg></button>
@@ -235,13 +238,23 @@
               <section class="flex flex-col gap-3">
                 <div>
                   <h3>Software updates</h3>
-                  <p class="text-fg-muted">Check whether a newer Phoenix release is available.</p>
+                  <p class="text-fg-muted">Phoenix checks for updates when you open the app.</p>
                 </div>
-                <div class="flex flex-wrap items-center gap-3">
-                  <button id="update-check" class="btn btn-sm" data-action="update.check">Check for updates</button>
-                  <button id="update-install" class="btn btn-sm" data-action="update.install" hidden>Download and install</button>
-                  <button id="update-restart" class="btn btn-sm" data-action="update.restart" hidden>Restart to update</button>
-                  <p id="update-status" class="text-sm text-fg-muted" role="status" aria-live="polite"></p>
+                <div class="update-card">
+                  <div class="update-card-heading">
+                    <div class="update-icon" aria-hidden="true"><svg viewBox="0 0 20 20" width="20" height="20"><path d="M10 3v9m-3-3 3 3 3-3M4 14v1a2 2 0 0 0 2 2h8a2 2 0 0 0 2-2v-1" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg></div>
+                    <div class="update-copy"><span class="update-label">Phoenix for Windows</span><span id="update-version" class="text-xs text-fg-muted">Checking installed version…</span></div>
+                  </div>
+                  <p id="update-status" class="update-status" role="status" aria-live="polite">Checking for updates…</p>
+                  <div id="update-progress-wrap" class="update-progress" hidden>
+                    <div class="update-progress-heading"><span>Download progress</span><span id="update-percent">Starting…</span></div>
+                    <progress id="update-progress" max="100" aria-label="Update download progress"></progress>
+                  </div>
+                  <div class="update-actions">
+                    <button id="update-install" class="btn btn-sm btn-primary" data-action="update.install" hidden>Download and install</button>
+                    <button id="update-restart" class="btn btn-sm btn-primary" data-action="update.restart" hidden>Restart to update</button>
+                    <button id="update-check" class="btn btn-sm" data-action="update.check">Check for updates</button>
+                  </div>
                 </div>
               </section>
 

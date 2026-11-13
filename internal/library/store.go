@@ -105,6 +105,25 @@ CREATE TABLE IF NOT EXISTS memories (
   updated_at INTEGER NOT NULL
 );
 CREATE INDEX IF NOT EXISTS memories_lookup ON memories(kind, topic COLLATE NOCASE, key COLLATE NOCASE);
+CREATE TABLE IF NOT EXISTS learned_items (
+  id INTEGER PRIMARY KEY,
+  kind TEXT NOT NULL,
+  trigger_text TEXT NOT NULL,
+  lesson TEXT NOT NULL,
+  evidence TEXT NOT NULL DEFAULT '',
+  source_chat TEXT NOT NULL DEFAULT '',
+  status TEXT NOT NULL DEFAULT 'candidate',
+  helpful INTEGER NOT NULL DEFAULT 0,
+  unhelpful INTEGER NOT NULL DEFAULT 0,
+  created_at INTEGER NOT NULL,
+  updated_at INTEGER NOT NULL
+);
+CREATE INDEX IF NOT EXISTS learned_items_status ON learned_items(status, updated_at);
+CREATE UNIQUE INDEX IF NOT EXISTS learned_items_unique ON learned_items(kind, trigger_text COLLATE NOCASE, lesson COLLATE NOCASE);
+CREATE TABLE IF NOT EXISTS learned_suppression (
+  fingerprint TEXT PRIMARY KEY,
+  created_at INTEGER NOT NULL
+);
 PRAGMA user_version = 3;
 `
 
