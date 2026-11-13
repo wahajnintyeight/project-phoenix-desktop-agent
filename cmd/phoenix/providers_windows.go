@@ -56,6 +56,7 @@ func initProviders() {
 }
 
 func openSettings() {
+	pushGPUPreference()
 	for _, t := range tabs {
 		if t.kind == kindSettings {
 			activate(t.id)

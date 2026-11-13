@@ -34,8 +34,9 @@ type ProviderConfig struct {
 type Browser struct {
 	// SearchURL is what the address bar uses for text that is not a URL. It must be https
 	// and contain {query}.
-	SearchURL string `yaml:"search_url,omitempty"`
-	DarkMode  bool   `yaml:"dark_mode,omitempty"`
+	SearchURL  string `yaml:"search_url,omitempty"`
+	DarkMode   bool   `yaml:"dark_mode,omitempty"`
+	DisableGPU bool   `yaml:"disable_gpu,omitempty"`
 }
 
 // DefaultSearchURL is used when none is configured.

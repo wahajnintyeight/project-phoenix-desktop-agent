@@ -251,6 +251,16 @@
                   <p class="text-fg-muted">Restart Phoenix to reload the application.</p>
                 </div>
                 <div><button class="btn btn-sm" data-action="app.restart">Restart Phoenix</button></div>
+                <p id="restart-status" class="text-sm text-danger" role="status"></p>
+              </section>
+
+              <section class="flex flex-col gap-3">
+                <div><h3>Performance</h3><p class="text-fg-muted">Choose how Phoenix renders its interface and web pages.</p></div>
+                <label class="display-density">
+                  <input id="gpu-acceleration" type="checkbox" disabled>
+                  <span class="flex flex-col"><span class="font-medium">Hardware acceleration</span><span class="text-xs text-fg-muted">Use the GPU for supported rendering. Restart Phoenix after changing this setting.</span></span>
+                </label>
+                <p id="gpu-status" class="text-sm text-fg-muted" role="status"></p>
               </section>
 
               <section class="flex flex-col gap-3">

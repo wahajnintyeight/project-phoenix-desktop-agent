@@ -8,7 +8,6 @@ import (
 	"encoding/json"
 	"fmt"
 	"os"
-	"os/exec"
 	"path/filepath"
 	"strconv"
 	"strings"
@@ -30,15 +29,14 @@ const (
 var trayIcon []byte
 
 var (
-	app        *application.App
-	win        *application.WebviewWindow
-	hwnd       uintptr   // the Wails window's HWND, known once the UI has loaded
-	uiViews    []uintptr // Wails's own webview windows: they must stay beneath the tab pages
-	ready      bool      // the UI has loaded and can receive messages
-	started    bool      // tabs and providers are initialised
-	quitting   bool
-	restarting bool
-	logFile    *os.File
+	app      *application.App
+	win      *application.WebviewWindow
+	hwnd     uintptr   // the Wails window's HWND, known once the UI has loaded
+	uiViews  []uintptr // Wails's own webview windows: they must stay beneath the tab pages
+	ready    bool      // the UI has loaded and can receive messages
+	started  bool      // tabs and providers are initialised
+	quitting bool
+	logFile  *os.File
 )
 
 // logf writes diagnostics to %TEMP%\phoenix.log when PHOENIX_LOG=1.
@@ -50,6 +48,9 @@ func logf(format string, args ...any) {
 }
 
 func main() {
+	if len(os.Args) == 3 && os.Args[1] == "--phoenix-relaunch" {
+		os.Exit(runRelaunch(os.Args[2]))
+	}
 	// The agent's CLI starts this program as its desktop tool server; no window, no Wails.
 	if len(os.Args) > 1 && os.Args[1] == "mcp-desktop" {
 		os.Exit(runDesktopMCP())
@@ -84,8 +85,12 @@ func main() {
 		"--disable-background-timer-throttling",
 	}
 	var uiArgs []string
+	if gpuDisabledAtStartup() {
+		uiArgs = append(uiArgs, "--disable-gpu")
+		browserArgs = append(browserArgs, "--disable-gpu")
+	}
 	if port, err := strconv.Atoi(os.Getenv("PHOENIX_DEBUG_PORT")); err == nil && port > 0 {
-		uiArgs = []string{"--remote-debugging-port=" + strconv.Itoa(port), "--remote-debugging-address=127.0.0.1"}
+		uiArgs = append(uiArgs, "--remote-debugging-port="+strconv.Itoa(port), "--remote-debugging-address=127.0.0.1")
 		browserArgs = append(browserArgs, "--remote-debugging-port="+strconv.Itoa(port+1), "--remote-debugging-address=127.0.0.1")
 	}
 
@@ -167,13 +172,6 @@ func main() {
 		fmt.Fprintln(os.Stderr, "phoenix:", err)
 		os.Exit(1)
 	}
-	if restarting {
-		if exe, err := os.Executable(); err == nil {
-			if err := exec.Command(exe).Start(); err != nil {
-				fmt.Fprintln(os.Stderr, "phoenix restart:", err)
-			}
-		}
-	}
 }
 
 func setupTray() {
@@ -253,7 +251,11 @@ func onMessage(message string) {
 	case "d": // floating agent panel rectangle (css px)
 		setDrawerRect(f[1:])
 	case "v": // provider management
-		handleProviderOp(f)
+		if len(f) > 1 && f[1] == "gpu" {
+			setGPUPreference(f)
+		} else {
+			handleProviderOp(f)
+		}
 	case "f": // the Files view
 		handleFilesOp(f)
 	case "g": // chat with the agent
@@ -364,7 +366,11 @@ func handleAction(action, id string) {
 	case "history.clear":
 		clearHistory()
 	case "app.restart":
-		quitting, restarting = true, true
+		if err := startRelaunch(); err != nil {
+			post("t" + fs + "restart-status" + fs + "Could not restart Phoenix: " + err.Error())
+			return
+		}
+		quitting = true
 		app.Quit()
 	case "setup.get": // the setup card's "Get Claude Code" / "Get Codex"
 		runLater(func() { openSetupPage(id) })

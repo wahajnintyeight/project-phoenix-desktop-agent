@@ -36,7 +36,7 @@ document.addEventListener("contextmenu", (event) => {
 const $ = (id: string): HTMLElement | null => document.getElementById(id);
 
 // Go may only set these. Anything else is ignored.
-const SETTABLE_PROPS = new Set(["tabs", "history", "chats", "activity", "value", "disabled", "src", "hidden", "data", "result", "models", "events", "actions", "preview"]);
+const SETTABLE_PROPS = new Set(["tabs", "history", "chats", "activity", "value", "checked", "disabled", "src", "hidden", "data", "result", "models", "events", "actions", "preview"]);
 const SETTABLE_ATTRS = new Set(["data-view", "data-state", "aria-pressed"]);
 
 // ── Message handling (Go → UI) ──────────────────────────────────────────
@@ -148,6 +148,9 @@ initTheme();
 const displayScale = document.querySelector<HTMLInputElement>("#display-scale");
 const displayScaleValue = document.querySelector<HTMLOutputElement>("#display-scale-value");
 const compactSpacing = document.querySelector<HTMLInputElement>("#compact-spacing");
+document.querySelector<HTMLInputElement>("#gpu-acceleration")?.addEventListener("change", (event) => {
+  send("v", "gpu", (event.currentTarget as HTMLInputElement).checked ? "1" : "0");
+});
 function applyDisplaySettings(scale: number, compact: boolean): void {
   const value = Math.min(120, Math.max(80, scale));
   document.documentElement.style.setProperty("--ui-scale", String(value / 100));
