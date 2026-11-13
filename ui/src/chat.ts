@@ -9,10 +9,13 @@ import type { PhMcp } from "./mcp-settings";
 import "./setup-card";
 import { send } from "./protocol";
 import { resolveSlashCommand, searchSlashCommands, type SlashCommandDefinition } from "./slash-commands";
-import { MentionPicker } from "./mentions";
+import "./mentions";
+import type { MentionPicker } from "./mentions";
+import { CompactReply } from "./compact-reply";
 
 export interface ChatEvent {
-  k: "user" | "note" | "processing" | "tool" | "tool-result" | "approve" | "approved" | "start" | "delta" | "done" | "error" | "stopped" | "reset" | "restore" | "queue" | "interrupted";
+  k: "user" | "note" | "processing" | "tool" | "tool-result" | "approve" | "approved" | "start" | "delta" | "done" | "error" | "stopped" | "reset" | "restore" | "queue" | "interrupted" | "suggestions";
+  suggestions?: string[];
   resume?: boolean | undefined;
   text?: string;
   at?: number;
@@ -43,6 +46,7 @@ interface ChatTranscriptMessage {
   at?: number;
   provider?: string;
   model?: string;
+  suggestions?: string[];
 }
 
 interface SavedChatSummary {
@@ -160,6 +164,7 @@ export class PhChat extends HTMLElement {
   readonly #processingText = el("span");
   readonly #compactStatus = el("div", "chat-compact-status");
   readonly #compactStatusText = el("span", "chat-compact-status-text");
+  readonly #compactReply = new CompactReply();
   readonly #input = el("textarea", "chat-input");
   readonly #commandMenu = el("div", "slash-menu");
   readonly #send = el("button", "send-btn");
@@ -190,6 +195,7 @@ export class PhChat extends HTMLElement {
   #activeCommand = 0;
   #current: Msg | null = null;
   #pendingChoices: Msg | null = null;
+  #suggestionTarget: Msg | null = null;
   #scrollFrame = 0;
   #scrollDirty = false;
   readonly #syncScrollLatest = (): void => {
@@ -307,7 +313,7 @@ export class PhChat extends HTMLElement {
     const bar = el("div", "composer-bar");
     bar.append(this.#share, picker, this.#send);
     const composer = el("div", "composer");
-    composer.append(this.#compactStatus, this.#input, bar);
+    composer.append(this.#compactStatus, this.#compactReply.element, this.#input, bar);
     const wrap = el("div", "chat-composer");
     this.#queue.hidden = true;
     this.#queue.setAttribute("role", "list");
@@ -619,10 +625,13 @@ export class PhChat extends HTMLElement {
   #setRunning(on: boolean): void {
     const wasRunning = this.#running;
     if (on && !this.#running) {
+      this.#suggestionTarget?.setSuggestionMode("inactive");
+      this.#suggestionTarget = null;
       this.#pendingChoices?.setChoiceMode("inactive");
       this.#pendingChoices = null;
     }
     this.#running = on;
+    this.#compactReply.setStreaming(on);
     this.dataset["running"] = String(on);
     if (!on) this.#setCompactStatus("");
     else if (!wasRunning) this.#setCompactStatus("Starting…");
@@ -696,6 +705,8 @@ export class PhChat extends HTMLElement {
   #apply(ev: ChatEvent): void {
     switch (ev.k) {
       case "reset":
+        this.#suggestionTarget = null;
+        this.#compactReply.clear();
         this.#pendingChoices = null;
         this.#log.replaceChildren(this.#empty);
         this.#processing.hidden = true;
@@ -710,6 +721,8 @@ export class PhChat extends HTMLElement {
         this.#setRunning(false);
         break;
       case "restore": {
+        this.#suggestionTarget = null;
+        this.#compactReply.clear();
         this.#pendingChoices = null;
         this.#log.replaceChildren(this.#empty);
         this.#processing.hidden = true;
@@ -738,6 +751,8 @@ export class PhChat extends HTMLElement {
             m.append(message.content);
             m.flush();
             m.meta.title = who;
+            if (message.suggestions?.length === 2) m.setSuggestions(message.suggestions, at === restored.length - 1 ? "ready" : "inactive");
+            if (at === restored.length - 1) this.#suggestionTarget = m;
             if (at === restored.length - 1 && m.getChoices().length) this.#pendingChoices = m;
           }
         }
@@ -746,6 +761,7 @@ export class PhChat extends HTMLElement {
         break;
       }
       case "user": {
+        this.#compactReply.clear();
         this.#processing.hidden = true;
         this.#toolCalls.clear();
         this.#endSteps();
@@ -876,6 +892,8 @@ export class PhChat extends HTMLElement {
       }
       case "delta": {
         this.#setCompactStatus("Writing reply…");
+        this.#compactStatus.hidden = true;
+        this.#compactReply.append(ev.text ?? "");
         this.#processing.hidden = true;
         // A reply that begins without a start event (or after a reset) still needs a box.
         if (!this.#current) {
@@ -904,11 +922,18 @@ export class PhChat extends HTMLElement {
           c.meta.title = [c.who, ev.out ? `${ev.in ?? 0} in, ${ev.out} out` : "", ev.cached ? `${ev.cached} cache reads reported by provider` : ""].filter(Boolean).join(" · ");
         }
         this.#pendingChoices = c && c.getChoices().length ? c : null;
+        this.#suggestionTarget = c;
         this.#current = null;
         this.#setRunning(false);
         this.#pendingChoices?.setChoiceMode("ready");
         break;
       }
+      case "suggestions":
+        if (!this.#running && this.#suggestionTarget && ev.suggestions?.length === 2) {
+          this.#suggestionTarget.setSuggestions(ev.suggestions);
+          if (ev.in || ev.out || ev.cost) this.#suggestionTarget.meta.title += `\nSuggestions: ${ev.in ?? 0} in, ${ev.out ?? 0} out${ev.cost ? ` · $${ev.cost.toFixed(3)}` : ""}`;
+        }
+        break;
       case "stopped": {
         this.#processing.hidden = true;
         this.#finishToolCalls("Stopped");

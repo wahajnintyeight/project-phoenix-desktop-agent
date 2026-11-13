@@ -4,7 +4,7 @@
 //           n text        navigate (address bar submit)
 //           b url         open a Markdown link in a new in-app browser tab
 //           l x y w h     page-slot rectangle in CSS pixels
-//           d x y w h     floating agent-panel rectangle in CSS pixels
+//           d x y w h radius   floating agent-panel rectangle and corner radius in CSS pixels
 //           i field value seq   input changed (type-ahead)
 //           p seq         ping
 //           m state       menu popover opened or closed

@@ -305,6 +305,7 @@ type chatRequest struct {
 	Stream    bool          `json:"stream"`
 	Tools     []apiTool     `json:"tools,omitempty"`
 	SessionID string        `json:"session_id,omitempty"`
+	MaxTokens int           `json:"max_tokens,omitempty"`
 	Usage     *struct {
 		Include bool `json:"include"`
 	} `json:"usage,omitempty"`
@@ -315,7 +316,7 @@ type chatRequest struct {
 }
 
 func (p OpenAICompat) buildRequest(s Settings, req Request) chatRequest {
-	cr := chatRequest{Model: firstNonEmpty(req.Model, s.Model), Stream: true}
+	cr := chatRequest{Model: firstNonEmpty(req.Model, s.Model), Stream: true, MaxTokens: req.MaxOutputTokens}
 	if p.Spec.ID == OpenRouter && (s.BaseURL == "" || strings.TrimRight(s.BaseURL, "/") == strings.TrimRight(p.Spec.BaseURL, "/")) {
 		cr.SessionID = req.CacheSession
 		cr.Usage = &struct {

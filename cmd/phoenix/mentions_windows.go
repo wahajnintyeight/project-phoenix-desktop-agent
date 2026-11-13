@@ -28,26 +28,13 @@ func pushMentions(query, seq string) {
 				items = append(items, mentionItem{Kind: "Task", Name: t.Name, Ref: t.ID})
 			}
 		}
-		if hits, err := lib.Search(query, "", 50); err == nil {
+		if hits, err := lib.MentionSearch(query, 50); err == nil {
 			for _, h := range hits {
 				kind := "File"
 				if h.Dir {
 					kind = "Folder"
 				}
 				items = append(items, mentionItem{Kind: kind, Name: h.Name, Ref: h.Path, Detail: h.Path})
-			}
-		}
-		if query == "" {
-			seen := make(map[string]bool)
-			for _, item := range items {
-				if item.Kind == "File" {
-					seen[item.Ref] = true
-				}
-			}
-			for _, n := range lib.Recent(25) {
-				if !seen[n.Path] {
-					items = append(items, mentionItem{Kind: "File", Name: n.Name, Ref: n.Path, Detail: n.Path})
-				}
 			}
 		}
 	}

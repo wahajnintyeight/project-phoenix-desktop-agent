@@ -6,6 +6,8 @@ const NS = "http://www.w3.org/2000/svg";
 const STROKES = {
   chevronRight: "m6 4 4 4-4 4",
   chevronDown: "m4 6 4 4 4-4",
+  panelRight: "M2.5 3.5h11v9h-11zM9.5 3.5v9",
+  panelBottom: "M2.5 3.5h11v9h-11zM2.5 9h11",
   check: "m3.5 8.5 3 3 6-6.5",
   arrowUp: "M8 13V3M4 7l4-4 4 4",
   page: "M4 2.5h5l3 3v8H4v-11ZM9 2.5v3h3",

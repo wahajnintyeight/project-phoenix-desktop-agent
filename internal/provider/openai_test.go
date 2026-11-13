@@ -93,8 +93,25 @@ func TestRequestBodyByEffortStyle(t *testing.T) {
 	}
 	m := body(Grok, "")
 	msgs := m["messages"].([]any)
-	if len(msgs) != 2 || msgs[0].(map[string]any)["role"] != "system" || m["stream"] != true || m["reasoning_effort"] != nil {
+	if len(msgs) != 2 || msgs[0].(map[string]any)["role"] != "system" || m["stream"] != true || m["reasoning_effort"] != nil || m["max_tokens"] != nil {
 		t.Errorf("messages: %v", m)
+	}
+}
+
+func TestRequestOutputLimit(t *testing.T) {
+	for _, id := range []ID{Gemini, OpenRouter, Mistral, Zai, Grok, DeepSeek} {
+		body := spec(t, id).buildRequest(Settings{Model: "m"}, Request{Prompt: "hi", MaxOutputTokens: 96})
+		data, err := json.Marshal(body)
+		if err != nil {
+			t.Fatal(err)
+		}
+		var got map[string]any
+		if err := json.Unmarshal(data, &got); err != nil {
+			t.Fatal(err)
+		}
+		if got["max_tokens"] != float64(96) {
+			t.Errorf("%s: limit missing: %s", id, data)
+		}
 	}
 }
 

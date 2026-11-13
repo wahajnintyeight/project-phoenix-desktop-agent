@@ -65,7 +65,7 @@ var (
 	menuOpen   bool // an overlay (the ⋯ menu) is open
 	popupOpen  bool
 	drawerOpen bool
-	drawerRect struct{ x, y, w, h float64 }
+	drawerRect struct{ x, y, w, h, radius float64 }
 	// pageHidden is true while the active page window is hidden behind a frozen image.
 	pageHidden bool
 	freezeGen  int

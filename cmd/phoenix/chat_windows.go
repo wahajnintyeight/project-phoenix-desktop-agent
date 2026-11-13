@@ -79,29 +79,30 @@ var chat struct {
 
 // chatEvent is what the UI's <ph-chat> understands.
 type chatEvent struct {
-	K         string               `json:"k"` // user, processing, note, tool, start, delta, done, error, stopped, reset, restore
-	Text      string               `json:"text,omitempty"`
-	At        int64                `json:"at,omitempty"`
-	Provider  string               `json:"provider,omitempty"`
-	Model     string               `json:"model,omitempty"`
-	Millis    int64                `json:"ms,omitempty"`
-	In        int                  `json:"in,omitempty"`
-	Out       int                  `json:"out,omitempty"`
-	Cached    int                  `json:"cached,omitempty"`
-	Cost      float64              `json:"cost,omitempty"`
-	Ctx       int                  `json:"ctx,omitempty"`      // done: estimated tokens in the context window
-	Queue     []chatQueueItem      `json:"queue,omitempty"`    // queue: messages waiting, in order
-	ID        string               `json:"id,omitempty"`       // approve, approved: which request
-	Cls       string               `json:"cls,omitempty"`      // approve: look or act
-	Decision  string               `json:"decision,omitempty"` // approved: allow, all or deny
-	ToolID    string               `json:"toolId,omitempty"`
-	Server    string               `json:"server,omitempty"`
-	ToolName  string               `json:"toolName,omitempty"`
-	Input     string               `json:"input,omitempty"`
-	Output    string               `json:"output,omitempty"`
-	ToolError bool                 `json:"toolError,omitempty"`
-	Resume    bool                 `json:"resume,omitempty"`
-	Messages  []chatDisplayMessage `json:"messages,omitempty"`
+	K           string               `json:"k"` // user, processing, note, tool, start, delta, done, error, stopped, reset, restore
+	Text        string               `json:"text,omitempty"`
+	At          int64                `json:"at,omitempty"`
+	Provider    string               `json:"provider,omitempty"`
+	Model       string               `json:"model,omitempty"`
+	Millis      int64                `json:"ms,omitempty"`
+	In          int                  `json:"in,omitempty"`
+	Out         int                  `json:"out,omitempty"`
+	Cached      int                  `json:"cached,omitempty"`
+	Cost        float64              `json:"cost,omitempty"`
+	Ctx         int                  `json:"ctx,omitempty"`      // done: estimated tokens in the context window
+	Queue       []chatQueueItem      `json:"queue,omitempty"`    // queue: messages waiting, in order
+	ID          string               `json:"id,omitempty"`       // approve, approved: which request
+	Cls         string               `json:"cls,omitempty"`      // approve: look or act
+	Decision    string               `json:"decision,omitempty"` // approved: allow, all or deny
+	ToolID      string               `json:"toolId,omitempty"`
+	Server      string               `json:"server,omitempty"`
+	ToolName    string               `json:"toolName,omitempty"`
+	Input       string               `json:"input,omitempty"`
+	Output      string               `json:"output,omitempty"`
+	ToolError   bool                 `json:"toolError,omitempty"`
+	Resume      bool                 `json:"resume,omitempty"`
+	Messages    []chatDisplayMessage `json:"messages,omitempty"`
+	Suggestions []string             `json:"suggestions,omitempty"`
 }
 
 func postChat(evs ...chatEvent) {
@@ -155,6 +156,7 @@ func handleChatOp(f []string) {
 			answerApproval(f[2], f[3])
 		}
 	case "stop":
+		cancelChatSuggestions()
 		if chat.busy {
 			postChat(chatEvent{K: "processing", Text: "Stopping…"})
 		}
@@ -180,6 +182,7 @@ func handleChatOp(f []string) {
 			}
 		}
 	case "new":
+		cancelChatSuggestions()
 		finishTask("stopped", "Stopped before it finished.", 0)
 		wasBusy := chat.busy
 		if wasBusy {
@@ -200,6 +203,7 @@ func handleChatOp(f []string) {
 		postChat(chatEvent{K: "reset"})
 		pushContext()
 	case "restore":
+		cancelChatSuggestions()
 		if len(f) > 2 && !chat.busy {
 			if c, ok := restoreSavedChat(f[2]); ok {
 				chat.gen++
@@ -207,6 +211,7 @@ func handleChatOp(f []string) {
 			}
 		}
 	case "clear-history":
+		cancelChatSuggestions()
 		finishTask("stopped", "Stopped before it finished.", 0)
 		clearQueue()
 		if chat.busy {
@@ -270,6 +275,7 @@ func sendTurn(display, text string, sharePage bool) {
 	if text == "" {
 		return
 	}
+	cancelChatSuggestions()
 	if hub == nil {
 		postChat(chatEvent{K: "error", Text: settingsUnavailable()})
 		return
@@ -624,6 +630,9 @@ func startChatRun(ctx context.Context, cancel context.CancelFunc, id provider.ID
 			// fail every message behind it; steering always proceeds.
 			if chatQueue.steer || (err == nil && !res.IsError) {
 				drainQueue()
+			}
+			if err == nil && !res.IsError && !chat.busy && answer != "" {
+				startChatSuggestions(id, gen, chatID, userIndex, text, answer)
 			}
 		})
 	}()

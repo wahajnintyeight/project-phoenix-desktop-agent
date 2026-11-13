@@ -16,6 +16,7 @@ export class Msg {
   #frame = 0;
   #copyTimer = 0;
   #menus: ChoiceMenus | null = null;
+  #suggestions: ChoiceMenus | null = null;
   #choiceMode: ChoiceMode = "inactive";
 
   constructor(who: string, cls: string, markdown: boolean, at: number) {
@@ -93,6 +94,17 @@ export class Msg {
   }
 
   setChoiceMode(mode: ChoiceMode): void { this.#choiceMode = mode; this.#menus?.setMode(mode); }
+
+  setSuggestions(options: string[], mode: ChoiceMode = "ready"): void {
+    if (!this.#suggestions) {
+      this.#suggestions = new ChoiceMenus((answers) => this.box.dispatchEvent(new CustomEvent<ChoiceAnswer[]>("phoenix-answers", { bubbles: true, detail: answers })));
+      this.box.append(this.#suggestions.element);
+    }
+    this.#suggestions.update([{ question: "What would you like to do next?", options, kind: "action" }]);
+    this.#suggestions.setMode(mode);
+  }
+
+  setSuggestionMode(mode: ChoiceMode): void { this.#suggestions?.setMode(mode); }
 
   #copyText(): void {
     const text = this.#md ? splitChoices(this.#raw).body : this.#raw;

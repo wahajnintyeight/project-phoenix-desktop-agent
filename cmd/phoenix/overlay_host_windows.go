@@ -9,14 +9,15 @@ import (
 )
 
 var (
-	gdi32           = windows.NewLazySystemDLL("gdi32.dll")
-	pCreateWindowEx = user32.NewProc("CreateWindowExW")
-	pDestroyWindow  = user32.NewProc("DestroyWindow")
-	pShowWindow     = user32.NewProc("ShowWindow")
-	pSetWindowRgn   = user32.NewProc("SetWindowRgn")
-	pCreateRectRgn  = gdi32.NewProc("CreateRectRgn")
-	pCombineRgn     = gdi32.NewProc("CombineRgn")
-	pDeleteObject   = gdi32.NewProc("DeleteObject")
+	gdi32               = windows.NewLazySystemDLL("gdi32.dll")
+	pCreateWindowEx     = user32.NewProc("CreateWindowExW")
+	pDestroyWindow      = user32.NewProc("DestroyWindow")
+	pShowWindow         = user32.NewProc("ShowWindow")
+	pSetWindowRgn       = user32.NewProc("SetWindowRgn")
+	pCreateRectRgn      = gdi32.NewProc("CreateRectRgn")
+	pCreateRoundRectRgn = gdi32.NewProc("CreateRoundRectRgn")
+	pCombineRgn         = gdi32.NewProc("CombineRgn")
+	pDeleteObject       = gdi32.NewProc("DeleteObject")
 )
 
 // Each browser gets a host window so its visible region can exclude the agent panel.
@@ -43,10 +44,19 @@ func setDrawerRect(fields []string) {
 		}
 		v[i] = n
 	}
-	if drawerRect.x == v[0] && drawerRect.y == v[1] && drawerRect.w == v[2] && drawerRect.h == v[3] {
+	radius := 0.0
+	if len(fields) > 4 {
+		n, err := strconv.ParseFloat(fields[4], 64)
+		if err != nil || math.IsNaN(n) || math.IsInf(n, 0) || n < 0 || n > 10000 {
+			return
+		}
+		radius = n
+	}
+	if drawerRect.x == v[0] && drawerRect.y == v[1] && drawerRect.w == v[2] && drawerRect.h == v[3] && drawerRect.radius == radius {
 		return
 	}
 	drawerRect.x, drawerRect.y, drawerRect.w, drawerRect.h = v[0], v[1], v[2], v[3]
+	drawerRect.radius = radius
 	if t := activeTab(); t != nil {
 		t.place()
 	}
@@ -73,6 +83,18 @@ func clipBrowserHost(host uintptr, page clipRect) {
 	}
 	full, _, _ := pCreateRectRgn.Call(0, 0, uintptr(page.right-page.left), uintptr(page.bottom-page.top))
 	cut, _, _ := pCreateRectRgn.Call(uintptr(r.left), uintptr(r.top), uintptr(r.right), uintptr(r.bottom))
+	if drawerRect.radius > 0 {
+		if cut != 0 {
+			pDeleteObject.Call(cut)
+		}
+		scale := float64(dpiFor(hwnd)) / 96
+		left := int32(math.Round(drawerRect.x*scale)) - page.left
+		top := int32(math.Round(drawerRect.y*scale)) - page.top
+		right := int32(math.Round((drawerRect.x+drawerRect.w)*scale)) - page.left
+		bottom := int32(math.Round((drawerRect.y+drawerRect.h)*scale)) - page.top
+		diameter := uintptr(math.Round(drawerRect.radius * 2 * scale))
+		cut, _, _ = pCreateRoundRectRgn.Call(uintptr(left), uintptr(top), uintptr(right), uintptr(bottom), diameter, diameter)
+	}
 	if full == 0 || cut == 0 {
 		if full != 0 {
 			pDeleteObject.Call(full)

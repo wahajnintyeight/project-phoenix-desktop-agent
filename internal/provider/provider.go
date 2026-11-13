@@ -231,15 +231,16 @@ type Request struct {
 	OnlyMCP  []string
 
 	// MCPConfig is the path of a JSON file of MCP servers (Phoenix's own tool server).
-	MCPConfig     string
-	CodexMCPURL   string   // per-run local tool proxy, never persisted
-	CodexMCPToken string   // passed in the child environment, never on the command line
-	CodexDisable  []string // Codex built-in features to turn off (set by the provider itself)
-	AllowedTools  []string // tool names the CLI may use without asking, e.g. "mcp__phoenix__*"
-	Tools         []Tool
-	ExecuteTool   ToolExecutor
-	ApproveTool   ToolApprover
-	MaxBudgetUSD  float64 // 0 means no cap
+	MCPConfig       string
+	CodexMCPURL     string   // per-run local tool proxy, never persisted
+	CodexMCPToken   string   // passed in the child environment, never on the command line
+	CodexDisable    []string // Codex built-in features to turn off (set by the provider itself)
+	AllowedTools    []string // tool names the CLI may use without asking, e.g. "mcp__phoenix__*"
+	Tools           []Tool
+	ExecuteTool     ToolExecutor
+	ApproveTool     ToolApprover
+	MaxBudgetUSD    float64 // 0 means no cap
+	MaxOutputTokens int     // HTTP providers: maximum completion tokens; 0 uses provider default
 }
 
 // Result is the outcome of a run.

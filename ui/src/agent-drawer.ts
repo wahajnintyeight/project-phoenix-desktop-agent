@@ -38,7 +38,7 @@ export function initAgentDrawer(): void {
       const top = Math.min(r.top, popup?.top ?? r.top);
       const right = Math.max(r.right, popup?.right ?? r.right);
       const bottom = Math.max(r.bottom, popup?.bottom ?? r.bottom);
-      const fields = drawerMode ? [left, top, right - left, bottom - top] : [0, 0, 0, 0];
+      const fields = drawerMode ? [left, top, right - left, bottom - top, collapsed && !popup ? r.height / 2 : 0] : [0, 0, 0, 0, 0];
       const value = fields.map((v) => String(Math.round(v * 100) / 100));
       const key = value.join("|");
       if (key !== lastBounds) { lastBounds = key; send("d", ...value); }
@@ -81,8 +81,7 @@ export function initAgentDrawer(): void {
     collapsed = height <= min;
     workspace.dataset["drawerCollapsed"] = String(collapsed);
     if (collapsed) document.querySelector<HTMLDetailsElement>("#agent-session-slot details")?.removeAttribute("open");
-    if (collapsed) collapse.replaceChildren(icon("chat", 16));
-    else collapse.textContent = "Minimize";
+    collapse.replaceChildren(icon(collapsed ? "chat" : "chevronDown", 16));
     collapse.setAttribute("aria-label", collapsed ? "Open chat" : "Minimize agent drawer");
     collapse.title = collapsed ? "Open chat" : "Minimize agent drawer";
     if (details) details.disabled = collapsed;
@@ -92,7 +91,7 @@ export function initAgentDrawer(): void {
   const setMode = (drawer: boolean): void => {
     drawerMode = drawer;
     workspace.dataset["agentMode"] = drawer ? "drawer" : "side";
-    mode.textContent = drawer ? "Side panel" : "Expand";
+    mode.replaceChildren(icon(drawer ? "panelRight" : "panelBottom", 16));
     mode.setAttribute("aria-label", drawer ? "Move agent to side panel" : "Move agent to bottom drawer");
     mode.title = drawer ? "Move agent to side panel" : "Move agent to bottom drawer";
     if (drawer) {

@@ -83,6 +83,13 @@
 }
 .workspace[data-agent-mode="drawer"][data-drawer-collapsed="true"] .chat-compact-status[hidden] { display: none; }
 .chat-compact-status-text { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.chat-compact-reply { display: none; }
+.workspace[data-agent-mode="drawer"][data-drawer-collapsed="true"] .chat-compact-reply:not([hidden]) { display: flex; min-width: 0; max-width: 48%; align-items: center; gap: 8px; color: var(--color-fg); text-align: left; font-size: 12px; }
+.workspace[data-agent-mode="drawer"][data-drawer-collapsed="true"] .composer:has(.chat-compact-status:not([hidden])) .chat-compact-reply { display: none; }
+.chat-compact-reply-text { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.chat-compact-reply-dot { width: 6px; height: 6px; flex: none; border-radius: 50%; background: var(--color-accent); }
+.chat-compact-reply[data-streaming="true"] .chat-compact-reply-dot { animation: compact-reply-pulse 1.4s ease-in-out infinite; }
+@keyframes compact-reply-pulse { 50% { opacity: .4; transform: scale(.65); } }
 .mention-menu { display: block; }
 .mention-menu[hidden] { display: none; }
 .mention-option { gap: 10px; }
@@ -107,11 +114,13 @@
 @media (prefers-reduced-motion: reduce) {
   .workspace[data-agent-mode="drawer"][data-drawer-collapsed="true"] .agent { transition: none; }
   .chat-compact-wave i { animation: none; transform: scaleY(.55); opacity: 1; }
+  .chat-compact-reply-dot { animation: none !important; }
 }
 
 .agent-layout-bar { @apply relative z-20 flex h-11 shrink-0 items-center gap-2 border-b border-line px-3; }
 .agent-layout-title { @apply flex-1 text-sm font-semibold text-fg; }
 .agent-layout-button { @apply rounded-md px-2 py-1 text-xs text-fg-muted; }
+.agent-layout-bar :is(#agent-collapse, #agent-mode) { display: grid; width: 32px; height: 32px; flex: none; place-items: center; padding: 0; }
 .agent-layout-button:hover { @apply bg-raised text-fg; }
 .agent-details-toggle { @apply inline-flex items-center gap-1.5; }
 .agent-details-toggle[aria-expanded="true"] { @apply bg-raised text-fg; }

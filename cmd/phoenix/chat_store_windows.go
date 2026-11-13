@@ -32,21 +32,23 @@ const (
 )
 
 type chatTranscriptMessage struct {
-	Role      string `json:"role"`
-	Content   string `json:"content"`
-	At        int64  `json:"at,omitempty"`
-	Context   string `json:"context,omitempty"`
-	InContext bool   `json:"inContext,omitempty"`
-	Provider  string `json:"provider,omitempty"`
-	Model     string `json:"model,omitempty"`
+	Role        string   `json:"role"`
+	Content     string   `json:"content"`
+	At          int64    `json:"at,omitempty"`
+	Context     string   `json:"context,omitempty"`
+	InContext   bool     `json:"inContext,omitempty"`
+	Provider    string   `json:"provider,omitempty"`
+	Model       string   `json:"model,omitempty"`
+	Suggestions []string `json:"suggestions,omitempty"`
 }
 
 type chatDisplayMessage struct {
-	Role     string `json:"role"`
-	Content  string `json:"content"`
-	At       int64  `json:"at,omitempty"`
-	Provider string `json:"provider,omitempty"`
-	Model    string `json:"model,omitempty"`
+	Role        string   `json:"role"`
+	Content     string   `json:"content"`
+	At          int64    `json:"at,omitempty"`
+	Provider    string   `json:"provider,omitempty"`
+	Model       string   `json:"model,omitempty"`
+	Suggestions []string `json:"suggestions,omitempty"`
 }
 
 type savedChat struct {
@@ -215,6 +217,13 @@ func cleanSavedChat(c *savedChat) bool {
 		m.Context = clippedUTF8(m.Context, chatStoreMaxMessage)
 		m.Provider = clippedText(m.Provider, 48)
 		m.Model = clippedText(m.Model, 96)
+		if m.Role == "assistant" && len(m.Suggestions) == 2 {
+			m.Suggestions = []string{clippedUTF8(m.Suggestions[0], 512), clippedUTF8(m.Suggestions[1], 512)}
+			b, _ := json.Marshal(m.Suggestions)
+			m.Suggestions = suggestionOptions(string(b))
+		} else {
+			m.Suggestions = nil
+		}
 		if m.Content == "" {
 			continue
 		}
@@ -564,7 +573,7 @@ func activateSavedChat(c *savedChat) {
 	display := make([]chatDisplayMessage, 0, len(c.Messages))
 	for _, m := range c.Messages {
 		if m.Role == "user" || m.Role == "assistant" {
-			display = append(display, chatDisplayMessage{Role: m.Role, Content: m.Content, At: m.At, Provider: m.Provider, Model: m.Model})
+			display = append(display, chatDisplayMessage{Role: m.Role, Content: m.Content, At: m.At, Provider: m.Provider, Model: m.Model, Suggestions: m.Suggestions})
 		}
 		if !m.InContext || (m.Role != "user" && m.Role != "assistant") {
 			continue

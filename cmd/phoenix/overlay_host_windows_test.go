@@ -67,6 +67,16 @@ func TestBrowserHostRegionLeavesPageInteractive(t *testing.T) {
 	if outsidePanel == 0 || underPanel != 0 {
 		t.Fatalf("unexpected region: outside=%d under panel=%d", outsidePanel, underPanel)
 	}
+	drawerRect.radius = 25 / scale
+	clipBrowserHost(host, clipRect{0, 0, 800, 600})
+	if result, _, _ := getRegion.Call(host, region); result == 0 {
+		t.Fatal("get rounded browser region")
+	}
+	corner, _, _ := inside.Call(region, 200, 100)
+	center, _, _ := inside.Call(region, 250, 150)
+	if corner == 0 || center != 0 {
+		t.Fatalf("unexpected rounded region: corner=%d center=%d", corner, center)
+	}
 	drawerOpen = false
 	clipBrowserHost(host, clipRect{0, 0, 800, 600})
 	if result, _, _ := getRegion.Call(host, region); result != 0 {
