@@ -1,4 +1,5 @@
 import { send } from "./protocol";
+import { icon } from "./icons";
 
 const STORAGE_KEY = "phoenix.agentDrawer";
 
@@ -32,7 +33,12 @@ export function initAgentDrawer(): void {
     boundsFrame = requestAnimationFrame(() => {
       boundsFrame = 0;
       const r = agent.getBoundingClientRect();
-      const fields = drawerMode && !collapsed ? [r.x, r.y, r.width, r.height] : [0, 0, 0, 0];
+      const popup = collapsed ? agent.querySelector<HTMLElement>(".slash-menu:not([hidden])")?.getBoundingClientRect() : undefined;
+      const left = Math.min(r.left, popup?.left ?? r.left);
+      const top = Math.min(r.top, popup?.top ?? r.top);
+      const right = Math.max(r.right, popup?.right ?? r.right);
+      const bottom = Math.max(r.bottom, popup?.bottom ?? r.bottom);
+      const fields = drawerMode ? [left, top, right - left, bottom - top] : [0, 0, 0, 0];
       const value = fields.map((v) => String(Math.round(v * 100) / 100));
       const key = value.join("|");
       if (key !== lastBounds) { lastBounds = key; send("d", ...value); }
@@ -53,7 +59,7 @@ export function initAgentDrawer(): void {
     catch { /* Preferences remain available for this session. */ }
   };
   const syncOverlay = (): void => {
-    const open = drawerMode && !collapsed;
+    const open = drawerMode;
     reportBounds();
     if (!ready || open === overlaySent) return;
     overlaySent = open;
@@ -75,10 +81,12 @@ export function initAgentDrawer(): void {
     collapsed = height <= min;
     workspace.dataset["drawerCollapsed"] = String(collapsed);
     if (collapsed) document.querySelector<HTMLDetailsElement>("#agent-session-slot details")?.removeAttribute("open");
-    collapse.textContent = collapsed ? "Restore" : "Minimize";
-    collapse.setAttribute("aria-label", collapsed ? "Restore agent drawer" : "Minimize agent drawer");
+    if (collapsed) collapse.replaceChildren(icon("chat", 16));
+    else collapse.textContent = "Minimize";
+    collapse.setAttribute("aria-label", collapsed ? "Open chat" : "Minimize agent drawer");
+    collapse.title = collapsed ? "Open chat" : "Minimize agent drawer";
     if (details) details.disabled = collapsed;
-    agent.querySelectorAll<HTMLElement>("ph-context, .agent-tabs, .agent-body").forEach((element) => { element.inert = collapsed; });
+    agent.querySelectorAll<HTMLElement>("ph-context, .agent-tabs").forEach((element) => { element.inert = collapsed; });
     syncOverlay();
   };
   const setMode = (drawer: boolean): void => {
@@ -96,13 +104,18 @@ export function initAgentDrawer(): void {
     else {
       workspace.dataset["drawerCollapsed"] = "false";
       if (details) details.disabled = false;
-      agent.querySelectorAll<HTMLElement>("ph-context, .agent-tabs, .agent-body").forEach((element) => { element.inert = false; });
+      agent.querySelectorAll<HTMLElement>("ph-context, .agent-tabs").forEach((element) => { element.inert = false; });
       syncOverlay();
     }
   };
   setMode(drawerMode);
   requestAnimationFrame(() => { ready = true; syncOverlay(); });
-  new ResizeObserver(reportBounds).observe(agent);
+  const boundsObserver = new ResizeObserver(reportBounds);
+  boundsObserver.observe(agent);
+  agent.querySelectorAll<HTMLElement>(".slash-menu").forEach((menu) => {
+    boundsObserver.observe(menu);
+    new MutationObserver(reportBounds).observe(menu, { attributes: true, attributeFilter: ["hidden"] });
+  });
   window.addEventListener("resize", reportBounds, { passive: true });
   mode.addEventListener("click", () => { setMode(!drawerMode); save(); });
   collapse.addEventListener("click", () => {

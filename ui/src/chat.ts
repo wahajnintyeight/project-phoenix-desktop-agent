@@ -9,6 +9,7 @@ import type { PhMcp } from "./mcp-settings";
 import "./setup-card";
 import { send } from "./protocol";
 import { resolveSlashCommand, searchSlashCommands, type SlashCommandDefinition } from "./slash-commands";
+import { MentionPicker } from "./mentions";
 
 export interface ChatEvent {
   k: "user" | "note" | "processing" | "tool" | "tool-result" | "approve" | "approved" | "start" | "delta" | "done" | "error" | "stopped" | "reset" | "restore" | "queue" | "interrupted";
@@ -157,6 +158,8 @@ export class PhChat extends HTMLElement {
   readonly #empty = el("div", "chat-empty");
   readonly #processing = el("div", "chat-processing");
   readonly #processingText = el("span");
+  readonly #compactStatus = el("div", "chat-compact-status");
+  readonly #compactStatusText = el("span", "chat-compact-status-text");
   readonly #input = el("textarea", "chat-input");
   readonly #commandMenu = el("div", "slash-menu");
   readonly #send = el("button", "send-btn");
@@ -239,6 +242,13 @@ export class PhChat extends HTMLElement {
     this.#processing.setAttribute("aria-live", "polite");
     this.#processing.hidden = true;
     this.#processing.append(el("span", "chat-spinner"), this.#processingText);
+    this.#compactStatus.setAttribute("role", "status");
+    this.#compactStatus.setAttribute("aria-live", "polite");
+    this.#compactStatus.hidden = true;
+    const wave = el("span", "chat-compact-wave");
+    wave.setAttribute("aria-hidden", "true");
+    wave.append(el("i"), el("i"), el("i"));
+    this.#compactStatus.append(wave, this.#compactStatusText);
 
     // The empty state teaches the one non-obvious feature: sharing the open tab.
     const ideas = el("div", "chat-ideas");
@@ -283,6 +293,7 @@ export class PhChat extends HTMLElement {
     // Sharing is the user's choice, kept between sessions: the page's text goes to the model.
     this.#share.type = "button";
     this.#share.title = "Send this tab's text with your message";
+    this.#share.setAttribute("aria-label", "Share this page with the agent");
     this.#share.append(icon("page", 14), el("span", undefined, "Share page"));
     try { this.#shareOn = localStorage.getItem("phoenix.sharePage") === "1"; } catch { /* storage unavailable */ }
     this.#setShare(this.#shareOn);
@@ -296,12 +307,13 @@ export class PhChat extends HTMLElement {
     const bar = el("div", "composer-bar");
     bar.append(this.#share, picker, this.#send);
     const composer = el("div", "composer");
-    composer.append(this.#input, bar);
+    composer.append(this.#compactStatus, this.#input, bar);
     const wrap = el("div", "chat-composer");
     this.#queue.hidden = true;
     this.#queue.setAttribute("role", "list");
     this.#queue.setAttribute("aria-label", "Queued messages");
-    wrap.append(this.#commandMenu, this.#queue, composer);
+    const mentions = document.createElement("ph-mentions") as MentionPicker;
+    wrap.append(this.#commandMenu, mentions, this.#queue, composer);
 
     this.#newChat.type = "button";
     this.#newChat.disabled = true; // nothing to leave until the first message
@@ -356,6 +368,7 @@ export class PhChat extends HTMLElement {
       const command = this.#commands[Number(option?.dataset["commandIndex"])];
       if (command) this.#runCommand(command);
     }, { passive: true });
+    mentions.attach(this.#input);
     // While the agent works the button is Stop; with text in the box it queues that message.
     this.#send.addEventListener("click", () => (this.#running && this.#input.value.trim() === "" ? send("g", "stop") : this.#submitInput()), { passive: true });
     this.#share.addEventListener("click", () => this.#setShare(!this.#shareOn), { passive: true });
@@ -598,12 +611,21 @@ export class PhChat extends HTMLElement {
     this.scrollToLatest();
   }
 
+  #setCompactStatus(text: string): void {
+    this.#compactStatusText.textContent = text;
+    this.#compactStatus.hidden = !text;
+  }
+
   #setRunning(on: boolean): void {
+    const wasRunning = this.#running;
     if (on && !this.#running) {
       this.#pendingChoices?.setChoiceMode("inactive");
       this.#pendingChoices = null;
     }
     this.#running = on;
+    this.dataset["running"] = String(on);
+    if (!on) this.#setCompactStatus("");
+    else if (!wasRunning) this.#setCompactStatus("Starting…");
     this.#newChat.disabled = on || !this.#empty.hidden;
     this.#log.setAttribute("aria-busy", String(on));
     this.#chatHistory.dataset["running"] = String(on);
@@ -739,6 +761,7 @@ export class PhChat extends HTMLElement {
         break;
       }
       case "interrupted": {
+        this.#setCompactStatus("Paused · restore chat");
         this.#empty.hidden = true;
         const card = el("div", "chat-approval");
         card.append(el("p", "chat-approval-label", "Interrupted run"), el("p", "chat-approval-what", ev.text ?? ""));
@@ -757,15 +780,18 @@ export class PhChat extends HTMLElement {
       case "processing": {
         if (!ev.text) {
           this.#processing.hidden = true;
+          this.#setCompactStatus(this.#running ? "Thinking…" : "");
           break;
         }
         if (!this.#running) this.#setRunning(true); // a queued message or a summary step started it
+        this.#setCompactStatus(ev.text);
         this.#processingText.textContent = ev.text;
         this.#processing.hidden = false;
         this.#log.append(this.#processing);
         break;
       }
       case "tool": {
+        this.#setCompactStatus(stepTitle(ev));
         this.#processing.hidden = true;
         this.#empty.hidden = true;
         // A reply box that is still empty (the agent went straight to a tool) is dropped; the
@@ -815,6 +841,7 @@ export class PhChat extends HTMLElement {
         break;
       }
       case "tool-result": {
+        this.#setCompactStatus("Thinking…");
         const call = ev.toolId ? this.#toolCalls.get(ev.toolId) : undefined;
         if (call) {
           call.group.finish(!!ev.toolError);
@@ -827,9 +854,11 @@ export class PhChat extends HTMLElement {
         break;
       }
       case "approve":
+        this.#setCompactStatus("Waiting for approval");
         this.#approval(ev);
         break;
       case "approved": {
+        this.#setCompactStatus(ev.decision === "deny" ? "Tool declined" : "Thinking…");
         const card = this.#log.querySelector<HTMLElement>(`.chat-approval[data-id="${CSS.escape(ev.id ?? "")}"]`);
         if (card) this.#answer(card, ev.decision === "deny" ? "Declined" : ev.decision === "always" ? "Always allowed this tool · manage in Computer Use settings" : ev.decision === "all" ? "Allowed this tool for this message" : "Allowed");
         break;
@@ -838,6 +867,7 @@ export class PhChat extends HTMLElement {
         if (this.#lastUser) this.#lastUser.textContent = ev.text ?? "";
         break;
       case "start": {
+        this.#setCompactStatus("Thinking…");
         this.#who = [ev.provider, ev.model].filter(Boolean).join(" · ") || "Agent";
         this.#current?.flush();
         this.#current?.setChoiceMode("inactive");
@@ -845,6 +875,7 @@ export class PhChat extends HTMLElement {
         break;
       }
       case "delta": {
+        this.#setCompactStatus("Writing reply…");
         this.#processing.hidden = true;
         // A reply that begins without a start event (or after a reset) still needs a box.
         if (!this.#current) {

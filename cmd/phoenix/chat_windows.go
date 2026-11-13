@@ -125,6 +125,10 @@ func handleChatOp(f []string) {
 		return
 	}
 	switch f[1] {
+	case "mentions":
+		if len(f) > 3 {
+			pushMentions(f[2], f[3])
+		}
 	case "send":
 		if len(f) > 4 && strings.HasPrefix(f[4], "c") { // older clients send one answer
 			go recordChoice(f[4][1:], f[2])
