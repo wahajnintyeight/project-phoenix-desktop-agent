@@ -81,13 +81,14 @@
     <div class="stage">
     <main class="slot" id="page-slot">
 
-      <div class="home mx-auto min-h-full w-full max-w-xl flex-col gap-6 px-6 pt-8 pb-12">
-        <div class="flex flex-col gap-3">
-          <h1 class="flex items-center gap-3">
+      <div class="home">
+        <div class="home-intro">
+          <h1 class="home-brand">
             <svg class="text-accent" viewBox="0 0 16 16" width="26" height="26" aria-hidden="true"><path d="M8 1.5c.4 2.2 2.8 3.3 2.8 6a2.8 2.8 0 0 1-5.6 0c0-1 .4-1.7.9-2.3.1.8.5 1.3 1 1.5C7 4.5 7.2 3 8 1.5Zm0 13a4.6 4.6 0 0 1-4.6-4.6c0-.5.1-1 .3-1.4.4 1.9 2 3 3.5 3.1h1.6c1.5-.1 3.1-1.2 3.5-3.1.2.4.3.9.3 1.4A4.6 4.6 0 0 1 8 14.5Z" fill="currentColor"/></svg>
             Phoenix
           </h1>
-          <p class="text-base text-pretty text-fg-muted">Browse with an AI agent beside you. Phoenix acts on your requests while you follow its progress.</p>
+          <p class="home-welcome">Where would you like to go?</p>
+          <p class="home-caption">Search the web, pick up where you left off, or give your agent a task.</p>
         </div>
 
         <div class="relative">
@@ -95,9 +96,14 @@
           <input id="home-search" class="home-search" type="text" placeholder="Search the web or enter an address" autocomplete="off" spellcheck="false" aria-label="Search the web or enter an address">
         </div>
 
+        <nav class="home-shortcuts" aria-label="Workspace">
+          <button type="button" class="home-shortcut" data-action="menu.tasks"><span>Tasks</span><span>View your automations</span></button>
+          <button type="button" class="home-shortcut" data-action="menu.files"><span>Files</span><span>Open your library</span></button>
+        </nav>
+
         <ph-history-list id="recent-sites"></ph-history-list>
 
-        <section class="flex flex-col gap-1">
+        <section id="home-get-started" class="flex flex-col gap-1" hidden>
           <h2 class="text-lg">Get started</h2>
           <ol>
             <li class="step" id="step-provider" data-done="false">

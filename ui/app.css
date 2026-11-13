@@ -278,8 +278,20 @@
   [data-view="files"] .files { display: block; height: 100%; }
 
   /* ── start page ──────────────────────────────────────────────────── */
-  .home-search { @apply h-11 w-full rounded-xl border border-line-strong bg-sunken pr-4 pl-11 text-base text-fg transition-colors; }
+  .home { flex-direction: column; width: min(100%, 760px); min-height: 100%; margin-inline: auto; padding: clamp(32px, 8vh, 80px) clamp(20px, 5vw, 48px) 64px; gap: 28px; }
+  .home-intro { display: flex; flex-direction: column; align-items: flex-start; }
+  .home-brand { display: flex; align-items: center; gap: 10px; color: var(--color-fg-muted); font-size: 15px; font-weight: 600; }
+  .home-brand svg { width: 21px; height: 21px; }
+  .home-welcome { margin-top: 28px; color: var(--color-fg); font-size: clamp(26px, 3vw, 34px); font-weight: 650; line-height: 1.2; letter-spacing: -.025em; }
+  .home-caption { margin-top: 8px; color: var(--color-fg-muted); font-size: 15px; line-height: 1.5; }
+  .home-search { @apply w-full rounded-xl border border-line-strong bg-sunken pr-4 pl-11 text-base text-fg transition-colors; height: 56px; }
   .home-search:focus { outline: none; }
+  .home-shortcuts { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; }
+  .home-shortcut { display: flex; flex-direction: column; align-items: flex-start; gap: 5px; min-width: 0; padding: 15px 17px; border: 1px solid var(--color-line); border-radius: 12px; background: var(--color-panel); text-align: left; transition: border-color 150ms, background-color 150ms; }
+  .home-shortcut:hover { border-color: var(--color-line-strong); background: var(--color-raised); }
+  .home-shortcut span:first-child { color: var(--color-fg); font-weight: 600; }
+  .home-shortcut span:last-child { color: var(--color-fg-muted); font-size: 13px; }
+  @container (max-width: 420px) { .home-shortcuts { grid-template-columns: 1fr; } }
   ph-history-list { @apply block; }
   .history-section { @apply flex flex-col gap-3; }
   .history-heading { @apply flex items-center justify-between gap-3; }

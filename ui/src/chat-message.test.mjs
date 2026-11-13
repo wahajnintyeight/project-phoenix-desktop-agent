@@ -61,4 +61,7 @@ const vault = new Element("div", "chat-choice-vault");
 plain.mountChoices(vault);
 assert.equal(vault.children.length, 1, "the active menu must mount in the composer vault");
 assert.equal(menus(plain), 0, "vault menus must leave the transcript message");
+plain.dismissChoices();
+plain.setSuggestions(["Search again", "Change filters"]);
+assert.equal(vault.children.length, 0, "dismissed suggestions must not return on a repeated event");
 console.log("Chat message one-menu checks passed.");

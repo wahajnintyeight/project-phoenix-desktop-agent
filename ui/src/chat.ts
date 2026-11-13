@@ -307,13 +307,13 @@ export class PhChat extends HTMLElement {
     const bar = el("div", "composer-bar");
     bar.append(this.#share, picker, this.#send);
     const composer = el("div", "composer");
-    composer.append(this.#choiceVault.element, this.#compactStatus, this.#compactReply.element, this.#input, bar);
+    composer.append(this.#compactStatus, this.#compactReply.element, this.#input, bar);
     const wrap = el("div", "chat-composer");
     this.#queue.hidden = true;
     this.#queue.setAttribute("role", "list");
     this.#queue.setAttribute("aria-label", "Queued messages");
     const mentions = document.createElement("ph-mentions") as MentionPicker;
-    wrap.append(this.#commandMenu, mentions, this.#queue, composer);
+    wrap.append(this.#commandMenu, mentions, this.#queue, this.#choiceVault.element, composer);
 
     this.#newChat.type = "button";
     this.#newChat.disabled = true; // nothing to leave until the first message

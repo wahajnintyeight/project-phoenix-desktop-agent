@@ -238,6 +238,11 @@ document.querySelector(".agent-tabs")?.addEventListener("click", (e) => {
 // The start page's first step follows the quick picker: done once some provider can run.
 document.addEventListener("quickchange", (e) => {
   const { ready, current } = (e as CustomEvent<{ ready: number; current: string }>).detail;
+  const onboarding = $("home-get-started");
+  try {
+    if (ready > 0) localStorage.setItem("phoenix.onboarded", "1");
+    if (onboarding) onboarding.hidden = ready > 0 || localStorage.getItem("phoenix.onboarded") === "1";
+  } catch { if (onboarding) onboarding.hidden = ready > 0; }
   const step = $("step-provider");
   const text = $("step-provider-text");
   if (step) step.dataset["done"] = String(ready > 0);

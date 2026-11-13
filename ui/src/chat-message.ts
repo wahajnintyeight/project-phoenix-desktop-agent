@@ -19,6 +19,7 @@ export class Msg {
   #suggestions: ChoiceMenus | null = null;
   #choiceMode: ChoiceMode = "inactive";
   #choiceHost: HTMLElement | null = null;
+  #choicesDismissed = false;
 
   constructor(who: string, cls: string, markdown: boolean, at: number) {
     this.who = who;
@@ -77,7 +78,7 @@ export class Msg {
     if (!this.#md) return;
     const { body, choices } = splitChoices(this.#raw);
     this.#md.set(body);
-    if (choices.length) {
+    if (choices.length && !this.#choicesDismissed) {
       this.#suggestions?.element.remove();
       this.#suggestions = null;
       if (!this.#menus) {
@@ -105,7 +106,7 @@ export class Msg {
   }
 
   setSuggestions(options: string[], mode: ChoiceMode = "ready"): void {
-    if (this.getChoices().length) return;
+    if (this.#choicesDismissed || this.getChoices().length) return;
     if (!this.#suggestions) {
       this.#suggestions = new ChoiceMenus((answers) => this.box.dispatchEvent(new CustomEvent<ChoiceAnswer[]>("phoenix-answers", { bubbles: true, detail: answers })));
     }
@@ -115,6 +116,12 @@ export class Msg {
   }
 
   setSuggestionMode(mode: ChoiceMode): void { this.#suggestions?.setMode(mode); }
+
+  dismissChoices(): void {
+    this.#choicesDismissed = true;
+    this.#menus?.element.remove();
+    this.#suggestions?.element.remove();
+  }
 
   #placeChoices(menus: ChoiceMenus): void {
     const host = this.#choiceHost;

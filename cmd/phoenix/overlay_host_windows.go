@@ -88,11 +88,13 @@ func clipBrowserHost(host uintptr, page clipRect) {
 			pDeleteObject.Call(cut)
 		}
 		scale := float64(dpiFor(hwnd)) / 96
-		left := int32(math.Round(drawerRect.x*scale)) - page.left
-		top := int32(math.Round(drawerRect.y*scale)) - page.top
-		right := int32(math.Round((drawerRect.x+drawerRect.w)*scale)) - page.left
-		bottom := int32(math.Round((drawerRect.y+drawerRect.h)*scale)) - page.top
-		diameter := uintptr(math.Round(drawerRect.radius * 2 * scale))
+		// Leave room for WebView's antialiased pill edge outside the native region.
+		const margin int32 = 2
+		left := int32(math.Round(drawerRect.x*scale)) - page.left - margin
+		top := int32(math.Round(drawerRect.y*scale)) - page.top - margin
+		right := int32(math.Round((drawerRect.x+drawerRect.w)*scale)) - page.left + margin
+		bottom := int32(math.Round((drawerRect.y+drawerRect.h)*scale)) - page.top + margin
+		diameter := uintptr(int32(math.Round(drawerRect.radius*2*scale)) + 2*margin)
 		cut, _, _ = pCreateRoundRectRgn.Call(uintptr(left), uintptr(top), uintptr(right), uintptr(bottom), diameter, diameter)
 	}
 	if full == 0 || cut == 0 {

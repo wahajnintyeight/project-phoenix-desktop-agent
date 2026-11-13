@@ -33,7 +33,7 @@ export function initAgentDrawer(): void {
     boundsFrame = requestAnimationFrame(() => {
       boundsFrame = 0;
       const r = agent.getBoundingClientRect();
-      const popup = collapsed ? agent.querySelector<HTMLElement>(".slash-menu:not([hidden])")?.getBoundingClientRect() : undefined;
+      const popup = collapsed ? agent.querySelector<HTMLElement>(".slash-menu:not([hidden]), .chat-choice-vault:has(.chat-question-menus)")?.getBoundingClientRect() : undefined;
       const left = Math.min(r.left, popup?.left ?? r.left);
       const top = Math.min(r.top, popup?.top ?? r.top);
       const right = Math.max(r.right, popup?.right ?? r.right);
@@ -111,9 +111,9 @@ export function initAgentDrawer(): void {
   requestAnimationFrame(() => { ready = true; syncOverlay(); });
   const boundsObserver = new ResizeObserver(reportBounds);
   boundsObserver.observe(agent);
-  agent.querySelectorAll<HTMLElement>(".slash-menu").forEach((menu) => {
+  agent.querySelectorAll<HTMLElement>(".slash-menu, .chat-choice-vault").forEach((menu) => {
     boundsObserver.observe(menu);
-    new MutationObserver(reportBounds).observe(menu, { attributes: true, attributeFilter: ["hidden"] });
+    new MutationObserver(reportBounds).observe(menu, { attributes: true, attributeFilter: ["hidden"], childList: true });
   });
   window.addEventListener("resize", reportBounds, { passive: true });
   mode.addEventListener("click", () => { setMode(!drawerMode); save(); });
