@@ -10,3 +10,6 @@
 .chat-question-status { @apply text-xs text-fg-muted; }
 .chat-question-status:empty { display: none; }
 .chat-question-submit { @apply min-h-9 self-start; }
+.chat-choice-vault { position: absolute; z-index: 30; right: 0; bottom: calc(100% + 8px); left: 0; pointer-events: none; }
+.chat-choice-vault:empty { display: none; }
+.chat-choice-vault .chat-question-menus { max-width: none; max-height: min(42vh, 24rem); overflow-y: auto; margin: 0; padding: 14px; border: 1px solid var(--color-line-strong); border-radius: 16px; background: var(--color-overlay); box-shadow: 0 12px 32px #0006; pointer-events: auto; }

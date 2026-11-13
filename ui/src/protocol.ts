@@ -11,6 +11,7 @@
 //           r version     UI ready
 //           g send text [1|0] | act id | probe | stop | new | restore id | clear-history
 //           g mentions query sequence   search tasks, library items and MCP servers
+//           g suggest timestamp userIndex   request one post-response menu when the reply has none
 //           k refresh | save id name prompt kind every at | delete id | enable id 0|1 | run id | stop   saved tasks
 //           v sub id [a] [b]  provider settings: refresh, mode, key, clearkey, default,
 //                          login, test, model <id> <model> <effort>, search <url>

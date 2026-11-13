@@ -32,10 +32,7 @@ const (
 		"Use this format:\n```choices\nQuestion?\n- First option\n- Second option\n```\n" +
 		"The user can select an option or type a different answer for each question, and submits the answers together. " +
 		"Ask only for information genuinely needed for their request and use known facts. " +
-		"When your result presents multiple concrete candidates or options the user may want to pursue, also offer a single fenced ```actions block, even if the requested report is complete. " +
-		"Put a short question on the first line and a separate '- ' option for each viable candidate shown (up to eight); exclude candidates you ruled out. " +
-		"Each option must be a concise, self-contained instruction for a sensible next step, for example:\n```actions\nWhich company should I explore?\n- Explore Nextcloud\n- Explore PROBIS\n```\n" +
-		"Use actions for optional next steps, not personal facts; do not invent generic actions or claim the user selected one. Continue the task without waiting when no decision is needed. " +
+		"Phoenix offers optional follow-up suggestions after the response; do not add an optional actions block. Continue the task without waiting when no decision is needed. " +
 		"Do not use these blocks in scheduled-task reports or output that must be machine-readable."
 
 	chatSystem = "You are the assistant inside Phoenix, a Windows desktop workspace that has a web browser. " +
@@ -129,6 +126,14 @@ func handleChatOp(f []string) {
 	case "mentions":
 		if len(f) > 3 {
 			pushMentions(f[2], f[3])
+		}
+	case "suggest":
+		if len(f) > 3 {
+			at, err := strconv.ParseInt(f[2], 10, 64)
+			index, indexErr := strconv.Atoi(f[3])
+			if err == nil && indexErr == nil {
+				requestChatSuggestions(at, index)
+			}
 		}
 	case "send":
 		if len(f) > 4 && strings.HasPrefix(f[4], "c") { // older clients send one answer
@@ -605,11 +610,12 @@ func startChatRun(ctx context.Context, cancel context.CancelFunc, id provider.ID
 			default:
 				chat.history = append(chat.history, provider.Message{Role: "user", Content: text}, provider.Message{Role: "assistant", Content: answer})
 				at := commitSavedTurn(chatID, userIndex, answer, providerName(id), model)
+				prepareChatPostResponse(id, gen, chatID, userIndex, at, text, answer)
 				addAgentActivity("turn", "Agent completed", "completed", time.Since(started).Milliseconds())
 				if taskRun.id == "" {
 					notifyUser("chat", "Agent response ready", chatID, true)
 				}
-				postChat(chatEvent{K: "done", At: at, Model: model, Millis: time.Since(started).Milliseconds(), In: usage.InputTokens, Out: usage.OutputTokens, Cached: usage.CachedTokens, Cost: usage.CostUSD, Ctx: historyTokens(chat.history) + chatSystemTokens})
+				postChat(chatEvent{K: "done", ID: strconv.Itoa(userIndex), At: at, Model: model, Millis: time.Since(started).Milliseconds(), In: usage.InputTokens, Out: usage.OutputTokens, Cached: usage.CachedTokens, Cost: usage.CostUSD, Ctx: historyTokens(chat.history) + chatSystemTokens})
 				setAgentState("idle", "Agent idle", false)
 				if taskRun.id != "" {
 					status, report := taskOutcome(answer)
@@ -630,9 +636,6 @@ func startChatRun(ctx context.Context, cancel context.CancelFunc, id provider.ID
 			// fail every message behind it; steering always proceeds.
 			if chatQueue.steer || (err == nil && !res.IsError) {
 				drainQueue()
-			}
-			if err == nil && !res.IsError && !chat.busy && answer != "" {
-				startChatSuggestions(id, gen, chatID, userIndex, text, answer)
 			}
 		})
 	}()

@@ -2,6 +2,20 @@
 
 Notable Phoenix changes are listed here. Versions use the `vMAJOR.MINOR.PATCH` release tags.
 
+## [0.2.3] - 2026-11-13
+
+### Added
+
+- Mention tasks, MCP servers, and Files library items from anywhere in a chat draft with `@`.
+- Keep using the collapsed agent drawer as a compact chat input with live processing and reply previews.
+- Show two lightweight follow-up actions above the composer after a reply.
+
+### Changed
+
+- Generate one follow-up menu per assistant response and skip it when the response already contains choices.
+- Place active reply choices in the input vault above the composer, including after restoring a chat.
+- Use compact icons for the collapsed drawer controls.
+
 ## [0.2.2] - 2026-11-12
 
 ### Added

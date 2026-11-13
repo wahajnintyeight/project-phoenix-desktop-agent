@@ -2,6 +2,7 @@
 // draws what Go reports (`events`) and sends what the user types ("g send", "g stop",
 // "g new"). Every message is placed with textContent: model output is untrusted text.
 import { Msg } from "./chat-message";
+import { ChatChoiceVault } from "./chat-choice-vault";
 import type { ChoiceAnswer } from "./choices";
 import { el } from "./dom";
 import { icon, type IconName } from "./icons";
@@ -12,6 +13,7 @@ import { resolveSlashCommand, searchSlashCommands, type SlashCommandDefinition }
 import "./mentions";
 import type { MentionPicker } from "./mentions";
 import { CompactReply } from "./compact-reply";
+import { when } from "./chat-time";
 
 export interface ChatEvent {
   k: "user" | "note" | "processing" | "tool" | "tool-result" | "approve" | "approved" | "start" | "delta" | "done" | "error" | "stopped" | "reset" | "restore" | "queue" | "interrupted" | "suggestions";
@@ -59,15 +61,6 @@ interface SavedChatSummary {
 interface SavedChatList {
   current: string;
   items: SavedChatSummary[];
-}
-
-function when(iso: string): string {
-  const date = new Date(iso);
-  if (Number.isNaN(date.valueOf())) return "";
-  const days = Math.round((new Date().setHours(0, 0, 0, 0) - new Date(date).setHours(0, 0, 0, 0)) / 86_400_000);
-  if (days <= 0) return "Today";
-  if (days === 1) return "Yesterday";
-  return new Intl.DateTimeFormat(undefined, { dateStyle: "medium" }).format(date);
 }
 
 interface ToolCardState {
@@ -164,6 +157,7 @@ export class PhChat extends HTMLElement {
   readonly #processingText = el("span");
   readonly #compactStatus = el("div", "chat-compact-status");
   readonly #compactStatusText = el("span", "chat-compact-status-text");
+  readonly #choiceVault = new ChatChoiceVault();
   readonly #compactReply = new CompactReply();
   readonly #input = el("textarea", "chat-input");
   readonly #commandMenu = el("div", "slash-menu");
@@ -313,7 +307,7 @@ export class PhChat extends HTMLElement {
     const bar = el("div", "composer-bar");
     bar.append(this.#share, picker, this.#send);
     const composer = el("div", "composer");
-    composer.append(this.#compactStatus, this.#compactReply.element, this.#input, bar);
+    composer.append(this.#choiceVault.element, this.#compactStatus, this.#compactReply.element, this.#input, bar);
     const wrap = el("div", "chat-composer");
     this.#queue.hidden = true;
     this.#queue.setAttribute("role", "list");
@@ -705,6 +699,7 @@ export class PhChat extends HTMLElement {
   #apply(ev: ChatEvent): void {
     switch (ev.k) {
       case "reset":
+        this.#choiceVault.show();
         this.#suggestionTarget = null;
         this.#compactReply.clear();
         this.#pendingChoices = null;
@@ -721,6 +716,7 @@ export class PhChat extends HTMLElement {
         this.#setRunning(false);
         break;
       case "restore": {
+        this.#choiceVault.show();
         this.#suggestionTarget = null;
         this.#compactReply.clear();
         this.#pendingChoices = null;
@@ -752,7 +748,7 @@ export class PhChat extends HTMLElement {
             m.flush();
             m.meta.title = who;
             if (message.suggestions?.length === 2) m.setSuggestions(message.suggestions, at === restored.length - 1 ? "ready" : "inactive");
-            if (at === restored.length - 1) this.#suggestionTarget = m;
+            if (at === restored.length - 1) { this.#suggestionTarget = m; this.#choiceVault.show(m); }
             if (at === restored.length - 1 && m.getChoices().length) this.#pendingChoices = m;
           }
         }
@@ -761,6 +757,7 @@ export class PhChat extends HTMLElement {
         break;
       }
       case "user": {
+        this.#choiceVault.show();
         this.#compactReply.clear();
         this.#processing.hidden = true;
         this.#toolCalls.clear();
@@ -921,11 +918,13 @@ export class PhChat extends HTMLElement {
           c.meta.textContent = bits.filter(Boolean).join(" · ");
           c.meta.title = [c.who, ev.out ? `${ev.in ?? 0} in, ${ev.out} out` : "", ev.cached ? `${ev.cached} cache reads reported by provider` : ""].filter(Boolean).join(" · ");
         }
+        this.#choiceVault.show(c ?? undefined);
         this.#pendingChoices = c && c.getChoices().length ? c : null;
         this.#suggestionTarget = c;
         this.#current = null;
         this.#setRunning(false);
         this.#pendingChoices?.setChoiceMode("ready");
+        if (c && !this.#pendingChoices && ev.at && ev.id) send("g", "suggest", String(ev.at), ev.id);
         break;
       }
       case "suggestions":

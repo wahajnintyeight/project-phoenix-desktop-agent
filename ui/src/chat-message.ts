@@ -18,6 +18,7 @@ export class Msg {
   #menus: ChoiceMenus | null = null;
   #suggestions: ChoiceMenus | null = null;
   #choiceMode: ChoiceMode = "inactive";
+  #choiceHost: HTMLElement | null = null;
 
   constructor(who: string, cls: string, markdown: boolean, at: number) {
     this.who = who;
@@ -77,12 +78,14 @@ export class Msg {
     const { body, choices } = splitChoices(this.#raw);
     this.#md.set(body);
     if (choices.length) {
+      this.#suggestions?.element.remove();
+      this.#suggestions = null;
       if (!this.#menus) {
         this.#menus = new ChoiceMenus((answers) => this.box.dispatchEvent(new CustomEvent<ChoiceAnswer[]>("phoenix-answers", { bubbles: true, detail: answers })));
-        this.text.after(this.#menus.element);
       }
       this.#menus.update(choices);
       this.#menus.setMode(this.#choiceMode);
+      this.#placeChoices(this.#menus);
     } else {
       this.#menus?.element.remove();
       this.#menus = null;
@@ -95,16 +98,32 @@ export class Msg {
 
   setChoiceMode(mode: ChoiceMode): void { this.#choiceMode = mode; this.#menus?.setMode(mode); }
 
+  mountChoices(host: HTMLElement | null): void {
+    this.#choiceHost = host;
+    if (this.#menus) this.#placeChoices(this.#menus);
+    if (this.#suggestions) this.#placeChoices(this.#suggestions);
+  }
+
   setSuggestions(options: string[], mode: ChoiceMode = "ready"): void {
+    if (this.getChoices().length) return;
     if (!this.#suggestions) {
       this.#suggestions = new ChoiceMenus((answers) => this.box.dispatchEvent(new CustomEvent<ChoiceAnswer[]>("phoenix-answers", { bubbles: true, detail: answers })));
-      this.box.append(this.#suggestions.element);
     }
     this.#suggestions.update([{ question: "What would you like to do next?", options, kind: "action" }]);
     this.#suggestions.setMode(mode);
+    this.#placeChoices(this.#suggestions);
   }
 
   setSuggestionMode(mode: ChoiceMode): void { this.#suggestions?.setMode(mode); }
+
+  #placeChoices(menus: ChoiceMenus): void {
+    const host = this.#choiceHost;
+    if (host) host.append(menus.element);
+    else if (menus.element.parentElement !== this.box) {
+      if (menus === this.#menus) this.text.after(menus.element);
+      else this.box.append(menus.element);
+    }
+  }
 
   #copyText(): void {
     const text = this.#md ? splitChoices(this.#raw).body : this.#raw;

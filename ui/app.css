@@ -922,7 +922,7 @@
   .slash-name { @apply shrink-0 font-mono text-xs text-accent; }
   .slash-description { @apply min-w-0 text-xs text-fg-muted; }
   .slash-empty { @apply px-3 py-2 text-xs text-fg-muted; }
-  .composer { @apply rounded-2xl p-1.5; background: var(--card-soft); box-shadow: inset 0 0 0 1px var(--card-edge); }
+  .composer { @apply relative rounded-2xl p-1.5; background: var(--card-soft); box-shadow: inset 0 0 0 1px var(--card-edge); }
   .composer:has(.chat-input:focus-visible) { box-shadow: inset 0 0 0 1px var(--color-mauve-shadow-600); }
   .chat-input { @apply block max-h-40 min-h-11 w-full resize-none bg-transparent px-3 pt-2.5 pb-1 text-base text-fg; font: inherit; line-height: 1.5; }
   .chat-input:focus { outline: none; }

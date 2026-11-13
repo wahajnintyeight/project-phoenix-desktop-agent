@@ -15,8 +15,50 @@ var chatSuggestions struct {
 	cancel   context.CancelFunc
 }
 
+type postResponse struct {
+	id         provider.ID
+	generation int
+	chatID     string
+	userIndex  int
+	at         int64
+	question   string
+	answer     string
+	requested  bool
+}
+
+var chatPostResponse postResponse
+
+func prepareChatPostResponse(id provider.ID, generation int, chatID string, userIndex int, at int64, question, answer string) {
+	chatPostResponse = postResponse{}
+	if at <= 0 || strings.TrimSpace(answer) == "" {
+		return
+	}
+	chatPostResponse = postResponse{id: id, generation: generation, chatID: chatID, userIndex: userIndex, at: at,
+		question: clippedUTF8(question, 1200), answer: clippedUTF8(answer, 3600)}
+}
+
+func claimChatPostResponse(at int64, userIndex int) (postResponse, bool) {
+	p := chatPostResponse
+	if p.at == 0 || p.at != at || p.userIndex != userIndex || p.requested || !suggestionCurrent(chatSuggestions.sequence, p.generation, p.chatID, p.userIndex) {
+		return postResponse{}, false
+	}
+	chatPostResponse.requested = true
+	return p, true
+}
+
+func requestChatSuggestions(at int64, userIndex int) {
+	if hub == nil {
+		return
+	}
+	p, ok := claimChatPostResponse(at, userIndex)
+	if ok {
+		startChatSuggestions(p.id, p.generation, p.chatID, p.userIndex, p.at, p.question, p.answer)
+	}
+}
+
 func cancelChatSuggestions() {
 	chatSuggestions.sequence++
+	chatPostResponse = postResponse{}
 	if chatSuggestions.cancel != nil {
 		chatSuggestions.cancel()
 		chatSuggestions.cancel = nil
@@ -58,7 +100,7 @@ func suggestionCurrent(sequence uint64, generation int, chatID string, userIndex
 	return sequence == chatSuggestions.sequence && generation == chat.gen && chat.currentID == chatID && !chat.busy && chat.pendingMessageIndex == userIndex
 }
 
-func startChatSuggestions(id provider.ID, generation int, chatID string, userIndex int, question, answer string) {
+func startChatSuggestions(id provider.ID, generation int, chatID string, userIndex int, answerAt int64, question, answer string) {
 	cancelChatSuggestions()
 	ctx, cancel := context.WithTimeout(context.Background(), 20*time.Second)
 	chatSuggestions.cancel = cancel
@@ -78,7 +120,7 @@ func startChatSuggestions(id provider.ID, generation int, chatID string, userInd
 			chatSuggestions.cancel = nil
 			if c := findSavedChat(chatID); c != nil && len(c.Messages) > 0 {
 				last := &c.Messages[len(c.Messages)-1]
-				if last.Role == "assistant" && last.Content == clippedUTF8(strings.ToValidUTF8(answer, "�"), chatStoreMaxMessage) {
+				if last.Role == "assistant" && last.At == answerAt {
 					last.Suggestions = options
 					persistSavedChats()
 				}

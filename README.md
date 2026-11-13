@@ -12,7 +12,9 @@
 
 Phoenix brings a multi-tab browser and AI provider controls into one native desktop app. It is being built around a simple idea: keep the person in control, make the agent's work visible, and make actions visible while the agent works.
 
-> **Project status:** Early development. The browser, provider setup, and model chat are implemented. Claude, Codex, and OpenAI-compatible API providers can inspect and operate Phoenix browser tabs through built-in browser tools. Native computer use can inspect and operate Windows apps without an external desktop agent. Browser file transfers are still in progress. There is no published release at this time.
+> **Latest release:** [Phoenix v0.2.3](https://github.com/wahajnintyeight/project-phoenix-desktop-agent/releases/latest) for Windows. See the [changelog](CHANGELOG.md) for this release's changes.
+
+Phoenix is in early development. The browser, provider setup, and model chat are implemented. Claude, Codex, and OpenAI-compatible API providers can inspect and operate Phoenix browser tabs through built-in browser tools. Native computer use can inspect and operate Windows apps without an external desktop agent. Browser file transfers are still in progress.
 
 ## What works today
 
@@ -22,6 +24,9 @@ Phoenix brings a multi-tab browser and AI provider controls into one native desk
 - A quick-action bar under the page: one-click requests that change with the page you are on (a job posting, an article, a form, search results, or text you have selected), so you send a request without typing it.
 - Provider setup, model selection, connection checks, and a quick model picker.
 - Streaming chat with the selected model, with an optional **Share page** control to include the active page's readable text in your message.
+- Search for tasks, MCP servers, and files or folders from the Files library by typing `@` anywhere in a message.
+- Collapse the agent drawer into a compact, usable chat bar. It shows live processing status and the current reply while the agent works.
+- Replies can offer two lightweight follow-up actions above the message composer. Phoenix avoids generating a second menu when the reply already contains choices.
 - Resize the assistant panel by dragging its left edge; the width is remembered. The divider also supports arrow keys, Shift for larger steps, and double-click to reset.
 - Saved chats and an activity timeline survive restarts. Phoenix restores the latest chat on launch; older conversations are available from the Chats menu. Activity records contain only tool labels, permission decisions and run outcomes.
 - **Notifications:** review recent task outcomes, agent responses and approval requests in the Notifications panel. Choose which categories alert you; Windows notifications open the related task or chat when Phoenix is in the background. Notification text omits conversation and page content.

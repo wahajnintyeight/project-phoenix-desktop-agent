@@ -5,6 +5,8 @@ import (
 	"reflect"
 	"strings"
 	"testing"
+
+	"phoenix/internal/provider"
 )
 
 func TestSuggestionOptions(t *testing.T) {
@@ -26,6 +28,36 @@ func TestSuggestionOptions(t *testing.T) {
 	got := suggestionOptions(`["` + strings.Repeat("a", 120) + `", "Other"]`)
 	if len([]rune(got[0])) != 80 {
 		t.Fatalf("option was not bounded: %q", got[0])
+	}
+}
+
+func TestPostResponseCanBeClaimedOnlyOnce(t *testing.T) {
+	oldChat, oldSuggestions, oldPost := chat, chatSuggestions, chatPostResponse
+	t.Cleanup(func() { chat, chatSuggestions, chatPostResponse = oldChat, oldSuggestions, oldPost })
+	chat.gen, chat.currentID, chat.pendingMessageIndex, chat.busy = 3, "session", 7, false
+	chatSuggestions.cancel = nil
+	prepareChatPostResponse(provider.Codex, 3, "session", 7, 42, "Question", "Answer")
+	if _, ok := claimChatPostResponse(41, 7); ok {
+		t.Fatal("wrong reply accepted")
+	}
+	if _, ok := claimChatPostResponse(42, 6); ok {
+		t.Fatal("wrong user turn accepted")
+	}
+	if p, ok := claimChatPostResponse(42, 7); !ok || p.answer != "Answer" {
+		t.Fatalf("current reply rejected: %+v", p)
+	}
+	if _, ok := claimChatPostResponse(42, 7); ok {
+		t.Fatal("reply claimed twice")
+	}
+	prepareChatPostResponse(provider.Codex, 3, "session", 7, 43, "Question", "Answer")
+	chat.busy = true
+	if _, ok := claimChatPostResponse(43, 7); ok {
+		t.Fatal("claimed during a new turn")
+	}
+	chat.busy = false
+	cancelChatSuggestions()
+	if _, ok := claimChatPostResponse(43, 7); ok {
+		t.Fatal("cancelled reply claimed")
 	}
 }
 
