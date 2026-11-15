@@ -810,8 +810,7 @@
   .chat-idea-text { @apply min-w-0 flex-1; }
   .chat-idea > svg:last-child { @apply shrink-0 text-fg-subtle; }
   /* Off-screen messages are skipped by layout: a long conversation stays cheap to stream into. */
-  .chat-msg { @apply flex flex-col gap-1; content-visibility: auto; contain-intrinsic-size: auto 96px; }
-  .chat-msg[data-streaming="true"] { content-visibility: visible; }
+  .chat-msg { @apply flex flex-col gap-1; }
   .chat-who { @apply inline-flex h-5 items-center self-start rounded-full border border-line-strong px-2 text-xs font-medium text-fg-muted; }
   .chat-processing { @apply flex min-h-5 items-center gap-2 text-sm text-fg-subtle; }
   .chat-spinner { @apply size-3 shrink-0 rounded-full border border-line-strong; border-top-color: var(--color-accent); animation: chat-spin 800ms linear infinite; }

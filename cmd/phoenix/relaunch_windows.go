@@ -26,16 +26,8 @@ func runRelaunch(parentID string) int {
 	if err != nil || pid == 0 || uint32(pid) == uint32(os.Getpid()) {
 		return 1
 	}
-	handle, err := windows.OpenProcess(windows.SYNCHRONIZE, false, uint32(pid))
-	if err != nil && err != windows.ERROR_INVALID_PARAMETER {
+	if err := waitForProcess(uint32(pid)); err != nil {
 		return 1
-	}
-	if err == nil {
-		result, waitErr := windows.WaitForSingleObject(handle, windows.INFINITE)
-		windows.CloseHandle(handle)
-		if waitErr != nil || result != windows.WAIT_OBJECT_0 {
-			return 1
-		}
 	}
 	exe, err := os.Executable()
 	if err != nil {
@@ -48,6 +40,24 @@ func runRelaunch(parentID string) int {
 		return 1
 	}
 	return 0
+}
+
+func waitForProcess(pid uint32) error {
+	handle, err := windows.OpenProcess(windows.SYNCHRONIZE, false, pid)
+	if err != nil && err != windows.ERROR_INVALID_PARAMETER {
+		return err
+	}
+	if err == nil {
+		result, waitErr := windows.WaitForSingleObject(handle, windows.INFINITE)
+		windows.CloseHandle(handle)
+		if waitErr != nil {
+			return waitErr
+		}
+		if result != windows.WAIT_OBJECT_0 {
+			return fmt.Errorf("unexpected wait result: %d", result)
+		}
+	}
+	return nil
 }
 
 func relaunchEnv(env []string) []string {

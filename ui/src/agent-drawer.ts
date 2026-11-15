@@ -1,5 +1,6 @@
 import { send } from "./protocol";
 import { icon } from "./icons";
+import type { PhChat } from "./chat";
 
 const STORAGE_KEY = "phoenix.agentDrawer";
 
@@ -24,6 +25,7 @@ export function initAgentDrawer(): void {
   let ready = false;
   let boundsFrame = 0;
   let lastBounds = "";
+  let scrollAfterExpand = false;
   let drag: { pointer: number; x: number; y: number; height: number; width: number; edge: string } | null = null;
   const min = 44;
   const max = (): number => Math.max(min, workspace.clientHeight - (quickActions?.offsetHeight ?? 56) - 24);
@@ -76,10 +78,12 @@ export function initAgentDrawer(): void {
     });
   };
   const apply = (value: number): void => {
+    const wasCollapsed = collapsed;
     height = Math.max(min, Math.min(max(), Math.round(value)));
     workspace.style.setProperty("--drawer-height", `${height}px`);
     collapsed = height <= min;
     workspace.dataset["drawerCollapsed"] = String(collapsed);
+    if (ready && wasCollapsed && !collapsed) { scrollAfterExpand = true; agent.querySelector<PhChat>("ph-chat")?.scrollToLatest(); }
     if (collapsed) document.querySelector<HTMLDetailsElement>("#agent-session-slot details")?.removeAttribute("open");
     collapse.replaceChildren(icon(collapsed ? "chat" : "chevronDown", 16));
     collapse.setAttribute("aria-label", collapsed ? "Open chat" : "Minimize agent drawer");
@@ -108,6 +112,12 @@ export function initAgentDrawer(): void {
     }
   };
   setMode(drawerMode);
+  agent.addEventListener("transitionend", (event) => {
+    if (event.target === agent && event.propertyName === "height" && scrollAfterExpand && !collapsed) {
+      scrollAfterExpand = false;
+      agent.querySelector<PhChat>("ph-chat")?.scrollToLatest();
+    }
+  });
   requestAnimationFrame(() => { ready = true; syncOverlay(); });
   const boundsObserver = new ResizeObserver(reportBounds);
   boundsObserver.observe(agent);

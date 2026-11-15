@@ -398,15 +398,16 @@ export class PhChat extends HTMLElement {
   }
 
   set events(list: ChatEvent[]) {
+    const follow = !this.#log.clientHeight || this.#log.scrollHeight - this.#log.scrollTop - this.#log.clientHeight < 120 || list.some((ev) => ev.k === "restore" || ev.k === "user");
     for (const ev of list) this.#apply(ev);
-    if (list.length) this.scrollToLatest();
+    if (list.length && follow) this.scrollToLatest();
   }
 
   scrollToLatest(): void {
     this.#scrollDirty = true;
     if (this.#scrollFrame) return;
 
-    // content-visibility can expand a message after scrolling reveals its real height.
+    // Follow layout changes that happen after the first frame.
     const follow = (): void => {
       this.#scrollFrame = 0;
       if (!this.#log.clientHeight) return;
