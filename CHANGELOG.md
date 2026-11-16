@@ -2,6 +2,32 @@
 
 Notable Phoenix changes are listed here. Versions use the `vMAJOR.MINOR.PATCH` release tags.
 
+## [0.2.4] - 2026-11-16
+
+### Added
+
+- **Learning mode:** opt-in, user-reviewed lessons for reusable preferences and workflows. Lessons stay local, are scoped to tasks or shared sites, support correction and replacement, and have bounded recall plus an on-demand search tool.
+- A configurable shared memory-context limit, short pinned guidance, and clearer provider-reported usage details.
+- GPU acceleration controls in Settings → General.
+
+### Changed
+
+- Keep the collapsed agent chat usable while it runs and show its current reply in the compact bar.
+- Keep reply actions in the input area above the composer and close them when they are no longer needed.
+- Place stable browser guidance and pinned preferences before task-specific instructions to reduce changes to the prompt prefix.
+
+### Fixed
+
+- Resume partially applied library schema migrations without trying to add columns that already exist, preserving saved memory and files.
+- Report Claude total input tokens only when uncached input, cache reads, and cache writes are all available.
+- Avoid carrying unrelated remembered lessons into simple greetings.
+
+### Notes
+
+- Learning suggestions are off by default. Existing approved lessons remain available when new suggestions are paused.
+- Memory limits are measured in bytes, not tokens. Learning uses lexical matching and may miss paraphrases.
+- Provider cache savings and general learning quality are not guaranteed.
+
 ## [0.2.3] - 2026-11-13
 
 ### Added

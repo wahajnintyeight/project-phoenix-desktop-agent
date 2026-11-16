@@ -12,7 +12,7 @@
 
 Phoenix brings a multi-tab browser and AI provider controls into one native desktop app. It is being built around a simple idea: keep the person in control, make the agent's work visible, and make actions visible while the agent works.
 
-> **Latest release:** [Phoenix v0.2.3](https://github.com/wahajnintyeight/project-phoenix-desktop-agent/releases/latest) for Windows. See the [changelog](CHANGELOG.md) for this release's changes.
+> **Latest release:** [Phoenix v0.2.4](https://github.com/wahajnintyeight/project-phoenix-desktop-agent/releases/latest) for Windows. See the [changelog](CHANGELOG.md) for this release's changes.
 
 Phoenix is in early development. The browser, provider setup, and model chat are implemented. Claude, Codex, and OpenAI-compatible API providers can inspect and operate Phoenix browser tabs through built-in browser tools. Native computer use can inspect and operate Windows apps without an external desktop agent. Browser file transfers are still in progress.
 
@@ -37,7 +37,7 @@ Phoenix is in early development. The browser, provider setup, and model chat are
 - **Export files and folders:** in Files, select one or more items and choose **Export…** from the toolbar or right-click menu. A native picker starts at your Windows Desktop and lets you choose where to save. Folder exports include every subfolder and file. Folder and multiple-item exports use numbered copies for existing names; exporting a single file asks before replacing it. Exporting keeps the originals in Phoenix.
 - **MCP servers:** install as many as you like (paste the JSON from a server's install instructions, or enter a program or web address), review the exact command before it is saved, test the connection and list its tools, then choose which servers the agent may use. OAuth-protected web servers open sign-in in the browser and keep refreshable tokens in the encrypted vault. Claude, Codex, and OpenAI-compatible API providers can use enabled servers; Enabled-server calls run automatically and appear in chat.
 - **Application tracking:** the agent can check and record job applications or other form submissions, and save user supplied answers in profile notes for future forms. Application records and remembered notes stay in Phoenix's local file library.
-- **Memory:** Phoenix remembers facts, answers, preferences, and choices you choose to save. Review, edit, or delete these entries under **Settings → Memory**; a bounded selection helps the agent avoid asking for the same information again.
+- **Memory and learning:** Phoenix remembers facts, answers, preferences, and choices you save. In Settings → Memory, opt in to lesson suggestions from completed work; approve, edit, scope, pin, replace, or forget lessons before they are reused. Retrieval is local and bounded.
 - Claude and OpenAI Codex through their command-line clients, plus API-key connections for Gemini, OpenRouter, Mistral, Z.ai, Grok, and DeepSeek. DeepSeek models are discovered from its API; add a key in Settings → AI providers.
 - API keys stored in a Windows DPAPI-encrypted vault; Phoenix does not put vault-backed keys in `config.yaml` or show them again in the UI.
 

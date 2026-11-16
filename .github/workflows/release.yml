@@ -70,11 +70,22 @@ jobs:
           wails3 updater verify -manifest dist/phoenix-update-manifest.json -publickey internal/update/updater-public.pem -dir dist
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
 
+      - name: Prepare release notes
+        shell: pwsh
+        run: |
+          $version = $env:GITHUB_REF_NAME.TrimStart('v')
+          $changelog = [IO.File]::ReadAllText('CHANGELOG.md')
+          $pattern = '(?ms)^## \[' + [regex]::Escape($version) + '\].*?(?=^## \[|\z)'
+          $match = [regex]::Match($changelog, $pattern)
+          if (-not $match.Success) { throw "No CHANGELOG.md section found for $version" }
+          $notes = $match.Value -replace '^## \[[^\]]+\].*\r?\n+', ''
+          [IO.File]::WriteAllText((Join-Path $env:RUNNER_TEMP 'release-notes.md'), $notes.Trim() + "`n", [Text.UTF8Encoding]::new($false))
+
       - name: Publish GitHub release
         shell: pwsh
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
           $version = $env:GITHUB_REF_NAME.TrimStart('v')
-          gh release create $env:GITHUB_REF_NAME dist/Phoenix-Setup-windows-amd64.exe dist/phoenix-windows-amd64.exe dist/phoenix-update-manifest.json --title "Phoenix $version" --generate-notes
+          gh release create $env:GITHUB_REF_NAME dist/Phoenix-Setup-windows-amd64.exe dist/phoenix-windows-amd64.exe dist/phoenix-update-manifest.json --title "Phoenix $version" --notes-file (Join-Path $env:RUNNER_TEMP 'release-notes.md')
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
