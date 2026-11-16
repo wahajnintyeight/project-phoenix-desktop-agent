@@ -47,9 +47,11 @@ export class Msg {
     const date = new Date(at);
     if (!at || Number.isNaN(date.valueOf())) {
       this.time.removeAttribute("datetime");
-      this.time.textContent = "Date unavailable";
+      this.time.textContent = "";
+      this.time.hidden = true;
       return;
     }
+    this.time.hidden = false;
     this.time.dateTime = date.toISOString();
     this.time.textContent = new Intl.DateTimeFormat(undefined, { dateStyle: "medium", timeStyle: "short" }).format(date);
   }

@@ -18,7 +18,7 @@ import (
 const (
 	maxToolRounds      = 32
 	maxToolCalls       = 96
-	maxToolDefinitions = 100
+	maxToolDefinitions = 500
 	maxToolArgs        = 64 << 10
 	maxToolReply       = 32 << 10
 	maxToolContext     = 128 << 10

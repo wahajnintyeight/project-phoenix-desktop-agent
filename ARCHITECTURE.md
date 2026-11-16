@@ -120,7 +120,7 @@ A conversation has a 256k-token window. Phoenix estimates it (characters / 4, pl
 
 ### Function calls and tool loop
 
-Every implemented provider path can expose the MCP tools it supports: Claude/Codex use their CLI MCP integration through an authenticated Phoenix proxy, while OpenAI-compatible providers receive generated function schemas and return function calls to Phoenix's loop. The HTTP loop preserves assistant/tool messages across requests and combines usage. It currently bounds a turn to 32 tool rounds, 96 calls, 100 definitions, 64 KiB arguments, 32 KiB per tool reply and 128 KiB of tool-result text. Image output is bounded before it is passed back to a vision-capable model.
+Every implemented provider path can expose the MCP tools it supports: Claude/Codex use their CLI MCP integration through an authenticated Phoenix proxy, while OpenAI-compatible providers receive generated function schemas and return function calls to Phoenix's loop. The HTTP loop preserves assistant/tool messages across requests and combines usage. It currently bounds a turn to 32 tool rounds, 96 calls, 500 definitions, 64 KiB arguments, 32 KiB per tool reply and 128 KiB of tool-result text. Image output is bounded before it is passed back to a vision-capable model.
 
 Function names sent to APIs are generated aliases; Phoenix maps them to the exact server/tool pair. Arguments must be valid JSON objects. Unknown functions, invalid schemas, oversized data and unsupported call types are rejected or returned as tool errors. Tool events are streamed into the chat and summarized separately in Activity.
 

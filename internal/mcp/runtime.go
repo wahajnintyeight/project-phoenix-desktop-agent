@@ -16,9 +16,9 @@ import (
 )
 
 const (
-	maxRuntimeTools     = 100
+	maxRuntimeTools     = 500
 	maxToolSchema       = 64 << 10
-	maxToolSchemasTotal = 128 << 10
+	maxToolSchemasTotal = 512 << 10
 	maxToolArgs         = 64 << 10
 	maxToolResult       = 32 << 10
 	maxToolImage        = 4 << 20
