@@ -32,23 +32,25 @@ const (
 )
 
 type chatTranscriptMessage struct {
-	Role        string   `json:"role"`
-	Content     string   `json:"content"`
-	At          int64    `json:"at,omitempty"`
-	Context     string   `json:"context,omitempty"`
-	InContext   bool     `json:"inContext,omitempty"`
-	Provider    string   `json:"provider,omitempty"`
-	Model       string   `json:"model,omitempty"`
-	Suggestions []string `json:"suggestions,omitempty"`
+	Role             string   `json:"role"`
+	Content          string   `json:"content"`
+	At               int64    `json:"at,omitempty"`
+	Context          string   `json:"context,omitempty"`
+	InContext        bool     `json:"inContext,omitempty"`
+	Provider         string   `json:"provider,omitempty"`
+	Model            string   `json:"model,omitempty"`
+	Suggestions      []string `json:"suggestions,omitempty"`
+	ChoicesDismissed bool     `json:"choicesDismissed,omitempty"`
 }
 
 type chatDisplayMessage struct {
-	Role        string   `json:"role"`
-	Content     string   `json:"content"`
-	At          int64    `json:"at,omitempty"`
-	Provider    string   `json:"provider,omitempty"`
-	Model       string   `json:"model,omitempty"`
-	Suggestions []string `json:"suggestions,omitempty"`
+	Role             string   `json:"role"`
+	Content          string   `json:"content"`
+	At               int64    `json:"at,omitempty"`
+	Provider         string   `json:"provider,omitempty"`
+	Model            string   `json:"model,omitempty"`
+	Suggestions      []string `json:"suggestions,omitempty"`
+	ChoicesDismissed bool     `json:"choicesDismissed,omitempty"`
 }
 
 type savedChat struct {
@@ -394,6 +396,24 @@ func commitSavedTurn(chatID string, userIndex int, answer, providerName, model s
 	return at
 }
 
+func dismissSavedChatChoices(chatID string, at int64) {
+	if at <= 0 {
+		return
+	}
+	if c := findSavedChat(chatID); c != nil {
+		for i := len(c.Messages) - 1; i >= 0; i-- {
+			m := &c.Messages[i]
+			if m.Role == "assistant" && m.At == at {
+				if !m.ChoicesDismissed {
+					m.ChoicesDismissed = true
+					persistSavedChats()
+				}
+				return
+			}
+		}
+	}
+}
+
 func restoreSavedChat(id string) (*savedChat, bool) {
 	c := findSavedChat(id)
 	if c == nil {
@@ -573,7 +593,7 @@ func activateSavedChat(c *savedChat) {
 	display := make([]chatDisplayMessage, 0, len(c.Messages))
 	for _, m := range c.Messages {
 		if m.Role == "user" || m.Role == "assistant" {
-			display = append(display, chatDisplayMessage{Role: m.Role, Content: m.Content, At: m.At, Provider: m.Provider, Model: m.Model, Suggestions: m.Suggestions})
+			display = append(display, chatDisplayMessage{Role: m.Role, Content: m.Content, At: m.At, Provider: m.Provider, Model: m.Model, Suggestions: m.Suggestions, ChoicesDismissed: m.ChoicesDismissed})
 		}
 		if !m.InContext || (m.Role != "user" && m.Role != "assistant") {
 			continue

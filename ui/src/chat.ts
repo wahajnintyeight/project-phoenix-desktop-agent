@@ -51,6 +51,7 @@ interface ChatTranscriptMessage {
   provider?: string;
   model?: string;
   suggestions?: string[];
+  choicesDismissed?: boolean;
 }
 
 interface SavedChatSummary {
@@ -159,7 +160,10 @@ export class PhChat extends HTMLElement {
   readonly #processingText = el("span");
   readonly #compactStatus = el("div", "chat-compact-status");
   readonly #compactStatusText = el("span", "chat-compact-status-text");
-  readonly #choiceVault = new ChatChoiceVault();
+  readonly #choiceVault = new ChatChoiceVault((message) => {
+    if (message.at) send("g", "dismiss-choices", String(message.at));
+    else this.#dismissedChoices = message;
+  });
   readonly #compactReply = new CompactReply();
   readonly #input = el("textarea", "chat-input");
   readonly #commandMenu = el("div", "slash-menu");
@@ -192,6 +196,7 @@ export class PhChat extends HTMLElement {
   #current: Msg | null = null;
   #pendingChoices: Msg | null = null;
   #suggestionTarget: Msg | null = null;
+  #dismissedChoices: Msg | null = null;
   #scrollFrame = 0;
   #scrollDirty = false;
   readonly #syncScrollLatest = (): void => {
@@ -703,6 +708,7 @@ export class PhChat extends HTMLElement {
     switch (ev.k) {
       case "reset":
         this.#choiceVault.show();
+        this.#dismissedChoices = null;
         this.#suggestionTarget = null;
         this.#compactReply.clear();
         this.#pendingChoices = null;
@@ -720,6 +726,7 @@ export class PhChat extends HTMLElement {
         break;
       case "restore": {
         this.#choiceVault.show();
+        this.#dismissedChoices = null;
         this.#suggestionTarget = null;
         this.#compactReply.clear();
         this.#pendingChoices = null;
@@ -747,12 +754,13 @@ export class PhChat extends HTMLElement {
           } else if (message.role === "assistant") {
             const who = [message.provider, message.model].filter(Boolean).join(" · ") || "Agent";
             const m = this.#message(who, "chat-ai", true, message.at ?? 0);
+            if (message.choicesDismissed) m.dismissChoices();
             m.append(message.content);
             m.flush();
             m.meta.title = who;
-            if (message.suggestions?.length === 2) m.setSuggestions(message.suggestions, at === restored.length - 1 ? "ready" : "inactive");
-            if (at === restored.length - 1) { this.#suggestionTarget = m; this.#choiceVault.show(m); }
-            if (at === restored.length - 1 && m.getChoices().length) this.#pendingChoices = m;
+            if (!message.choicesDismissed && message.suggestions?.length === 2) m.setSuggestions(message.suggestions, at === restored.length - 1 ? "ready" : "inactive");
+            if (at === restored.length - 1 && !message.choicesDismissed) { this.#suggestionTarget = m; this.#choiceVault.show(m); }
+            if (at === restored.length - 1 && !message.choicesDismissed && m.getChoices().length) this.#pendingChoices = m;
           }
         }
         this.#setRunning(false);
@@ -761,6 +769,7 @@ export class PhChat extends HTMLElement {
       }
       case "user": {
         this.#choiceVault.show();
+        this.#dismissedChoices = null;
         this.#compactReply.clear();
         this.#processing.hidden = true;
         this.#toolCalls.clear();
@@ -898,7 +907,7 @@ export class PhChat extends HTMLElement {
         // A reply that begins without a start event (or after a reset) still needs a box.
         if (!this.#current) {
           this.#endSteps(); // tools after this text start a new folded run
-          this.#current = this.#message(this.#who, "chat-ai", true);
+          this.#current = this.#message(this.#who, "chat-ai", true, 0);
           this.#current.meta.title = this.#who;
         }
         this.#current.box.dataset["streaming"] = "true";
@@ -914,6 +923,10 @@ export class PhChat extends HTMLElement {
         if (c) {
           c.flush();
           if (ev.at) c.setTime(ev.at);
+          if (this.#dismissedChoices === c) {
+            if (ev.at) send("g", "dismiss-choices", String(ev.at));
+            this.#dismissedChoices = null;
+          }
           delete c.box.dataset["streaming"];
           // One short line; the model name and exact token counts are in the tooltip.
           const tokens = (ev.in ?? 0) + (ev.out ?? 0);
@@ -921,9 +934,9 @@ export class PhChat extends HTMLElement {
           c.meta.textContent = bits.filter(Boolean).join(" · ");
           c.meta.title = [c.who, ev.inKnown ? `${ev.in ?? 0} input tokens` : "Input tokens not reported", ev.outKnown ? `${ev.out ?? 0} output tokens` : "Output tokens not reported", ev.cachedKnown ? `${ev.cached ?? 0} cached tokens` : "Cached tokens not reported", ev.costKnown ? `$${(ev.cost ?? 0).toFixed(4)} reported cost` : "Cost not reported", ev.memoryBytes ? `${ev.memoryBytes} bytes of retrieved memory (not a token count)` : ""].filter(Boolean).join(" · ");
         }
-        this.#choiceVault.show(c ?? undefined);
-        this.#pendingChoices = c && c.getChoices().length ? c : null;
-        this.#suggestionTarget = c;
+        this.#choiceVault.show(c && !c.choicesDismissed ? c : undefined);
+        this.#pendingChoices = c && !c.choicesDismissed && c.getChoices().length ? c : null;
+        this.#suggestionTarget = c && !c.choicesDismissed ? c : null;
         this.#current = null;
         this.#setRunning(false);
         this.#pendingChoices?.setChoiceMode("ready");

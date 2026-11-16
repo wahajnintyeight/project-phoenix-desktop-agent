@@ -20,9 +20,11 @@ export class Msg {
   #choiceMode: ChoiceMode = "inactive";
   #choiceHost: HTMLElement | null = null;
   #choicesDismissed = false;
+  #at = 0;
 
   constructor(who: string, cls: string, markdown: boolean, at: number) {
     this.who = who;
+    this.#at = at;
     this.box = el("article", `chat-msg ${cls}`);
     const footer = el("div", "chat-msg-footer");
     const copyable = cls.includes("chat-user") || cls.includes("chat-ai");
@@ -41,6 +43,7 @@ export class Msg {
   }
 
   setTime(at: number): void {
+    this.#at = at;
     const date = new Date(at);
     if (!at || Number.isNaN(date.valueOf())) {
       this.time.removeAttribute("datetime");
@@ -54,6 +57,9 @@ export class Msg {
   get empty(): boolean {
     return this.#raw === "";
   }
+
+  get at(): number { return this.#at; }
+  get choicesDismissed(): boolean { return this.#choicesDismissed; }
 
   set(text: string): void {
     this.#raw = text;

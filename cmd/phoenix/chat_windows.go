@@ -133,6 +133,12 @@ func handleChatOp(f []string) {
 		if len(f) > 3 {
 			pushMentions(f[2], f[3])
 		}
+	case "dismiss-choices":
+		if len(f) > 2 {
+			if at, err := strconv.ParseInt(f[2], 10, 64); err == nil {
+				dismissSavedChatChoices(chat.currentID, at)
+			}
+		}
 	case "suggest":
 		if len(f) > 3 {
 			at, err := strconv.ParseInt(f[2], 10, 64)

@@ -41,6 +41,7 @@ const KIND_LABEL: Record<string, string> = {
   preference: "Preference",
   choice: "Your choice",
 };
+const MEMORY_PAGE_SIZE = 8;
 
 export class PhMemorySettings extends HTMLElement {
   #entries: Entry[] = [];
@@ -48,6 +49,7 @@ export class PhMemorySettings extends HTMLElement {
   #learningEnabled = false;
   #editingLesson = 0;
   #editing = 0;
+  #visibleEntries = MEMORY_PAGE_SIZE;
   #confirmClear = false;
   readonly #search = el("input", "field");
   readonly #count = el("p", "text-xs text-fg-muted");
@@ -58,7 +60,7 @@ export class PhMemorySettings extends HTMLElement {
   readonly #keyIn = el("input", "field");
   readonly #valueIn = el("input", "field field-wide");
   readonly #kindIn = el("select", "field");
-  readonly #addBtn = el("button", "btn btn-primary", "Remember");
+  readonly #addBtn = el("button", "btn btn-primary w-fit", "Remember");
   readonly #learning = el("input");
   readonly #budget = el("input", "field");
   readonly #lessonList = el("div", "flex flex-col gap-4");
@@ -98,13 +100,13 @@ export class PhMemorySettings extends HTMLElement {
     this.#budget.type = "number"; this.#budget.min = "400"; this.#budget.max = "3200"; this.#budget.step = "100";
     this.#budget.setAttribute("aria-label", "Maximum retrieved memory bytes");
     const budgetLabel = el("label", "mem-text"); budgetLabel.append(el("span", "font-medium", "Memory context limit (bytes)"), this.#budget, el("span", "text-xs text-fg-muted", "Shared by remembered facts and lessons; bytes are not model tokens."));
-    const saveBudget = el("button", "btn btn-sm", "Save memory limit"); saveBudget.type = "button";
+    const saveBudget = el("button", "btn btn-sm w-fit", "Save memory limit"); saveBudget.type = "button";
     saveBudget.addEventListener("click", () => send("v", "memory-budget", this.#budget.value));
     this.append(bar, this.#count, learningLabel, learningInfo, budgetLabel, saveBudget, add, this.#result, this.#lessonList, this.#list);
 
     this.#learning.addEventListener("change", () => send("v", "memory-learning", this.#learning.checked ? "1" : "0"), { passive: true });
 
-    this.#search.addEventListener("input", () => this.#render(), { passive: true });
+    this.#search.addEventListener("input", () => { this.#visibleEntries = MEMORY_PAGE_SIZE; this.#render(); }, { passive: true });
     this.#addBtn.addEventListener("click", () => {
       const value = this.#valueIn.value.trim();
       if (!value) return;
@@ -150,9 +152,11 @@ export class PhMemorySettings extends HTMLElement {
       return words.every((w) => hay.includes(w));
     });
     this.#clear.hidden = this.#entries.length === 0 && this.#lessons.length === 0;
+    const visible = shown.slice(0, this.#visibleEntries);
+    const displayCount = shown.length > MEMORY_PAGE_SIZE ? ` · ${visible.length} shown` : "";
     this.#count.textContent = this.#entries.length === 0 && this.#lessons.length === 0
       ? "Nothing yet. Phoenix remembers what you tell the agent and what you choose; you can also add things here."
-      : `${shown.length} of ${this.#entries.length} memories · ${this.#lessons.length} lessons. Stored on this computer and used when relevant.`;
+      : `${shown.length} of ${this.#entries.length} memories${displayCount} · ${this.#lessons.length} lessons. Stored on this computer and used when relevant.`;
 
     this.#lessonList.replaceChildren();
     const lessons = this.#lessons.filter((l) => words.every((w) => `${l.trigger} ${l.lesson} ${l.evidence}`.toLowerCase().includes(w)));
@@ -165,12 +169,24 @@ export class PhMemorySettings extends HTMLElement {
 
     this.#list.replaceChildren();
     const byTopic = new Map<string, Entry[]>();
-    for (const e of shown) byTopic.set(e.topic, [...(byTopic.get(e.topic) ?? []), e]);
+    for (const e of visible) byTopic.set(e.topic, [...(byTopic.get(e.topic) ?? []), e]);
     for (const [topic, rows] of byTopic) {
       const sec = el("section", "mem-topic");
       sec.append(el("h3", undefined, topic));
       for (const e of rows) sec.append(e.id === this.#editing ? this.#editRow(e) : this.#row(e));
       this.#list.append(sec);
+    }
+    if (shown.length > visible.length) {
+      const remaining = shown.length - visible.length;
+      const more = el("button", "btn btn-sm btn-quiet w-fit self-start", `Show ${Math.min(MEMORY_PAGE_SIZE, remaining)} more memories · ${remaining} remaining`);
+      more.type = "button";
+      more.addEventListener("click", () => { this.#visibleEntries += MEMORY_PAGE_SIZE; this.#render(); }, { passive: true });
+      this.#list.append(more);
+    } else if (this.#visibleEntries > MEMORY_PAGE_SIZE) {
+      const fewer = el("button", "btn btn-sm btn-quiet w-fit self-start", "Show fewer memories");
+      fewer.type = "button";
+      fewer.addEventListener("click", () => { this.#visibleEntries = MEMORY_PAGE_SIZE; this.#render(); }, { passive: true });
+      this.#list.append(fewer);
     }
   }
 

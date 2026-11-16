@@ -8,7 +8,7 @@ export class ChatChoiceVault {
   readonly #toggle = el("button", "chat-choice-toggle");
   #message: Msg | undefined;
 
-  constructor() {
+  constructor(private readonly onDismiss: (message: Msg) => void) {
     this.#toggle.type = "button";
     this.#toggle.addEventListener("click", () => this.#setCollapsed(this.element.dataset["collapsed"] !== "true"));
     this.#setCollapsed(false);
@@ -16,7 +16,12 @@ export class ChatChoiceVault {
     this.#close.setAttribute("aria-label", "Dismiss suggestions");
     this.#close.title = "Dismiss suggestions";
     this.#close.append(icon("close", 16));
-    this.#close.addEventListener("click", () => { this.#message?.dismissChoices(); this.element.replaceChildren(); });
+    this.#close.addEventListener("click", () => {
+      const message = this.#message;
+      message?.dismissChoices();
+      this.element.replaceChildren();
+      if (message) this.onDismiss(message);
+    });
   }
 
   show(message?: Msg): void {

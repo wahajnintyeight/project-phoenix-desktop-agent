@@ -196,10 +196,10 @@
   /* ── title bar ───────────────────────────────────────────────────── */
   .titlebar { @apply flex items-end gap-1 border-b border-line bg-chrome; }
   .tab {
-    @apply flex h-full min-w-14 flex-[0_1_200px] items-center rounded-t-lg text-fg-muted transition-colors;
+    @apply flex h-full min-w-14 max-w-60 flex-[1_1_200px] items-center rounded-t-lg border border-b-0 border-line-strong bg-raised text-fg-muted transition-colors;
   }
-  .tab:hover { @apply bg-canvas/50 text-fg; }
-  .tab[aria-selected="true"] { @apply bg-canvas font-medium text-fg; }
+  .tab:hover { @apply bg-overlay text-fg; }
+  .tab[aria-selected="true"] { @apply border-accent bg-canvas font-medium text-fg; }
   .tab-main { @apply flex h-full min-w-0 flex-1 items-center gap-2 pr-0 pl-3 text-left; }
   .tab-title { @apply truncate text-sm; }
   .tab-spin { @apply hidden size-3 shrink-0 animate-spin rounded-full border-2 border-line-strong border-t-accent; }
@@ -343,6 +343,7 @@
   .update-progress progress::-webkit-progress-value { background: var(--color-accent); border-radius: 999px; transition: width 180ms ease; }
   .settings [data-for] { display: none; }
   .settings[data-section="providers"] [data-for="providers"],
+  .settings[data-section="profile"] [data-for="profile"],
   .settings[data-section="memory"] [data-for="memory"],
   .settings[data-section="mcp"] [data-for="mcp"],
   .settings[data-section="desktop"] [data-for="desktop"],
