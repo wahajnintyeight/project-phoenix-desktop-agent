@@ -4,7 +4,7 @@
 .chat-question-input { @apply h-10 w-full rounded-xl border border-line-strong bg-sunken px-3 text-base text-fg placeholder:text-fg-subtle; }
 .chat-question-input:focus-visible { outline: 2px solid var(--color-accent); outline-offset: 2px; }
 .chat-question-options { @apply flex flex-wrap gap-2; }
-.chat-question-option { @apply min-h-10 max-w-full rounded-full px-4 py-2 text-sm whitespace-normal; overflow-wrap: anywhere; }
+.chat-question-options .chat-question-option { @apply h-auto min-h-10 max-w-full justify-start rounded-xl px-3 py-2 text-left text-sm leading-5 whitespace-normal; overflow-wrap: anywhere; }
 .chat-question-option[aria-pressed="true"] { background: var(--color-accent-fill); color: var(--color-accent-fill-ink); border-color: transparent; }
 .chat-question-option:disabled, .chat-question-input:disabled { opacity: .65; }
 .chat-question-status { @apply text-xs text-fg-muted; }
