@@ -332,7 +332,7 @@ func (p OpenAICompat) finishRun(start time.Time, text string, usage Usage, isErr
 		text += suffix[0]
 		emit(Event{Kind: EvTextDelta, Text: suffix[0]})
 	}
-	if usage.InputTokens != 0 || usage.OutputTokens != 0 || usage.CachedTokens != 0 || usage.CostUSD != 0 {
+	if usage.InputTokens != 0 || usage.OutputTokens != 0 || usage.CachedTokens != 0 || usage.CostUSD != 0 || usage.InputReported || usage.OutputReported || usage.CachedReported || usage.CostReported {
 		emit(Event{Kind: EvUsage, Usage: &usage})
 	}
 	emit(Event{Kind: EvDone, Text: text, IsError: isError})
@@ -340,6 +340,16 @@ func (p OpenAICompat) finishRun(start time.Time, text string, usage Usage, isErr
 }
 
 func addUsage(a, b Usage) Usage {
+	// A total is reported only when every provider round reported that field.
+	if a.rounds == 0 {
+		a.InputReported, a.OutputReported, a.CachedReported, a.CostReported = b.InputReported, b.OutputReported, b.CachedReported, b.CostReported
+	} else {
+		a.InputReported = a.InputReported && b.InputReported
+		a.OutputReported = a.OutputReported && b.OutputReported
+		a.CachedReported = a.CachedReported && b.CachedReported
+		a.CostReported = a.CostReported && b.CostReported
+	}
+	a.rounds++
 	a.InputTokens += b.InputTokens
 	a.OutputTokens += b.OutputTokens
 	a.CachedTokens += b.CachedTokens

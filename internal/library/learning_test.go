@@ -2,6 +2,7 @@ package library
 
 import (
 	"context"
+	"encoding/json"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -107,6 +108,23 @@ func TestLearningToolRequiresReviewAndHasSource(t *testing.T) {
 		t.Fatal(err)
 	}
 	defer client.Close()
+	listed, err := client.ListTools(context.Background(), nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var searchSchema []byte
+	for _, tool := range listed.Tools {
+		if tool.Name == "learning_search" {
+			searchSchema, err = json.Marshal(tool)
+			if err != nil {
+				t.Fatal(err)
+			}
+		}
+	}
+	if len(searchSchema) == 0 {
+		t.Fatal("search tool schema missing")
+	}
+	t.Logf("learning_search MCP schema: %d JSON bytes (provider formats and token counts vary)", len(searchSchema))
 	result, err := client.CallTool(context.Background(), &sdk.CallToolParams{Name: "learning_propose", Arguments: map[string]any{"kind": "experience", "trigger": "PDF application", "lesson": "Check PDF type", "evidence": "The page required a PDF"}})
 	if err != nil || result.IsError {
 		t.Fatalf("tool: %+v %v", result, err)
@@ -115,6 +133,18 @@ func TestLearningToolRequiresReviewAndHasSource(t *testing.T) {
 	if err != nil || len(lessons) != 1 || lessons[0].SourceChat != "chat-123" || lessons[0].Status != "candidate" {
 		t.Fatalf("lessons: %+v %v", lessons, err)
 	}
+	result, err = client.CallTool(context.Background(), &sdk.CallToolParams{Name: "learning_search", Arguments: map[string]any{"query": "PDF application"}})
+	if err != nil || result.IsError || strings.Contains(result.Content[0].(*sdk.TextContent).Text, "Check PDF type") {
+		t.Fatalf("candidate exposed: %+v %v", result, err)
+	}
+	if err := s.ReviewLesson(lessons[0].ID, "approve", "", ""); err != nil {
+		t.Fatal(err)
+	}
+	result, err = client.CallTool(context.Background(), &sdk.CallToolParams{Name: "learning_search", Arguments: map[string]any{"query": "PDF application"}})
+	if err != nil || result.IsError || !strings.Contains(result.Content[0].(*sdk.TextContent).Text, "Check PDF type") {
+		t.Fatalf("approved lesson missing: %+v %v", result, err)
+	}
+	t.Logf("approved search response: %d text bytes (provider formats and token counts vary)", len(result.Content[0].(*sdk.TextContent).Text))
 	if err := s.ClearMemories(); err != nil {
 		t.Fatal(err)
 	}

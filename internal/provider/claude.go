@@ -340,27 +340,33 @@ func (p *claudeParser) Parse(line []byte) []Event {
 
 	case "result":
 		var m struct {
-			IsError    bool    `json:"is_error"`
-			Result     string  `json:"result"`
-			SessionID  string  `json:"session_id"`
-			DurationMS int64   `json:"duration_ms"`
-			CostUSD    float64 `json:"total_cost_usd"`
+			IsError    bool     `json:"is_error"`
+			Result     string   `json:"result"`
+			SessionID  string   `json:"session_id"`
+			DurationMS int64    `json:"duration_ms"`
+			CostUSD    *float64 `json:"total_cost_usd"`
 			Usage      struct {
-				In    int `json:"input_tokens"`
-				Out   int `json:"output_tokens"`
-				Cache int `json:"cache_read_input_tokens"`
+				In         *int `json:"input_tokens"`
+				Out        *int `json:"output_tokens"`
+				Cache      *int `json:"cache_read_input_tokens"`
+				CacheWrite *int `json:"cache_creation_input_tokens"`
 			} `json:"usage"`
 		}
 		if json.Unmarshal(line, &m) != nil {
 			return nil
 		}
 		p.done = true
+		usage := reportedUsage(nil, m.Usage.Out, m.Usage.Cache, m.CostUSD)
+		if m.Usage.In != nil && m.Usage.Cache != nil && m.Usage.CacheWrite != nil {
+			usage.InputTokens = *m.Usage.In + *m.Usage.Cache + *m.Usage.CacheWrite
+			usage.InputReported = true
+		}
 		p.result = Result{
 			Text:       m.Result,
 			SessionID:  firstNonEmpty(m.SessionID, p.result.SessionID),
 			IsError:    m.IsError,
 			DurationMS: m.DurationMS,
-			Usage:      Usage{InputTokens: m.Usage.In, OutputTokens: m.Usage.Out, CachedTokens: m.Usage.Cache, CostUSD: m.CostUSD},
+			Usage:      usage,
 		}
 		out := []Event{{Kind: EvUsage, Usage: &p.result.Usage}}
 		if m.IsError {

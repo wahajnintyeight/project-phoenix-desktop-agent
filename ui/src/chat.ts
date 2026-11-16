@@ -18,6 +18,8 @@ import { when } from "./chat-time";
 export interface ChatEvent {
   k: "user" | "note" | "processing" | "tool" | "tool-result" | "approve" | "approved" | "start" | "delta" | "done" | "error" | "stopped" | "reset" | "restore" | "queue" | "interrupted" | "suggestions";
   suggestions?: string[];
+  memoryBytes?: number;
+  inKnown?: boolean; outKnown?: boolean; cachedKnown?: boolean; costKnown?: boolean;
   resume?: boolean | undefined;
   text?: string;
   at?: number;
@@ -915,9 +917,9 @@ export class PhChat extends HTMLElement {
           delete c.box.dataset["streaming"];
           // One short line; the model name and exact token counts are in the tooltip.
           const tokens = (ev.in ?? 0) + (ev.out ?? 0);
-          const bits = [ev.ms ? `${(ev.ms / 1000).toFixed(1)} s` : "", tokens ? `${tokens >= 1000 ? `${(tokens / 1000).toFixed(1)}k` : tokens} tokens` : "", ev.cached ? `${ev.cached >= 1000 ? `${(ev.cached / 1000).toFixed(1)}k` : ev.cached} cached` : "", ev.cost ? `$${ev.cost.toFixed(3)}` : ""]; // the context window has its own meter at the top of the panel
+          const bits = [ev.ms ? `${(ev.ms / 1000).toFixed(1)} s` : "", ev.inKnown && ev.outKnown && tokens ? `${tokens >= 1000 ? `${(tokens / 1000).toFixed(1)}k` : tokens} tokens` : "", ev.cachedKnown && ev.cached ? `${ev.cached >= 1000 ? `${(ev.cached / 1000).toFixed(1)}k` : ev.cached} cached` : "", ev.costKnown && ev.cost ? `$${ev.cost.toFixed(3)}` : ""]; // the context window has its own meter at the top of the panel
           c.meta.textContent = bits.filter(Boolean).join(" · ");
-          c.meta.title = [c.who, ev.out ? `${ev.in ?? 0} in, ${ev.out} out` : "", ev.cached ? `${ev.cached} cache reads reported by provider` : ""].filter(Boolean).join(" · ");
+          c.meta.title = [c.who, ev.inKnown ? `${ev.in ?? 0} input tokens` : "Input tokens not reported", ev.outKnown ? `${ev.out ?? 0} output tokens` : "Output tokens not reported", ev.cachedKnown ? `${ev.cached ?? 0} cached tokens` : "Cached tokens not reported", ev.costKnown ? `$${(ev.cost ?? 0).toFixed(4)} reported cost` : "Cost not reported", ev.memoryBytes ? `${ev.memoryBytes} bytes of retrieved memory (not a token count)` : ""].filter(Boolean).join(" · ");
         }
         this.#choiceVault.show(c ?? undefined);
         this.#pendingChoices = c && c.getChoices().length ? c : null;

@@ -131,6 +131,19 @@ data: [DONE]
 
 `
 
+func TestUsageAvailabilityAcrossRounds(t *testing.T) {
+	first := addUsage(Usage{}, Usage{})
+	combined := addUsage(first, Usage{InputTokens: 5, InputReported: true})
+	if combined.InputReported {
+		t.Fatal("missing first-round usage was reported as a complete total")
+	}
+	complete := addUsage(Usage{}, Usage{InputReported: true, CachedReported: true})
+	complete = addUsage(complete, Usage{InputTokens: 5, InputReported: true, CachedReported: true})
+	if !complete.InputReported || !complete.CachedReported || complete.InputTokens != 5 {
+		t.Fatalf("complete usage: %+v", complete)
+	}
+}
+
 func fakeServer(t *testing.T, h http.HandlerFunc) (*httptest.Server, Settings) {
 	t.Helper()
 	srv := httptest.NewServer(h)
@@ -161,6 +174,9 @@ func TestRunStreamsAndSendsKeyOnlyAsBearer(t *testing.T) {
 	}
 	if res.Text != "ok" || res.Usage.InputTokens != 11 || res.Usage.OutputTokens != 2 || res.Usage.CachedTokens != 5 || res.Usage.CostUSD != 0.0004 {
 		t.Errorf("result %+v", res)
+	}
+	if !res.Usage.InputReported || !res.Usage.OutputReported || !res.Usage.CachedReported || !res.Usage.CostReported {
+		t.Fatalf("reported usage lost: %+v", res.Usage)
 	}
 	var kinds []string
 	for _, e := range evs {

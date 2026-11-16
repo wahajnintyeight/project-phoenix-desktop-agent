@@ -18,6 +18,15 @@ var jobTerms = regexp.MustCompile(`(?i)\b(job|jobs|career|careers|vacancy|vacanc
 // Instructions selects guidance from user-authored text only. A short follow-up can inherit
 // a recent job context; the untrusted content of a page never selects a skill by itself.
 func Instructions(message string, previousUserMessages []string) string {
+	base, task := Sections(message, previousUserMessages)
+	if task != "" {
+		return base + "\n\n" + task
+	}
+	return base
+}
+
+// Sections separates stable browser instructions from task-specific guidance.
+func Sections(message string, previousUserMessages []string) (string, string) {
 	useJob := jobTerms.MatchString(message)
 	if !useJob && len(strings.Fields(message)) <= 5 {
 		for i, seen := len(previousUserMessages)-1, 0; i >= 0 && seen < 3; i, seen = i-1, seen+1 {
@@ -28,7 +37,7 @@ func Instructions(message string, previousUserMessages []string) string {
 		}
 	}
 	if useJob {
-		return browser + "\n\n" + job
+		return browser, job
 	}
-	return browser
+	return browser, ""
 }

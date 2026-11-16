@@ -31,3 +31,14 @@ func TestInstructionRouting(t *testing.T) {
 		})
 	}
 }
+
+func TestInstructionSectionsKeepBaseStable(t *testing.T) {
+	base, task := Sections("Find remote jobs", nil)
+	otherBase, otherTask := Sections("Compare camera lenses", nil)
+	if base != otherBase || task == "" || otherTask != "" {
+		t.Fatal("stable and task-specific guidance were not separated")
+	}
+	if got := Instructions("Find remote jobs", nil); got != base+"\n\n"+task {
+		t.Fatal("section split changed existing policy")
+	}
+}

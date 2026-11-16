@@ -169,11 +169,7 @@ func (c CodexProvider) Run(ctx context.Context, s Settings, req Request, emit fu
 	defer cleanup()
 
 	req.CodexDisable = codexLean(ctx, path)
-	prompt := req.Transcript()
-	if req.System != "" {
-		// codex exec has no system-prompt flag; instructions travel with the prompt.
-		prompt = req.System + "\n\n" + prompt
-	}
+	prompt := codexPrompt(req)
 	parser := &codexParser{}
 	env := codexEnv(s)
 	if req.CodexMCPURL != "" {
@@ -193,6 +189,14 @@ func (c CodexProvider) Run(ctx context.Context, s Settings, req Request, emit fu
 		return parser.result, fmt.Errorf("codex: %s", msg)
 	}
 	return parser.result, nil
+}
+
+// codex exec has no system-prompt flag; instructions travel with the transcript.
+func codexPrompt(req Request) string {
+	if req.System != "" {
+		return req.System + "\n\n" + req.Transcript()
+	}
+	return req.Transcript()
 }
 
 // codexLeanWanted are Codex's own built-in tools and integrations. Phoenix's agent works only
@@ -365,14 +369,14 @@ func (p *codexParser) Parse(line []byte) []Event {
 	case "turn.completed":
 		var m struct {
 			Usage struct {
-				In     int `json:"input_tokens"`
-				Cached int `json:"cached_input_tokens"`
-				Out    int `json:"output_tokens"`
+				In     *int `json:"input_tokens"`
+				Cached *int `json:"cached_input_tokens"`
+				Out    *int `json:"output_tokens"`
 			} `json:"usage"`
 		}
 		_ = json.Unmarshal(line, &m)
 		p.done = true
-		p.result.Usage = Usage{InputTokens: m.Usage.In, OutputTokens: m.Usage.Out, CachedTokens: m.Usage.Cached}
+		p.result.Usage = reportedUsage(m.Usage.In, m.Usage.Out, m.Usage.Cached, nil)
 		p.result.Text = strings.Join(p.text, "\n\n")
 		return []Event{{Kind: EvUsage, Usage: &p.result.Usage}, {Kind: EvDone, Text: p.result.Text}}
 

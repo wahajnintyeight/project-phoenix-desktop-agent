@@ -225,9 +225,7 @@ func NewServerForSession(s *Store, origin, chatID string) *sdk.Server {
 		return t, nil
 	})
 	registerApplicationTools(srv, s)
-	if s.LearningEnabled() {
-		registerLearningTools(srv, s, chatID)
-	}
+	registerLearningTools(srv, s, chatID)
 	registerTaskTools(srv, s)
 	return srv
 }

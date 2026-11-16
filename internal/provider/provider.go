@@ -133,10 +133,32 @@ type Event struct {
 
 // Usage is token accounting for a run, as far as the CLI reports it.
 type Usage struct {
-	InputTokens  int     `json:"inputTokens"`
-	OutputTokens int     `json:"outputTokens"`
-	CachedTokens int     `json:"cachedTokens,omitempty"`
-	CostUSD      float64 `json:"costUsd,omitempty"` // 0 when the CLI does not report cost
+	InputTokens    int     `json:"inputTokens"`
+	OutputTokens   int     `json:"outputTokens"`
+	CachedTokens   int     `json:"cachedTokens,omitempty"`
+	CostUSD        float64 `json:"costUsd,omitempty"` // 0 when the CLI does not report cost
+	InputReported  bool    `json:"inputReported,omitempty"`
+	OutputReported bool    `json:"outputReported,omitempty"`
+	CachedReported bool    `json:"cachedReported,omitempty"`
+	CostReported   bool    `json:"costReported,omitempty"`
+	rounds         int
+}
+
+func reportedUsage(input, output, cached *int, cost *float64) Usage {
+	var u Usage
+	if input != nil {
+		u.InputTokens, u.InputReported = *input, true
+	}
+	if output != nil {
+		u.OutputTokens, u.OutputReported = *output, true
+	}
+	if cached != nil {
+		u.CachedTokens, u.CachedReported = *cached, true
+	}
+	if cost != nil {
+		u.CostUSD, u.CostReported = *cost, true
+	}
+	return u
 }
 
 // Limit is a rate-limit window (Claude subscriptions report these).

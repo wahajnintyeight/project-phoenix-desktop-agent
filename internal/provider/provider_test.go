@@ -46,6 +46,30 @@ func TestClaudeStreamWithDeltas(t *testing.T) {
 	if r.Text != "ok" || r.SessionID != "s-1" || r.IsError || r.Usage.OutputTokens != 4 || r.Usage.CachedTokens != 649 || r.Usage.CostUSD != 0.0007 {
 		t.Errorf("result: %+v", r)
 	}
+	if r.Usage.InputReported || !r.Usage.OutputReported || !r.Usage.CachedReported || !r.Usage.CostReported {
+		t.Fatalf("Claude usage presence: %+v", r.Usage)
+	}
+}
+
+func TestClaudeCompleteInputIncludesCacheReadsAndWrites(t *testing.T) {
+	p := &claudeParser{}
+	feed(p, `{"type":"result","usage":{"input_tokens":2,"output_tokens":4,"cache_read_input_tokens":649,"cache_creation_input_tokens":17}}`)
+	if !p.result.Usage.InputReported || p.result.Usage.InputTokens != 668 || !p.result.Usage.CachedReported || p.result.Usage.CachedTokens != 649 {
+		t.Fatalf("Claude total input: %+v", p.result.Usage)
+	}
+}
+
+func TestCLIUsageOmittedFieldsStayUnknown(t *testing.T) {
+	claude := &claudeParser{}
+	feed(claude, `{"type":"result","result":"ok","usage":{"input_tokens":0}}`)
+	if claude.result.Usage.InputReported || claude.result.Usage.CachedReported || claude.result.Usage.CostReported {
+		t.Fatalf("Claude usage: %+v", claude.result.Usage)
+	}
+	codex := &codexParser{}
+	feed(codex, `{"type":"turn.completed","usage":{"input_tokens":0,"output_tokens":0}}`)
+	if !codex.result.Usage.InputReported || !codex.result.Usage.OutputReported || codex.result.Usage.CachedReported || codex.result.Usage.CostReported {
+		t.Fatalf("Codex usage: %+v", codex.result.Usage)
+	}
 }
 
 func TestClaudeStreamWithoutDeltasEmitsText(t *testing.T) {

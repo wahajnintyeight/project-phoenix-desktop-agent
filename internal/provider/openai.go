@@ -425,11 +425,11 @@ func (p *openaiParser) Parse(line []byte) []Event {
 			} `json:"delta"`
 		} `json:"choices"`
 		Usage *struct {
-			Prompt  int     `json:"prompt_tokens"`
-			Output  int     `json:"completion_tokens"`
-			Cost    float64 `json:"cost"` // OpenRouter
+			Prompt  *int     `json:"prompt_tokens"`
+			Output  *int     `json:"completion_tokens"`
+			Cost    *float64 `json:"cost"` // OpenRouter
 			Details *struct {
-				Cached int `json:"cached_tokens"`
+				Cached *int `json:"cached_tokens"`
 			} `json:"prompt_tokens_details"`
 		} `json:"usage"`
 		Error *struct {
@@ -499,9 +499,18 @@ func (p *openaiParser) Parse(line []byte) []Event {
 		}
 	}
 	if c.Usage != nil {
-		u := &Usage{InputTokens: c.Usage.Prompt, OutputTokens: c.Usage.Output, CostUSD: c.Usage.Cost}
-		if c.Usage.Details != nil {
-			u.CachedTokens = c.Usage.Details.Cached
+		u := &Usage{}
+		if c.Usage.Prompt != nil {
+			u.InputTokens, u.InputReported = *c.Usage.Prompt, true
+		}
+		if c.Usage.Output != nil {
+			u.OutputTokens, u.OutputReported = *c.Usage.Output, true
+		}
+		if c.Usage.Cost != nil {
+			u.CostUSD, u.CostReported = *c.Usage.Cost, true
+		}
+		if c.Usage.Details != nil && c.Usage.Details.Cached != nil {
+			u.CachedTokens, u.CachedReported = *c.Usage.Details.Cached, true
 		}
 		p.usage = u
 	}

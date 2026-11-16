@@ -190,7 +190,7 @@ Phoenix uses bounded JSON files for history, chats and activity, and one SQLite 
 
 Chat and activity writes are bounded, coalesced off the UI thread and flushed during a normal quit. A saved transcript contains what the user sent and what the assistant replied; it does not separately persist raw tool payloads or the shared-page snapshot. Assistant text may still quote information it used. Browser history is a distinct store and can be cleared independently.
 
-There is no migration system beyond the library's `user_version`, résumé facts database, application tracker, or backup subsystem in the current code.
+The library applies transactional migrations using SQLite `user_version` and refuses unknown future versions. There is no separate backup subsystem in the current code.
 
 ## 10. Security boundaries
 

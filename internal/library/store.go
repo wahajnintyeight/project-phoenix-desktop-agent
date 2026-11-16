@@ -124,7 +124,6 @@ CREATE TABLE IF NOT EXISTS learned_suppression (
   fingerprint TEXT PRIMARY KEY,
   created_at INTEGER NOT NULL
 );
-PRAGMA user_version = 3;
 `
 
 // Open opens (creating if needed) the library database at dbPath.
@@ -141,7 +140,7 @@ func Open(dbPath string) (*Store, error) {
 		return nil, err
 	}
 	db.SetMaxOpenConns(1)
-	if _, err := db.Exec(schema); err != nil {
+	if err := migrateSchema(db); err != nil {
 		db.Close()
 		return nil, fmt.Errorf("could not prepare the library database: %w", err)
 	}
