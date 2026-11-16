@@ -388,6 +388,10 @@ func handleProviderOp(f []string) {
 		handleMemoryOp(f)
 		return
 	}
+	if strings.HasPrefix(sub, "skills-") {
+		handleSkillsOp(f)
+		return
+	}
 	if strings.HasPrefix(sub, "profile-") {
 		handleProfileOp(f)
 		return

@@ -7,6 +7,7 @@ import "./quick-model";
 import "./browser-settings";
 import "./profile-settings";
 import "./memory-settings";
+import "./skills-settings";
 import "./theme-picker";
 import { initTheme } from "./themes";
 import "./mcp-settings";
@@ -150,6 +151,7 @@ document.querySelector("[data-settings-nav]")?.addEventListener("click", (e) => 
   if (!b || !name || !settings) return;
   settings.dataset["section"] = name;
   if (name === "memory") send("v", "memory-refresh"); // the agent may have added entries since
+  if (name === "skills") send("v", "skills-refresh");
   document.querySelectorAll<HTMLElement>("[data-section-btn]").forEach((other) => {
     other.setAttribute("aria-current", String(other === b));
   });

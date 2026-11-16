@@ -15,6 +15,7 @@
 //           k refresh | save id name prompt kind every at | delete id | enable id 0|1 | run id | stop   saved tasks
 //           v sub id [a] [b]  provider settings: refresh, mode, key, clearkey, default,
 //                          login, test, model <id> <model> <effort>, search <url>
+//                          memory-* and skills-* manage local learning and playbooks
 // Go → UI:  u id prop json   set an allow-listed property on an element
 //           a id attr value  set an allow-listed attribute
 //           t id text        set text content

@@ -467,6 +467,7 @@ func startChatRun(ctx context.Context, cancel context.CancelFunc, id provider.ID
 	if taskPolicy != "" {
 		system += "\n\n" + taskPolicy
 	}
+	system += selectedSkillContext(text, history)
 	prompt = promptWithMemory(prompt, memory)
 	go func() {
 		defer cancel()

@@ -150,6 +150,7 @@
             <button class="nav-item" data-section-btn="providers" aria-current="true">AI providers</button>
             <button class="nav-item" data-section-btn="profile" aria-current="false">About you</button>
             <button class="nav-item" data-section-btn="memory" aria-current="false">Memory</button>
+            <button class="nav-item" data-section-btn="skills" aria-current="false">Skills</button>
             <button class="nav-item" data-section-btn="mcp" aria-current="false">Tools (MCP)</button>
             <button class="nav-item" data-section-btn="desktop" aria-current="false">Computer use</button>
             <button class="nav-item" data-section-btn="browser" aria-current="false">Browser</button>
@@ -206,6 +207,14 @@
                 <p class="max-w-[62ch] text-base text-fg-muted">What Phoenix has learned about you: your details, your answers to questions, your preferences and the choices you make. The agent reads this before it acts and stops asking what it already knows. Correct or delete anything.</p>
               </div>
               <ph-memory-settings id="memory-settings"></ph-memory-settings>
+            </div>
+
+            <div class="flex-col gap-6" data-for="skills">
+              <div class="flex flex-col gap-2">
+                <h2>Skills</h2>
+                <p class="max-w-[62ch] text-base text-fg-muted">Create reusable task playbooks. Phoenix stores them on this computer and adds at most one relevant playbook to a request, up to 4 KB. Skills guide the workflow; they do not grant tools or permissions.</p>
+              </div>
+              <ph-skills-settings id="skills-settings"></ph-skills-settings>
             </div>
 
             <div class="flex-col gap-6" data-for="mcp">

@@ -6,7 +6,7 @@ import (
 	"fmt"
 )
 
-const schemaVersion = 5
+const schemaVersion = 6
 
 func hasColumn(ctx context.Context, conn *sql.Conn, table, column string) (bool, error) {
 	rows, err := conn.QueryContext(ctx, "PRAGMA table_info("+table+")")
@@ -66,7 +66,7 @@ func migrateSchema(db *sql.DB) error {
 			}
 		}
 	}
-	if _, err := conn.ExecContext(ctx, "PRAGMA user_version = 5"); err != nil {
+	if _, err := conn.ExecContext(ctx, "PRAGMA user_version = 6"); err != nil {
 		return err
 	}
 	_, err = conn.ExecContext(ctx, "COMMIT")

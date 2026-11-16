@@ -345,6 +345,7 @@
   .settings[data-section="providers"] [data-for="providers"],
   .settings[data-section="profile"] [data-for="profile"],
   .settings[data-section="memory"] [data-for="memory"],
+  .settings[data-section="skills"] [data-for="skills"],
   .settings[data-section="mcp"] [data-for="mcp"],
   .settings[data-section="desktop"] [data-for="desktop"],
   .settings[data-section="browser"] [data-for="browser"],
@@ -606,6 +607,21 @@
   .mem-add .field-wide { grid-column: 1 / -1; }
   .mem-topic { @apply flex flex-col gap-1; }
   .mem-topic h3 { @apply px-1 text-xs font-medium uppercase tracking-wide text-fg-subtle; }
+  ph-skills-settings { display: flex; max-width: 52rem; flex-direction: column; gap: 1.5rem; }
+  .skills-form { display: flex; flex-direction: column; gap: 1.15rem; padding: 1.25rem; border: 1px solid var(--color-line); border-radius: 1rem; background: var(--color-panel); }
+  .skills-form-intro { display: flex; flex-direction: column; gap: .3rem; }
+  .skills-field { display: flex; flex-direction: column; gap: .4rem; font-weight: 600; }
+  .skills-field .field { width: 100%; font-weight: 400; }
+  .skills-field textarea { height: auto; min-height: 9rem; padding: .7rem; resize: vertical; }
+  .skills-hint { color: var(--color-fg-muted); font-size: .8rem; font-weight: 400; }
+  .skills-actions { display: flex; flex-wrap: wrap; gap: .5rem; }
+  .skills-actions .btn { min-height: 2.25rem; padding-inline: 1rem; }
+  .skills-list-heading { margin-bottom: .25rem; }
+  .skills-item { padding: 1rem 0; border-bottom: 1px solid var(--color-line); overflow-wrap: anywhere; }
+  .skills-item-title { font-weight: 600; margin-bottom: .25rem; }
+  .skills-status { margin-top: .6rem; color: var(--color-fg-muted); font-size: .8rem; }
+  .skills-status.is-enabled { color: var(--color-accent); }
+  .skills-empty { padding: 1rem 0; display: flex; flex-direction: column; gap: .3rem; }
   .mem-row { @apply flex items-start gap-3 rounded-lg px-3 py-2; }
   .mem-row:hover { @apply bg-raised; }
   .mem-text { @apply flex min-w-0 flex-1 flex-col; }

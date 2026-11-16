@@ -124,6 +124,17 @@ CREATE TABLE IF NOT EXISTS learned_suppression (
   fingerprint TEXT PRIMARY KEY,
   created_at INTEGER NOT NULL
 );
+CREATE TABLE IF NOT EXISTS agent_skills (
+  id INTEGER PRIMARY KEY,
+  name TEXT NOT NULL,
+  description TEXT NOT NULL,
+  instructions TEXT NOT NULL,
+  enabled INTEGER NOT NULL DEFAULT 1,
+  created_at INTEGER NOT NULL,
+  updated_at INTEGER NOT NULL
+);
+CREATE UNIQUE INDEX IF NOT EXISTS agent_skills_name ON agent_skills(name COLLATE NOCASE);
+CREATE INDEX IF NOT EXISTS agent_skills_enabled ON agent_skills(enabled, updated_at);
 `
 
 // Open opens (creating if needed) the library database at dbPath.
