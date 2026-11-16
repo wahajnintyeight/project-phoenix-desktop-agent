@@ -32,10 +32,13 @@ export class PhQuickModel extends HTMLElement {
   readonly #empty = el("p", "qm-empty", "No provider is ready yet. Sign in or add an API key in Settings.");
   readonly #manage = el("button", "btn btn-quiet", "Manage providers…");
   readonly #position = (): void => {
-    const button = this.#button.getBoundingClientRect();
-    const panelTop = this.closest<HTMLElement>(".agent")?.getBoundingClientRect().top ?? 0;
-    this.#pop.style.setProperty("--qm-bottom", `${Math.max(8, window.innerHeight - button.top + 8)}px`);
-    this.#pop.style.setProperty("--qm-max-height", `${Math.max(0, button.top - panelTop - 20)}px`);
+    const panel = this.closest<HTMLElement>(".agent")?.getBoundingClientRect();
+    const top = Math.max(8, (panel?.top ?? 0) + 8);
+    const bottom = Math.min(window.innerHeight - 8, panel?.bottom ?? this.#button.getBoundingClientRect().top) - 8;
+    this.#pop.style.setProperty("--qm-right", `${Math.max(12, window.innerWidth - (panel?.right ?? window.innerWidth) + 12)}px`);
+    this.#pop.style.setProperty("--qm-width", `${Math.max(0, (panel?.width ?? window.innerWidth) - 24)}px`);
+    this.#pop.style.setProperty("--qm-bottom", `${window.innerHeight - bottom}px`);
+    this.#pop.style.setProperty("--qm-max-height", `${Math.max(0, bottom - top)}px`);
   };
 
   connectedCallback(): void {

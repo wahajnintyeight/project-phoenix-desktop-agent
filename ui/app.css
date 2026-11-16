@@ -743,7 +743,7 @@
   .qm-btn:hover:not(:disabled) { @apply bg-raised text-fg; }
   .qm-btn:disabled { @apply opacity-50; }
   .qm-label { @apply truncate; }
-  .qm-pop { position-area: none; inset: auto 12px var(--qm-bottom, 80px) auto; width: min(25rem, calc(var(--agent-width, 380px) - 24px)); max-height: min(36rem, var(--qm-max-height, calc(100vh - var(--qm-bottom, 80px) - 96px))); @apply hidden flex-col gap-0 overflow-hidden rounded-xl p-0; }
+  .qm-pop { position-area: none; inset: auto var(--qm-right, 12px) var(--qm-bottom, 80px) auto; width: min(25rem, var(--qm-width, calc(100vw - 24px))); max-height: min(36rem, var(--qm-max-height, calc(100vh - var(--qm-bottom, 80px) - 96px))); @apply hidden flex-col gap-0 overflow-hidden rounded-xl p-0; }
   .qm-pop:popover-open { display: flex; }
   .qm-heading { @apply flex shrink-0 items-center justify-between gap-3 border-b border-line px-4 py-2; }
   .qm-heading-copy { @apply min-w-0; }
