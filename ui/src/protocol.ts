@@ -18,6 +18,7 @@
 // Go → UI:  u id prop json   set an allow-listed property on an element
 //           a id attr value  set an allow-listed attribute
 //           t id text        set text content
+//           d [percent]      update download progress (empty means indeterminate)
 //           f id             focus (and select) an element
 //           s state          window state: max | normal
 //           o seq            pong

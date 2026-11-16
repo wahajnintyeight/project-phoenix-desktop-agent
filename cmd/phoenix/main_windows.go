@@ -313,6 +313,7 @@ func uiReady() {
 		startAppInit() // library, approvals, saved MCP servers, desktop thread: all in the background
 	}
 	ready = true
+	checkForUpdates()
 	ver, verErr := webviewloader.GetAvailableCoreWebView2BrowserVersionString("")
 	if verErr != nil {
 		ver = "unavailable: " + verErr.Error()

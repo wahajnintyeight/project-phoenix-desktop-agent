@@ -14,6 +14,18 @@ interface Entry {
   updated: number;
 }
 
+interface Lesson {
+  id: number;
+  kind: string;
+  trigger: string;
+  lesson: string;
+  evidence: string;
+  sourceChat?: string | undefined;
+  status: "candidate" | "active";
+  helpful: number;
+  unhelpful: number;
+}
+
 interface Outcome {
   ok?: boolean;
   text?: string;
@@ -29,18 +41,23 @@ const KIND_LABEL: Record<string, string> = {
 
 export class PhMemorySettings extends HTMLElement {
   #entries: Entry[] = [];
+  #lessons: Lesson[] = [];
+  #learningEnabled = false;
+  #editingLesson = 0;
   #editing = 0;
   #confirmClear = false;
   readonly #search = el("input", "field");
   readonly #count = el("p", "text-xs text-fg-muted");
   readonly #list = el("div", "flex flex-col gap-4");
   readonly #result = el("p", "msg");
-  readonly #clear = el("button", "btn", "Forget everything");
+  readonly #clear = el("button", "btn", "Clear memory");
   readonly #topicIn = el("input", "field");
   readonly #keyIn = el("input", "field");
   readonly #valueIn = el("input", "field field-wide");
   readonly #kindIn = el("select", "field");
   readonly #addBtn = el("button", "btn btn-primary", "Remember");
+  readonly #learning = el("input");
+  readonly #lessonList = el("div", "flex flex-col gap-4");
 
   connectedCallback(): void {
     if (this.childElementCount > 0) return;
@@ -69,7 +86,14 @@ export class PhMemorySettings extends HTMLElement {
 
     const bar = el("div", "mem-bar");
     bar.append(this.#search, this.#clear);
-    this.append(bar, this.#count, add, this.#result, this.#list);
+    this.#learning.type = "checkbox";
+    this.#learning.setAttribute("aria-label", "Learn from completed work");
+    const learningLabel = el("label", "tp-check");
+    learningLabel.append(this.#learning, el("span", "tp-check-text", "Suggest lessons from completed work"));
+    const learningInfo = el("p", "text-xs text-fg-muted", "Phoenix suggests useful lessons from agent tasks and corrections. Review them here before they are used. Turning this off stops new suggestions; saved memories still work.");
+    this.append(bar, this.#count, learningLabel, learningInfo, add, this.#result, this.#lessonList, this.#list);
+
+    this.#learning.addEventListener("change", () => send("v", "memory-learning", this.#learning.checked ? "1" : "0"), { passive: true });
 
     this.#search.addEventListener("input", () => this.#render(), { passive: true });
     this.#addBtn.addEventListener("click", () => {
@@ -83,20 +107,24 @@ export class PhMemorySettings extends HTMLElement {
     this.#clear.addEventListener("click", () => {
       if (!this.#confirmClear) {
         this.#confirmClear = true;
-        this.#clear.textContent = "Click again to forget everything";
-        setTimeout(() => { this.#confirmClear = false; this.#clear.textContent = "Forget everything"; }, 4000);
+        this.#clear.textContent = "Click again to clear memory";
+        setTimeout(() => { this.#confirmClear = false; this.#clear.textContent = "Clear memory"; }, 4000);
         return;
       }
       this.#confirmClear = false;
-      this.#clear.textContent = "Forget everything";
+      this.#clear.textContent = "Clear memory";
       send("v", "memory-clear");
     }, { passive: true });
     this.#render();
   }
 
-  set data(v: { entries: Entry[] }) {
+  set data(v: { entries: Entry[]; lessons?: Lesson[]; learningEnabled?: boolean }) {
     this.#entries = v.entries ?? [];
+    this.#lessons = v.lessons ?? [];
+    this.#learningEnabled = v.learningEnabled ?? false;
+    this.#learning.checked = this.#learningEnabled;
     this.#editing = 0;
+    this.#editingLesson = 0;
     this.#render();
   }
 
@@ -111,10 +139,19 @@ export class PhMemorySettings extends HTMLElement {
       const hay = `${e.topic} ${e.key} ${e.value}`.toLowerCase();
       return words.every((w) => hay.includes(w));
     });
-    this.#clear.hidden = this.#entries.length === 0;
-    this.#count.textContent = this.#entries.length === 0
+    this.#clear.hidden = this.#entries.length === 0 && this.#lessons.length === 0;
+    this.#count.textContent = this.#entries.length === 0 && this.#lessons.length === 0
       ? "Nothing yet. Phoenix remembers what you tell the agent and what you choose; you can also add things here."
-      : `${shown.length} of ${this.#entries.length} remembered. Stored only on this computer; a short version goes with every message.`;
+      : `${shown.length} of ${this.#entries.length} memories · ${this.#lessons.length} lessons. Stored on this computer and used when relevant.`;
+
+    this.#lessonList.replaceChildren();
+    const lessons = this.#lessons.filter((l) => words.every((w) => `${l.trigger} ${l.lesson} ${l.evidence}`.toLowerCase().includes(w)));
+    if (lessons.length) {
+      const section = el("section", "mem-topic");
+      section.append(el("h3", undefined, "Learned lessons"));
+      for (const lesson of lessons) section.append(this.#lessonRow(lesson));
+      this.#lessonList.append(section);
+    }
 
     this.#list.replaceChildren();
     const byTopic = new Map<string, Entry[]>();
@@ -125,6 +162,52 @@ export class PhMemorySettings extends HTMLElement {
       for (const e of rows) sec.append(e.id === this.#editing ? this.#editRow(e) : this.#row(e));
       this.#list.append(sec);
     }
+  }
+
+  #lessonRow(item: Lesson): HTMLElement {
+    const row = el("div", "mem-row");
+    const body = el("div", "mem-text");
+    const actions = el("div", "mem-actions");
+    const act = (label: string, action: string): HTMLButtonElement => {
+      const button = el("button", "btn btn-sm", label);
+      button.type = "button";
+      button.addEventListener("click", () => send("v", "memory-lesson", String(item.id), action), { passive: true });
+      return button;
+    };
+    if (this.#editingLesson === item.id) {
+      const trigger = el("input", "field");
+      const lesson = el("textarea", "field");
+      trigger.value = item.trigger;
+      lesson.value = item.lesson;
+      trigger.setAttribute("aria-label", "When this lesson is relevant");
+      lesson.setAttribute("aria-label", "Lesson");
+      const save = el("button", "btn btn-sm btn-primary", "Save");
+      save.type = "button";
+      save.addEventListener("click", () => send("v", "memory-lesson", String(item.id), "edit", trigger.value, lesson.value), { passive: true });
+      const cancel = el("button", "btn btn-sm", "Cancel");
+      cancel.type = "button";
+      cancel.addEventListener("click", () => { this.#editingLesson = 0; this.#render(); }, { passive: true });
+      body.append(trigger, lesson);
+      actions.append(save, cancel);
+    } else {
+      body.append(el("span", "mem-key", item.trigger), el("span", "mem-value", item.lesson));
+      body.append(el("span", "mem-meta", `${item.status === "candidate" ? "Suggested · review before use" : `Approved · ${item.helpful} helpful · ${item.unhelpful} needs work`} · ${item.kind} · Agent suggestion`));
+      body.append(el("span", "mem-meta", `Evidence reported: ${item.evidence}`));
+      if (item.sourceChat) {
+        const source = el("button", "btn btn-sm", "Open source chat");
+        source.type = "button";
+        source.addEventListener("click", () => send("k", "session", item.sourceChat ?? ""), { passive: true });
+        actions.append(source);
+      }
+      if (item.status === "candidate") actions.append(act("Approve", "approve"));
+      else actions.append(act("Helpful", "helpful"), act("Needs work", "unhelpful"));
+      const edit = el("button", "btn btn-sm", "Edit");
+      edit.type = "button";
+      edit.addEventListener("click", () => { this.#editingLesson = item.id; this.#render(); }, { passive: true });
+      actions.append(edit, act("Forget", "delete"));
+    }
+    row.append(body, actions);
+    return row;
   }
 
   #row(e: Entry): HTMLElement {
