@@ -106,6 +106,7 @@ type chatEvent struct {
 	Resume      bool                 `json:"resume,omitempty"`
 	Messages    []chatDisplayMessage `json:"messages,omitempty"`
 	Suggestions []string             `json:"suggestions,omitempty"`
+	Summary     string               `json:"summary,omitempty"`
 }
 
 func postChat(evs ...chatEvent) {
@@ -144,7 +145,7 @@ func handleChatOp(f []string) {
 			at, err := strconv.ParseInt(f[2], 10, 64)
 			index, indexErr := strconv.Atoi(f[3])
 			if err == nil && indexErr == nil {
-				requestChatSuggestions(at, index)
+				requestChatSuggestions(at, index, len(f) > 4 && f[4] == "1")
 			}
 		}
 	case "send":

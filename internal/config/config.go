@@ -61,6 +61,11 @@ type Desktop struct {
 	CLIPath string `yaml:"cli_path,omitempty"`
 }
 
+// Voice stores speech-mode preferences. Speech provider credentials live in the vault.
+type Voice struct {
+	Enabled bool `yaml:"enabled,omitempty"`
+}
+
 // Providers is the providers section.
 type Providers struct {
 	Default string         `yaml:"default,omitempty"`
@@ -76,6 +81,7 @@ type Config struct {
 	Providers Providers `yaml:"providers"`
 	Browser   Browser   `yaml:"browser,omitempty"`
 	Desktop   Desktop   `yaml:"desktop,omitempty"`
+	Voice     Voice     `yaml:"voice,omitempty"`
 	// MCPServers are the installed MCP servers by name. Entries run programs or call URLs, so
 	// they are validated on load and only the Settings UI may change them.
 	MCPServers map[string]mcp.Server `yaml:"mcp_servers,omitempty"`

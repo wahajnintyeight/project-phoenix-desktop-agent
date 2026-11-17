@@ -63,6 +63,7 @@ const STROKES = {
   shuffle: "M2.5 4.5H5l5 7h3.5M2.5 11.5H5l1.5-2M9 6l1-1.5h3.5M12 3l1.5 1.5L12 6M12 10l1.5 1.5L12 13",
   play: "M5 3.5v9l7.5-4.5L5 3.5Z",
   pause: "M5.5 3.5v9M10.5 3.5v9",
+  mic: "M8 2.5a2.2 2.2 0 0 0-2.2 2.2v3.8a2.2 2.2 0 0 0 4.4 0V4.7A2.2 2.2 0 0 0 8 2.5ZM4 7.5a4 4 0 0 0 8 0M8 11.5v2M5.5 13.5h5",
 } as const;
 
 export type IconName = keyof typeof STROKES | "stop";

@@ -51,6 +51,7 @@ func initProviders() {
 	if hubErr != nil {
 		return
 	}
+	initVoice(vault, cfgStore.Path())
 	hub = providerhub.NewWithStore(cfgStore, vault)
 	hub.Trace = logf
 }

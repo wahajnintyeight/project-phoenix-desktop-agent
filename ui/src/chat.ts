@@ -14,10 +14,12 @@ import "./mentions";
 import type { MentionPicker } from "./mentions";
 import { CompactReply } from "./compact-reply";
 import { when } from "./chat-time";
+import { createVoiceButton, finishVoiceRequest, isVoiceModeEnabled, playVoiceAudio, prepareVoicePlayback, showVoiceStatus } from "./voice";
 
 export interface ChatEvent {
-  k: "user" | "note" | "processing" | "tool" | "tool-result" | "approve" | "approved" | "start" | "delta" | "done" | "error" | "stopped" | "reset" | "restore" | "queue" | "interrupted" | "suggestions";
+  k: "user" | "note" | "processing" | "tool" | "tool-result" | "approve" | "approved" | "start" | "delta" | "done" | "error" | "stopped" | "reset" | "restore" | "queue" | "interrupted" | "suggestions" | "voice-transcript" | "voice-error" | "voice-audio";
   suggestions?: string[];
+  summary?: string;
   memoryBytes?: number;
   inKnown?: boolean; outKnown?: boolean; cachedKnown?: boolean; costKnown?: boolean;
   resume?: boolean | undefined;
@@ -168,6 +170,7 @@ export class PhChat extends HTMLElement {
   readonly #input = el("textarea", "chat-input");
   readonly #commandMenu = el("div", "slash-menu");
   readonly #send = el("button", "send-btn");
+  readonly #voice = createVoiceButton();
   readonly #queue = el("div", "chat-queue"); // messages waiting for the agent, with Steer and remove
   readonly #share = el("button", "share-chip");
   readonly #newChat = el("button", "chat-new");
@@ -312,7 +315,7 @@ export class PhChat extends HTMLElement {
     this.#syncSend();
 
     const bar = el("div", "composer-bar");
-    bar.append(this.#share, picker, this.#send);
+    bar.append(this.#share, picker, this.#voice, this.#send);
     const composer = el("div", "composer");
     composer.append(this.#compactStatus, this.#compactReply.element, this.#input, bar);
     const wrap = el("div", "chat-composer");
@@ -511,6 +514,7 @@ export class PhChat extends HTMLElement {
   #submit(): void {
     const text = this.#input.value.trim();
     if (!text) return;
+    prepareVoicePlayback();
     // While the agent is busy Go queues the message; it is shown when it starts.
     if (!this.#running) this.#setRunning(true);
     send("g", "send", text, this.#shareOn ? "1" : "0");
@@ -940,14 +944,38 @@ export class PhChat extends HTMLElement {
         this.#current = null;
         this.#setRunning(false);
         this.#pendingChoices?.setChoiceMode("ready");
-        if (c && !this.#pendingChoices && ev.at && ev.id) send("g", "suggest", String(ev.at), ev.id);
+        if (c && ev.at && ev.id && (isVoiceModeEnabled() || !this.#pendingChoices)) {
+          send("g", "suggest", String(ev.at), ev.id, isVoiceModeEnabled() ? "1" : "0");
+        }
         break;
       }
       case "suggestions":
-        if (!this.#running && this.#suggestionTarget && ev.suggestions?.length === 2) {
+        if (ev.summary && isVoiceModeEnabled()) send("w", "speak", ev.summary);
+        if (!this.#running && this.#suggestionTarget && !this.#pendingChoices && ev.suggestions?.length === 2) {
           this.#suggestionTarget.setSuggestions(ev.suggestions);
           if (ev.in || ev.out || ev.cost) this.#suggestionTarget.meta.title += `\nSuggestions: ${ev.in ?? 0} in, ${ev.out ?? 0} out${ev.cost ? ` · $${ev.cost.toFixed(3)}` : ""}`;
         }
+        break;
+      case "voice-transcript": {
+        finishVoiceRequest();
+        const text = ev.text?.trim();
+        if (text) {
+          this.#input.value = `${this.#input.value}${this.#input.value ? " " : ""}${text}`;
+          this.#resizeInput();
+          this.#syncSend();
+          this.#input.focus();
+          showVoiceStatus("Transcription added to the message box.");
+        } else {
+          showVoiceStatus("Cartesia did not recognize any speech.");
+        }
+        break;
+      }
+      case "voice-error":
+        finishVoiceRequest();
+        showVoiceStatus(ev.text ?? "Voice request failed.");
+        break;
+      case "voice-audio":
+        if (ev.text) playVoiceAudio(ev.text);
         break;
       case "stopped": {
         this.#processing.hidden = true;

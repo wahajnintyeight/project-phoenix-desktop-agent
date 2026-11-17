@@ -219,6 +219,11 @@ func onMessage(message string) {
 		if len(f) > 1 {
 			logf("msg f %s", f[1])
 		}
+	case "w":
+		// Speech messages can contain an API key, recorded audio, or private transcripts.
+		if len(f) > 1 {
+			logf("msg w %s", f[1])
+		}
 	case "v":
 		// Provider messages can carry an API key: log the operation, never the fields. For
 		// MCP the second field can be pasted JSON holding secrets, so only the operation is
@@ -260,6 +265,8 @@ func onMessage(message string) {
 		handleFilesOp(f)
 	case "g": // chat with the agent
 		handleChatOp(f)
+	case "w": // optional speech input and output
+		handleVoiceOp(f)
 	case "k": // saved tasks
 		handleTaskOp(f)
 	case "j":
@@ -343,6 +350,7 @@ func uiReady() {
 	quickState.key = "" // the UI is new: draw the bar even if it looks unchanged
 	refreshActions(true)
 	refreshProviders() // also reports a configuration error instead of leaving Home in "checking"
+	pushVoiceSettings("")
 	if hub != nil {
 		pushMCP("", false) // slash commands need the installed server list before Settings opens
 	}

@@ -23,9 +23,11 @@ import "./context-meter";
 import "./quick-actions";
 import { initPanelResize } from "./panel-resize";
 import { initAgentDrawer } from "./agent-drawer";
+import { initVoiceSettings, syncVoiceMode } from "./voice";
 
 initPanelResize();
 initAgentDrawer();
+initVoiceSettings();
 
 document.addEventListener("contextmenu", (event) => {
   const target = event.target;
@@ -72,6 +74,7 @@ listen((op, f) => {
       if (!el || !SETTABLE_PROPS.has(prop)) break;
       if (prop === "value" && el === document.activeElement) break; // never clobber typing
       (el as unknown as Record<string, unknown>)[prop] = JSON.parse(f[2] ?? "null");
+      if (el.id === "voice-mode" && prop === "checked") syncVoiceMode();
       break;
     }
     case "a": { // set attribute: id, name, value
@@ -152,6 +155,7 @@ document.querySelector("[data-settings-nav]")?.addEventListener("click", (e) => 
   settings.dataset["section"] = name;
   if (name === "memory") send("v", "memory-refresh"); // the agent may have added entries since
   if (name === "skills") send("v", "skills-refresh");
+  if (name === "general") send("w", "status");
   document.querySelectorAll<HTMLElement>("[data-section-btn]").forEach((other) => {
     other.setAttribute("aria-current", String(other === b));
   });

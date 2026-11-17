@@ -245,6 +245,17 @@
               <h2>General</h2>
 
               <section class="flex flex-col gap-3">
+                <div><h3>Voice mode</h3><p class="text-fg-muted">Dictate in English with Cartesia, then hear a short LLM summary after each reply. Voice is off until you enable it.</p></div>
+                <label class="flex items-center gap-3"><input id="voice-mode" type="checkbox"><span>Enable voice mode</span></label>
+                <label class="flex max-w-[38rem] flex-col gap-2" for="cartesia-api-key"><span class="font-medium">Cartesia API key</span><input id="cartesia-api-key" type="password" autocomplete="new-password" spellcheck="false" class="w-full rounded-md border border-line bg-sunken px-3 py-2 text-fg outline-none focus:border-accent" placeholder="sk_car_…"><span class="text-xs text-fg-muted">The key is stored in the Windows encrypted vault and sent only from Phoenix to Cartesia.</span></label>
+                <div class="flex flex-wrap gap-2"><button id="cartesia-save" type="button" class="btn btn-sm">Save key</button><button id="cartesia-clear" type="button" class="btn btn-quiet btn-sm" disabled>Remove key</button></div>
+                <p id="voice-status" class="text-sm text-fg-muted" role="status">Checking Cartesia setup…</p>
+                <p id="voice-budget" class="text-sm text-fg-muted">Phoenix enforces a local rolling 28-day cap of 20,000 credits. Cartesia Free is $0 and includes 20,000 shared credits per month. Use the Free plan with no paid add-ons; usage outside Phoenix is not counted by this local cap.</p>
+                <p class="max-w-[62ch] text-xs text-fg-muted">Microphone audio clips up to 20 seconds and spoken summaries are sent to Cartesia over HTTPS. Phoenix reserves credits before each request and will not retry when Cartesia rejects a request or the local cap is reached.</p>
+                <p class="max-w-[62ch] text-xs text-fg-muted">The spoken summary uses your configured chat model; its provider’s usage may be billed separately from Cartesia voice credits.</p>
+              </section>
+
+              <section class="flex flex-col gap-3">
                 <div>
                   <h3>Software updates</h3>
                   <p class="text-fg-muted">Phoenix checks for updates when you open the app.</p>
