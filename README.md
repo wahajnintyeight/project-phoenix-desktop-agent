@@ -12,7 +12,7 @@
 
 Phoenix brings a multi-tab browser and AI provider controls into one native desktop app. It is being built around a simple idea: keep the person in control, make the agent's work visible, and make actions visible while the agent works.
 
-> **Latest release:** [Phoenix v0.2.4](https://github.com/wahajnintyeight/project-phoenix-desktop-agent/releases/latest) for Windows. See the [changelog](CHANGELOG.md) for this release's changes.
+> **Latest release:** [Phoenix v0.2.5](https://github.com/wahajnintyeight/project-phoenix-desktop-agent/releases/latest) for Windows. See the [changelog](CHANGELOG.md) for this release's changes.
 
 Phoenix is in early development. The browser, provider setup, and model chat are implemented. Claude, Codex, and OpenAI-compatible API providers can inspect and operate Phoenix browser tabs through built-in browser tools. Native computer use can inspect and operate Windows apps without an external desktop agent. Browser file transfers are still in progress.
 
@@ -27,6 +27,8 @@ Phoenix is in early development. The browser, provider setup, and model chat are
 - Search for tasks, MCP servers, and files or folders from the Files library by typing `@` anywhere in a message.
 - Collapse the agent drawer into a compact, usable chat bar. It shows live processing status and the current reply while the agent works.
 - Replies can offer two lightweight follow-up actions above the message composer. Phoenix avoids generating a second menu when the reply already contains choices.
+- **Voice mode:** dictate messages and answers to agent questions in English with Cartesia, and hear short spoken summaries after replies. The Speak control shows microphone activity and recording controls; transcripts are inserted when recording stops. Voice mode is off until enabled in Settings → General.
+- **Keyboard shortcuts:** open the application menu's Keyboard shortcuts page to see built-in shortcuts and configure multiple single-character Alt bindings for common actions. Hold Alt to show temporary key tips on visible buttons.
 - Resize the assistant panel by dragging its left edge; the width is remembered. The divider also supports arrow keys, Shift for larger steps, and double-click to reset.
 - **Hardware acceleration:** Settings → General controls GPU rendering for Phoenix and its web pages. It is enabled by default; changes apply after restarting Phoenix.
 - Saved chats and an activity timeline survive restarts. Phoenix restores the latest chat on launch; older conversations are available from the Chats menu. Activity records contain only tool labels, permission decisions and run outcomes.

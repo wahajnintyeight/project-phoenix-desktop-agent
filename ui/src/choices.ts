@@ -1,5 +1,6 @@
 import { el } from "./dom";
 import type { ChoiceSet } from "./choice-parser";
+import { createVoiceButton } from "./voice";
 
 export { splitChoices } from "./choice-parser";
 export type { ChoiceSet } from "./choice-parser";
@@ -47,6 +48,8 @@ export class ChoiceMenus {
     input.maxLength = 500;
     input.placeholder = "Type your own answer…";
     input.setAttribute("aria-label", `Your answer: ${set.question}`);
+    const voice = createVoiceButton(input);
+    voice.classList.add("chat-question-voice");
     const list = el("div", "chat-question-options");
     const group: Group = { key: JSON.stringify(set), set, node, input, buttons: [], answer: "" };
     input.addEventListener("input", () => {
@@ -68,7 +71,7 @@ export class ChoiceMenus {
       group.buttons.push(button);
       list.append(button);
     }
-    node.append(input, list);
+    node.append(input, voice, list);
     return group;
   }
 

@@ -18,6 +18,7 @@
 @import "./quick-actions.css" layer(components);
 @import "./chat-questions.css" layer(components);
 @import "./chat-history.css" layer(components);
+@import "./keybindings.css" layer(components);
 @source "./index.html";
 @source "./src";
 
@@ -349,7 +350,8 @@
   .settings[data-section="mcp"] [data-for="mcp"],
   .settings[data-section="desktop"] [data-for="desktop"],
   .settings[data-section="browser"] [data-for="browser"],
-  .settings[data-section="general"] [data-for="general"] { display: flex; }
+  .settings[data-section="general"] [data-for="general"],
+  .settings[data-section="keybindings"] [data-for="keybindings"] { display: flex; }
   .display-control { @apply flex max-w-xl flex-col gap-2; }
   .display-control label { @apply flex items-center justify-between gap-4; }
   .display-control output { @apply tabular text-fg-muted; }

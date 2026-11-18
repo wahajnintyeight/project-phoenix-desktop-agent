@@ -59,6 +59,7 @@
     </button>
     <div id="menu" popover>
       <button class="menu-item" data-action="menu.settings">Settings <kbd>Ctrl+,</kbd></button>
+      <button class="menu-item" id="keybindings-open" type="button">Keyboard shortcuts</button>
       <button class="menu-item" data-action="menu.downloads">Downloads</button>
       <button class="menu-item" data-action="menu.about">About Phoenix</button>
     </div>
@@ -155,10 +156,16 @@
             <button class="nav-item" data-section-btn="desktop" aria-current="false">Computer use</button>
             <button class="nav-item" data-section-btn="browser" aria-current="false">Browser</button>
             <button class="nav-item" data-section-btn="general" aria-current="false">General</button>
+            <button class="nav-item" data-section-btn="keybindings" aria-current="false">Keybindings</button>
           </nav>
 
           <div class="min-w-0">
             <p id="settings-error" class="notice is-error mb-6" role="alert" hidden></p>
+            <div class="flex-col gap-6" data-for="keybindings">
+              <div><h2>Keybindings</h2><p class="text-fg-muted">Assign one or more Alt shortcuts to an action. Separate single characters with spaces; hold Alt and press a character to activate it.</p></div>
+              <div id="keybindings-settings"></div>
+              <p id="keybindings-status" role="status" class="text-fg-muted"></p>
+            </div>
 
             <div class="flex-col gap-8" data-for="providers">
               <div class="flex flex-col gap-2">

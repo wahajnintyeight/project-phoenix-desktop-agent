@@ -24,6 +24,7 @@ import "./quick-actions";
 import { initPanelResize } from "./panel-resize";
 import { initAgentDrawer } from "./agent-drawer";
 import { initVoiceSettings, syncVoiceMode } from "./voice";
+import "./keybindings";
 
 initPanelResize();
 initAgentDrawer();

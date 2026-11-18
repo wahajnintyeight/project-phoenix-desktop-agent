@@ -2,6 +2,25 @@
 
 Notable Phoenix changes are listed here. Versions use the `vMAJOR.MINOR.PATCH` release tags.
 
+## [0.2.5] - 2026-11-18
+
+### Added
+
+- Voice mode with Cartesia dictation, spoken reply summaries, microphone activity feedback, and voice input for chat and agent question fields.
+- A recording bar with a live waveform and cancel and stop controls.
+- A Keyboard shortcuts page, configurable single-character Alt bindings, and hold-Alt key tips on visible buttons.
+
+### Changed
+
+- Place dictated transcripts in the answer field that started the recording.
+- Keep recording controls in the composer until the user stops or cancels dictation.
+
+### Notes
+
+- Dictation is transcribed after the user stops recording; live transcript streaming is not included.
+- Alt bindings are stored in browser local storage for the current Phoenix profile.
+- Voice mode is off by default and uses the Cartesia key stored in the Windows encrypted vault.
+
 ## [0.2.4] - 2026-11-16
 
 ### Added

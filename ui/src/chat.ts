@@ -14,7 +14,7 @@ import "./mentions";
 import type { MentionPicker } from "./mentions";
 import { CompactReply } from "./compact-reply";
 import { when } from "./chat-time";
-import { createVoiceButton, finishVoiceRequest, isVoiceModeEnabled, playVoiceAudio, prepareVoicePlayback, showVoiceStatus } from "./voice";
+import { createVoiceButton, finishVoiceRequest, insertVoiceTranscript, isVoiceModeEnabled, playVoiceAudio, prepareVoicePlayback, showVoiceStatus } from "./voice";
 
 export interface ChatEvent {
   k: "user" | "note" | "processing" | "tool" | "tool-result" | "approve" | "approved" | "start" | "delta" | "done" | "error" | "stopped" | "reset" | "restore" | "queue" | "interrupted" | "suggestions" | "voice-transcript" | "voice-error" | "voice-audio";
@@ -957,15 +957,16 @@ export class PhChat extends HTMLElement {
         }
         break;
       case "voice-transcript": {
-        finishVoiceRequest();
         const text = ev.text?.trim();
-        if (text) {
+        const insertedInAnswer = text ? insertVoiceTranscript(text) : false;
+        finishVoiceRequest();
+        if (text && !insertedInAnswer) {
           this.#input.value = `${this.#input.value}${this.#input.value ? " " : ""}${text}`;
           this.#resizeInput();
           this.#syncSend();
           this.#input.focus();
           showVoiceStatus("Transcription added to the message box.");
-        } else {
+        } else if (!text) {
           showVoiceStatus("Cartesia did not recognize any speech.");
         }
         break;
