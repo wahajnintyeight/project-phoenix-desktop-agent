@@ -9,4 +9,4 @@ go.sum
 /ui/.cache/
 *.syso
 /build/windows/nsis/*-installer.exe
-/.task/
+/.task//brag-output-*/

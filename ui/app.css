@@ -894,6 +894,7 @@
   .chat-user { @apply items-end; }
   .chat-user .chat-text { @apply max-w-[88%] rounded-2xl rounded-br-md border px-3.5 py-2 text-sm whitespace-pre-wrap text-fg; background: linear-gradient(155deg, var(--color-mauve-shadow-700), var(--color-mauve-shadow-800)); border-color: var(--color-mauve-shadow-700); }
   .chat-error .chat-text { @apply whitespace-pre-wrap; }
+  .chat-retry { @apply self-start; }
 
   /* Markdown in replies */
   .chat-ai .chat-text > :first-child { margin-top: 0; }
