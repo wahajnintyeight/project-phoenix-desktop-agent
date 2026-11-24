@@ -4,7 +4,7 @@ import type { ChatEvent } from "./chat";
 
 /**
  * Consecutive tool calls fold into one collapsed row, so a long run reads as a single line of
- * progress ("Clicking Apply · 7 steps") instead of a wall of cards. Opening it shows each step.
+ * progress ("Clicking Apply Â· 7 steps") instead of a wall of cards. Opening it shows each step.
  */
 export class StepGroup {
   readonly box = el("details", "chat-steps") as HTMLDetailsElement;
@@ -47,10 +47,10 @@ export class StepGroup {
   #render(): void {
     const running = this.#live;
     this.box.dataset["state"] = running ? "running" : this.#failed ? "failed" : "done";
-    this.#label.textContent = running ? this.#latest || "Working…" : `Used ${this.#total === 1 ? "1 tool" : `${this.#total} tools`}`;
+    this.#label.textContent = running ? this.#latest || "Workingâ€¦" : `Used ${this.#total === 1 ? "1 tool" : `${this.#total} tools`}`;
     const bits = running ? [`${this.#total} ${this.#total === 1 ? "step" : "steps"}`] : [];
     if (this.#failed) bits.push(`${this.#failed} failed`);
-    this.#count.textContent = bits.join(" · ");
+    this.#count.textContent = bits.join(" Â· ");
     this.#count.hidden = bits.length === 0;
   }
 }
@@ -70,6 +70,5 @@ const BROWSER_STEPS: Record<string, string> = {
 };
 
 export function stepTitle(ev: ChatEvent): string {
-  return (/browser/i.test(ev.server ?? "") && ev.toolName && BROWSER_STEPS[ev.toolName]) || ev.text || ev.toolName || "Working…";
+  return (/browser/i.test(ev.server ?? "") && ev.toolName && BROWSER_STEPS[ev.toolName]) || ev.text || ev.toolName || "Workingâ€¦";
 }
-

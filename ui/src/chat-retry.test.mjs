@@ -43,4 +43,3 @@ assert.equal(sent.length, 1, "a running retry must not send twice");
 chat.events = [{ k: "user", text: "retry" }];
 assert.ok(!retry.parent.children.includes(retry), "an older retry button must be removed");
 console.log("Chat retry checks passed.");
-
