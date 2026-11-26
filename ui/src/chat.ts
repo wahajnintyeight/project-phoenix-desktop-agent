@@ -232,7 +232,7 @@ export class PhChat extends HTMLElement {
 
     // Sharing is the user's choice, kept between sessions: the page's text goes to the model.
     this.#share.type = "button";
-    this.#share.title = "Send this tab's text with your message";
+    this.#share.title = "Share this tab with the agent and generate page-specific quick actions";
     this.#share.setAttribute("aria-label", "Share this page with the agent");
     this.#share.append(icon("page", 14), el("span", undefined, "Share page"));
     try { this.#shareOn = localStorage.getItem("phoenix.sharePage") === "1"; } catch { /* storage unavailable */ }
@@ -400,6 +400,7 @@ export class PhChat extends HTMLElement {
   #setShare(on: boolean): void {
     this.#shareOn = on;
     this.#share.setAttribute("aria-pressed", String(on));
+    send("g", "quick-share", on ? "1" : "0");
     try { localStorage.setItem("phoenix.sharePage", on ? "1" : "0"); } catch { /* ignore */ }
   }
 

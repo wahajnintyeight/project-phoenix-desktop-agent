@@ -154,7 +154,7 @@ func TestCodexStream(t *testing.T) {
 func TestCodexFailure(t *testing.T) {
 	p := &codexParser{}
 	evs := feed(p, `{"type":"turn.failed","error":{"message":"usage limit reached"}}`)
-	if len(evs) != 2 || evs[0].Kind != EvError || evs[0].Text != "usage limit reached" || !p.result.IsError || !p.done {
+	if len(evs) != 2 || evs[0].Kind != EvError || evs[0].Text != "usage limit reached" || !p.result.IsError || p.result.Text != "usage limit reached" || !p.done {
 		t.Fatalf("%+v", evs)
 	}
 }

@@ -70,3 +70,57 @@ func TestMemoryFollowUpDetection(t *testing.T) {
 		}
 	}
 }
+
+// All six cases must pass: reviewed corrections must replace old content and
+// scoped lessons must never leak across scopes, including on follow-ups.
+func TestLearningContextScenarioEvaluation(t *testing.T) {
+	s, err := library.Open(filepath.Join(t.TempDir(), "library.db"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer s.Close()
+	if err := s.SetLearningEnabled(true); err != nil {
+		t.Fatal(err)
+	}
+	old, err := s.ProposeLesson("workflow", "expense report", "Use paper receipts", "synthetic", "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := s.ReviewLesson(old.ID, "approve", "", ""); err != nil {
+		t.Fatal(err)
+	}
+	updated, err := s.ProposeLesson("workflow", "expense report", "Use digital receipts", "synthetic correction", "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := s.ReviewLessonDetails(updated.ID, "scope", "atlas", 0); err != nil {
+		t.Fatal(err)
+	}
+	history := []provider.Message{{Role: "user", Content: "Prepare an expense report"}}
+	before := memoryContext(s, "expense report", nil, []string{"atlas"}, "")
+	if !strings.Contains(before, "paper receipts") || strings.Contains(before, "digital receipts") {
+		t.Fatal("unreviewed correction affected recall")
+	}
+	if err := s.ReviewLessonDetails(updated.ID, "replace", "", old.ID); err != nil {
+		t.Fatal(err)
+	}
+	cases := []struct {
+		name, text string
+		history    []provider.Message
+		scopes     []string
+		want       bool
+	}{
+		{"matching scope", "expense report", nil, []string{"atlas"}, true},
+		{"other scope", "expense report", nil, []string{"boreal"}, false},
+		{"no scope", "expense report", nil, nil, false},
+		{"follow-up", "continue", history, []string{"atlas"}, true},
+		{"follow-up wrong scope", "continue", history, []string{"boreal"}, false},
+		{"greeting", "hello", history, []string{"atlas"}, false},
+	}
+	for _, c := range cases {
+		got := memoryContext(s, c.text, c.history, c.scopes, "")
+		if strings.Contains(got, "paper receipts") || strings.Contains(got, "digital receipts") != c.want {
+			t.Errorf("%s: unexpected context %q", c.name, got)
+		}
+	}
+}

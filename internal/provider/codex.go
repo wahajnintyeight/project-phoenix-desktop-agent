@@ -393,6 +393,7 @@ func (p *codexParser) Parse(line []byte) []Event {
 		if head.Type == "turn.failed" {
 			p.done = true
 			p.result.IsError = true
+			p.result.Text = msg
 			return []Event{{Kind: EvError, Text: msg, IsError: true}, {Kind: EvDone, Text: msg, IsError: true}}
 		}
 		return []Event{{Kind: EvError, Text: msg, IsError: true}}

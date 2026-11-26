@@ -169,7 +169,7 @@ The server is another mode of `phoenix.exe` (`mcp-desktop`). It uses Windows UI 
 
 ## 8. Quick actions and interaction visibility
 
-`internal/quick` classifies the open page from a small local signal set and selects a bounded set of actions. It distinguishes job search results from individual listings and prioritizes resume-aware job actions when a resume MCP is enabled. `internal/quick/pattern.go` formats those actions into provider-neutral goals, workflow steps, deliverables and guardrails; no vendor-specific function schema is embedded in a prompt. Quick actions do not submit applications or send messages.
+`internal/quick` classifies the open page from a small local signal set and selects a bounded set of actions. When Share page is enabled, the selected provider can generate additional page-specific actions using bounded page metadata; local actions remain the fallback. It distinguishes job search results from individual listings and offers an application action for the open or selected position. `internal/quick/pattern.go` formats actions into provider-neutral goals, workflow steps, deliverables and guardrails. The application action requests submission; other generated actions ask before irreversible steps.
 
 The chat command list is an enum-backed registry in `ui/src/slash-commands.ts`. Commands route either to local Phoenix actions, the quick-action pattern service, or the current provider/model selector. Tool-call cards show the MCP server, tool name, input and result in an expandable section. Chat/activity persistence stores summaries rather than raw tool data.
 

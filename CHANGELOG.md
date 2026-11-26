@@ -2,6 +2,29 @@
 
 Notable Phoenix changes are listed here. Versions use the `vMAJOR.MINOR.PATCH` release tags.
 
+## [0.2.6] - 2026-11-26
+
+### Added
+
+- Page-specific quick action suggestions when Share page is enabled, with a job application action on job pages.
+- Read rows and hyperlink targets from XLSX workbooks in the Files library.
+- Retry failed chat replies.
+
+### Changed
+
+- Improved the voice settings layout and credit usage display.
+- Added guidance for reading live Google Sheets with browser and desktop tools.
+
+### Fixed
+
+- Preserve Codex failure messages in the final response.
+- Discard outdated page probes and quick action suggestions after navigation.
+
+### Notes
+
+- Page-specific suggestions send bounded page metadata to the selected provider when Share page is enabled. Fixed suggestions remain available otherwise.
+- XLSX reading is limited to files in the Phoenix library; live Google Sheets require browser and desktop tools.
+
 ## [0.2.5] - 2026-11-18
 
 ### Added

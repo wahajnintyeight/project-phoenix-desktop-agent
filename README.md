@@ -12,7 +12,7 @@
 
 Phoenix brings a multi-tab browser and AI provider controls into one native desktop app. It is being built around a simple idea: keep the person in control, make the agent's work visible, and make actions visible while the agent works.
 
-> **Latest release:** [Phoenix v0.2.5](https://github.com/wahajnintyeight/project-phoenix-desktop-agent/releases/latest) for Windows. See the [changelog](CHANGELOG.md) for this release's changes.
+> **Latest release:** [Phoenix v0.2.6](https://github.com/wahajnintyeight/project-phoenix-desktop-agent/releases/latest) for Windows. See the [changelog](CHANGELOG.md) for this release's changes.
 
 Phoenix is in early development. The browser, provider setup, and model chat are implemented. Claude, Codex, and OpenAI-compatible API providers can inspect and operate Phoenix browser tabs through built-in browser tools. Native computer use can inspect and operate Windows apps without an external desktop agent. Browser file transfers are still in progress.
 
@@ -21,9 +21,9 @@ Phoenix is in early development. The browser, provider setup, and model chat are
 - Wails v3 desktop app (system tray, single instance, installer) with a redesigned dark interface (warm mauve-shadow neutrals, one mauve accent) and a multi-tab browser powered by WebView2.
 - Recently visited sites show their website favicons and can be removed individually or cleared from history. Settings → General includes an application restart control.
 - Address bar for URLs and web searches, with a configurable HTTPS search provider.
-- A quick-action bar under the page: one-click requests that change with the page you are on (a job posting, an article, a form, search results, or text you have selected), so you send a request without typing it.
+- A quick-action bar under the page offers one-click requests for the current page. With **Share page** enabled, Phoenix can send bounded page metadata to the selected provider to suggest page-specific actions; job pages also offer an application action.
 - Provider setup, model selection, connection checks, and a quick model picker.
-- Streaming chat with the selected model, with an optional **Share page** control to include the active page's readable text in your message.
+- Streaming chat with the selected model, with an optional **Share page** control to include the active page's readable text in your message. Retry a failed reply from the chat.
 - Search for tasks, MCP servers, and files or folders from the Files library by typing `@` anywhere in a message.
 - Collapse the agent drawer into a compact, usable chat bar. It shows live processing status and the current reply while the agent works.
 - Replies can offer two lightweight follow-up actions above the message composer. Phoenix avoids generating a second menu when the reply already contains choices.
@@ -36,6 +36,7 @@ Phoenix is in early development. The browser, provider setup, and model chat are
 - **Built-in browser tools:** Claude, Codex, and OpenAI-compatible API providers can list tabs, read a bounded accessibility snapshot, extract paged text and links from whole pages, capture a reduced-size screenshot, navigate, click a control by its visible label or snapshot reference, drag between elements, copy or paste, type into ordinary text fields, fill forms in batches, validate required fields, attach files from Phoenix's library, press supported keys, scroll, wait for page elements and use native select controls. Phoenix uses the same WebView2 profile as the visible browser, so user sign-ins carry over. Browser reads and actions run automatically when requested; no browser extension, external desktop agent, or remote-debugging port is required.
 - **Computer use** (enabled by default in new installations): native tools list and capture windows, discover controls, click, scroll, drag, type, copy, and paste. Supported providers can use them automatically while working on your request. Vision-capable models can also inspect screenshots. Actions are visible in Activity and can be stopped.
 - Replies are formatted: headings, lists, tables, code blocks with a Copy button.
+- **Spreadsheets:** the agent can read rows and hyperlink targets from XLSX workbooks saved in the Files library, with bounded results. Live Google Sheets require browser and desktop tools.
 - **Export files and folders:** in Files, select one or more items and choose **Export…** from the toolbar or right-click menu. A native picker starts at your Windows Desktop and lets you choose where to save. Folder exports include every subfolder and file. Folder and multiple-item exports use numbered copies for existing names; exporting a single file asks before replacing it. Exporting keeps the originals in Phoenix.
 - **MCP servers:** install as many as you like (paste the JSON from a server's install instructions, or enter a program or web address), review the exact command before it is saved, test the connection and list its tools, then choose which servers the agent may use. OAuth-protected web servers open sign-in in the browser and keep refreshable tokens in the encrypted vault. Claude, Codex, and OpenAI-compatible API providers can use enabled servers; Enabled-server calls run automatically and appear in chat.
 - **Application tracking:** the agent can check and record job applications or other form submissions, and save user supplied answers in profile notes for future forms. Application records and remembered notes stay in Phoenix's local file library.

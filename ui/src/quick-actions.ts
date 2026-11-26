@@ -15,6 +15,7 @@ export interface QuickAction {
 export interface QuickActionSet {
   context: string;
   items: QuickAction[];
+  generated?: boolean;
 }
 
 export class PhQuickActions extends HTMLElement {
@@ -24,6 +25,7 @@ export class PhQuickActions extends HTMLElement {
   readonly #next = el("button", "qa-scroll");
   #busy = false;
   #probeAt = 0;
+  #pending: QuickActionSet | null = null;
 
   connectedCallback(): void {
     if (this.childElementCount > 0) return;
@@ -66,9 +68,23 @@ export class PhQuickActions extends HTMLElement {
       this.#probeAt = now;
       send("g", "probe");
     }, { passive: true });
+    const flush = (): void => {
+      if (!this.matches(":hover") && !this.contains(document.activeElement) && this.#pending) {
+        const pending = this.#pending;
+        this.#pending = null;
+        this.actions = pending;
+      }
+    };
+    this.addEventListener("pointerleave", flush);
+    this.addEventListener("focusout", () => setTimeout(flush, 0));
   }
 
   set actions(set: QuickActionSet) {
+    if (set.generated && (this.matches(":hover") || this.contains(document.activeElement))) {
+      this.#pending = set;
+      return;
+    }
+    this.#pending = null;
     this.#context.textContent = set.context;
     const buttons = set.items.map((a) => {
       const b = el("button", "qa-chip", a.label);

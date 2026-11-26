@@ -12,9 +12,8 @@ import (
 // `g act <id>`; the wording of the request lives in Go, so the UI cannot send arbitrary text
 // through this path.
 //
-// To pick the buttons, a fixed script reads a few facts from the page (structured-data types,
-// form fields, the selection length). That stays on this machine: it is not sent to a model,
-// not logged, and only the resulting kind is kept.
+// A fixed script reads local page signals for the fallback buttons. With Share page enabled,
+// bounded page metadata may also be sent to the selected provider to suggest actions.
 
 const probeScript = `(() => {
   const meta = (n) => {
@@ -92,8 +91,9 @@ type actionJSON struct {
 }
 
 type actionsJSON struct {
-	Context string       `json:"context"`
-	Items   []actionJSON `json:"items"`
+	Context   string       `json:"context"`
+	Items     []actionJSON `json:"items"`
+	Generated bool         `json:"generated,omitempty"`
 }
 
 var quickState struct {
@@ -107,6 +107,10 @@ var quickState struct {
 // refresh of the same page keeps what is showing until the probe answers, so the buttons do
 // not flicker under the pointer.
 func refreshActions(fresh bool) {
+	if fresh {
+		cancelQuickGeneration()
+		quickState.key = ""
+	}
 	t := activeTab()
 	if t == nil {
 		return
@@ -115,7 +119,7 @@ func refreshActions(fresh bool) {
 		pushActions(quick.KindStart, false, quick.Signals{})
 		return
 	}
-	id, addr, title := t.id, t.url, t.title
+	id, addr, title, epoch := t.id, t.url, t.title, t.browserEpoch.Load()
 	if fresh {
 		sig := quick.Signals{URL: addr, Title: title}
 		pushActions(quick.Classify(sig), false, sig)
@@ -125,7 +129,7 @@ func refreshActions(fresh bool) {
 	}
 	var snap probeSnap
 	runScript(t, probeScript, &snap, func(err error) {
-		if err != nil || activeID != id {
+		if err != nil || activeID != id || t.url != addr || t.browserEpoch.Load() != epoch {
 			return // the page is busy or the user has moved on: keep what is showing
 		}
 		sig := quick.Signals{
@@ -135,6 +139,7 @@ func refreshActions(fresh bool) {
 			CodeBlock: snap.CodeBlock, Cards: snap.Cards, Reading: snap.Reading,
 		}
 		pushActions(quick.Classify(sig), snap.SelLen >= 3, sig)
+		generateQuickActions(t, sig, snap.SelLen >= 3)
 	})
 }
 

@@ -169,6 +169,8 @@ func handleChatOp(f []string) {
 		}
 	case "probe":
 		refreshActions(false)
+	case "quick-share":
+		setQuickSharing(len(f) > 2 && f[2] == "1")
 	case "approve": // g approve <id> <allow|all|deny>
 		if len(f) > 3 {
 			answerApproval(f[2], f[3])
@@ -275,7 +277,10 @@ func friendlyChatError(id provider.ID, err error) string {
 // they clicked); the model gets the full wording. An action that reads the page shares it for
 // this turn without the user having to turn Share page on.
 func runAction(id string) {
-	a, ok := quick.Lookup(id)
+	a, ok := generatedQuickAction(id)
+	if !ok {
+		a, ok = quick.Lookup(id)
+	}
 	if !ok || chat.busy {
 		return
 	}

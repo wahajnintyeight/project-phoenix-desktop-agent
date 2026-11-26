@@ -58,6 +58,20 @@ migration fails, preserve the copied files and the error message for diagnosis.
 
 ## Evaluation
 
+`TestLearningBroaderEvaluation` adds 20 synthetic queries with a threshold fixed before its first
+run: at least 8/10 direct matches and no results for five unrelated queries. On this run, both
+legacy and current retrieval achieved 10/10 direct matches, 1/5 paraphrases, and 0/5 unrelated
+results; no memory matched none. Across all queries legacy selected 2,176 bytes and current
+2,012 bytes. This fixture was authored with knowledge of the implementation, contains no
+scope or correction lifecycle cases, and is not an independent real-world validation. The
+paraphrase sample is too small to justify selecting a replacement retrieval method.
+
+`TestLearningContextScenarioEvaluation` separately checks a proposed correction before review,
+then checks six cases after replacement: matching, different and absent scopes; follow-ups with
+matching and different scopes; and a greeting. All six passed, and the superseded lesson was not
+returned. This is a synthetic integration check authored with knowledge of the implementation,
+not an independent quality estimate.
+
 `go test ./internal/library -run TestLearningRetrievalEvaluation -v -count=1` compares synthetic
 no-memory, legacy substring, current whole-word, and SQLite FTS5 retrieval when FTS5 is available.
 The ten-case fixture includes eight relevant queries and two abstentions. On the development

@@ -109,8 +109,22 @@ func TestSelectionActionsComeFirst(t *testing.T) {
 	if list[len(list)-1].ID == "sel-rewrite" {
 		t.Fatal("kind actions were crowded out entirely")
 	}
-	if got := For(KindJob, false)[0].ID; got != "role" {
+	if got := For(KindJob, false)[0].ID; got != "apply" {
 		t.Fatalf("first job action = %s", got)
+	}
+}
+
+func TestApplyAction(t *testing.T) {
+	for _, kind := range []Kind{KindJob, KindJobSearch} {
+		a := For(kind, false)[0]
+		if a.ID != "apply" || a.Label != "Apply to this position" || !a.Page {
+			t.Fatalf("%s: unexpected application action: %+v", kind, a)
+		}
+		for _, phrase := range []string{"submit", "no clear position", "Do not apply to a different position"} {
+			if !strings.Contains(a.Prompt, phrase) {
+				t.Errorf("%s: application prompt missing %q", kind, phrase)
+			}
+		}
 	}
 }
 
